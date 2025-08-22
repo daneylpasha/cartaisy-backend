@@ -1,0 +1,364 @@
+name: Continuous Deployment
+
+on:
+  push:
+    branches: [ main ]
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+env:
+  DOCKER_REGISTRY: docker.io
+  DOCKER_IMAGE: cartaisy/backend
+  NODE_VERSION: '18'
+
+jobs:
+  # Build and push Docker image
+  build-and-push:
+    name: Build & Push Docker Image
+    runs-on: ubuntu-latest
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
+      image-digest: ${{ steps.build.outputs.digest }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Docker image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            BUILD_DATE=${{ github.event.repository.updated_at }}
+            VCS_REF=${{ github.sha }}
+            VERSION=${{ github.ref_name }}
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_IMAGE }}:latest
+          format: spdx-json
+          output-file: sbom.spdx.json
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v3
+        with:
+          name: sbom
+          path: sbom.spdx.json
+
+  # Deploy to staging environment
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.ref == 'refs/heads/develop' || github.event.inputs.environment == 'staging'
+    environment:
+      name: staging
+      url: https://staging-api.cartaisy.com
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Deploy to ECS
+        run: |
+          # Update ECS task definition with new image
+          aws ecs update-service \
+            --cluster cartaisy-staging \
+            --service cartaisy-backend \
+            --force-new-deployment \
+            --desired-count 2
+
+      - name: Wait for deployment
+        run: |
+          aws ecs wait services-stable \
+            --cluster cartaisy-staging \
+            --services cartaisy-backend
+
+      - name: Run smoke tests
+        run: |
+          # Test health endpoint
+          for i in {1..10}; do
+            if curl -f https://staging-api.cartaisy.com/api/health; then
+              echo "Health check passed"
+              break
+            fi
+            echo "Waiting for service to be ready... (attempt $i/10)"
+            sleep 30
+          done
+
+      - name: Notify Slack
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": "Staging Deployment Successful",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "✅ *Staging Deployment Successful*\n*Version:* `${{ github.sha }}`\n*Environment:* Staging\n*URL:* https://staging-api.cartaisy.com"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  # Run E2E tests on staging
+  e2e-tests:
+    name: E2E Tests on Staging
+    runs-on: ubuntu-latest
+    needs: deploy-staging
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install test dependencies
+        run: |
+          cd tests/e2e
+          npm ci
+
+      - name: Run E2E tests
+        run: |
+          cd tests/e2e
+          npm run test:e2e
+        env:
+          API_URL: https://staging-api.cartaisy.com
+          TEST_USER_EMAIL: ${{ secrets.TEST_USER_EMAIL }}
+          TEST_USER_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: e2e-test-results
+          path: tests/e2e/results/
+
+  # Deploy to production environment
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [build-and-push, e2e-tests]
+    if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.environment == 'production'
+    environment:
+      name: production
+      url: https://api.cartaisy.com
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.PROD_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.PROD_AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.PROD_AWS_REGION }}
+
+      - name: Create backup before deployment
+        run: |
+          # Trigger database backup
+          aws lambda invoke \
+            --function-name cartaisy-backup-trigger \
+            --payload '{"type": "pre-deployment"}' \
+            response.json
+
+      - name: Blue-Green Deployment
+        run: |
+          # Get current target group
+          CURRENT_TG=$(aws elbv2 describe-target-groups \
+            --load-balancer-arn ${{ secrets.PROD_ALB_ARN }} \
+            --query 'TargetGroups[?contains(TargetGroupName, `blue`)].TargetGroupArn' \
+            --output text)
+          
+          if [ -n "$CURRENT_TG" ]; then
+            TARGET_COLOR="green"
+          else
+            TARGET_COLOR="blue"
+          fi
+          
+          echo "Deploying to $TARGET_COLOR environment"
+          
+          # Update ECS service with new image
+          aws ecs update-service \
+            --cluster cartaisy-production-$TARGET_COLOR \
+            --service cartaisy-backend \
+            --force-new-deployment \
+            --desired-count 3
+          
+          # Wait for deployment
+          aws ecs wait services-stable \
+            --cluster cartaisy-production-$TARGET_COLOR \
+            --services cartaisy-backend
+
+      - name: Run health checks
+        run: |
+          # Health check on new deployment
+          for i in {1..20}; do
+            if curl -f https://api-$TARGET_COLOR.cartaisy.com/api/health; then
+              echo "Health check passed"
+              break
+            fi
+            echo "Waiting for service... (attempt $i/20)"
+            sleep 30
+          done
+
+      - name: Switch traffic
+        run: |
+          # Switch ALB target group
+          aws elbv2 modify-listener \
+            --listener-arn ${{ secrets.PROD_LISTENER_ARN }} \
+            --default-actions Type=forward,TargetGroupArn=$NEW_TG_ARN
+
+      - name: Monitor deployment
+        run: |
+          # Monitor CloudWatch metrics
+          aws cloudwatch get-metric-statistics \
+            --namespace AWS/ECS \
+            --metric-name CPUUtilization \
+            --dimensions Name=ServiceName,Value=cartaisy-backend \
+            --start-time $(date -u -d '5 minutes ago' +%Y-%m-%dT%H:%M:%S) \
+            --end-time $(date -u +%Y-%m-%dT%H:%M:%S) \
+            --period 60 \
+            --statistics Average
+
+      - name: Create release notes
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            CHANGELOG.md
+            sbom.spdx.json
+          generate_release_notes: true
+
+      - name: Notify stakeholders
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": "Production Deployment Successful",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "🚀 *Production Deployment Successful*\n*Version:* `${{ github.ref_name }}`\n*Environment:* Production\n*URL:* https://api.cartaisy.com\n*Release Notes:* https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.PROD_SLACK_WEBHOOK_URL }}
+
+  # Rollback procedure
+  rollback:
+    name: Rollback Deployment
+    runs-on: ubuntu-latest
+    if: failure()
+    needs: [deploy-staging, deploy-production]
+    
+    steps:
+      - name: Determine environment
+        id: env
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
+            echo "environment=staging" >> $GITHUB_OUTPUT
+          else
+            echo "environment=production" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ steps.env.outputs.environment == 'production' && secrets.PROD_AWS_ACCESS_KEY_ID || secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ steps.env.outputs.environment == 'production' && secrets.PROD_AWS_SECRET_ACCESS_KEY || secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ steps.env.outputs.environment == 'production' && secrets.PROD_AWS_REGION || secrets.AWS_REGION }}
+
+      - name: Rollback deployment
+        run: |
+          # Get previous task definition
+          PREVIOUS_TASK_DEF=$(aws ecs describe-services \
+            --cluster cartaisy-${{ steps.env.outputs.environment }} \
+            --services cartaisy-backend \
+            --query 'services[0].deployments[1].taskDefinition' \
+            --output text)
+          
+          # Update service with previous version
+          aws ecs update-service \
+            --cluster cartaisy-${{ steps.env.outputs.environment }} \
+            --service cartaisy-backend \
+            --task-definition $PREVIOUS_TASK_DEF \
+            --force-new-deployment
+
+      - name: Notify rollback
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": "Deployment Rollback Initiated",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "⚠️ *Deployment Rollback Initiated*\n*Environment:* ${{ steps.env.outputs.environment }}\n*Failed Version:* `${{ github.sha }}`\n*Action Required:* Please investigate the deployment failure"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

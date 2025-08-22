@@ -1,0 +1,365 @@
+# GitLab CI/CD Configuration for Cartaisy Backend
+
+stages:
+  - build
+  - test
+  - security
+  - docker
+  - deploy
+  - notify
+
+variables:
+  NODE_VERSION: "18"
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: "/certs"
+  FF_USE_FASTZIP: "true"
+  ARTIFACT_COMPRESSION_LEVEL: "fast"
+  CACHE_COMPRESSION_LEVEL: "fast"
+
+# Cache configuration
+.node_cache:
+  cache:
+    key:
+      files:
+        - package-lock.json
+    paths:
+      - node_modules/
+      - .npm/
+    policy: pull-push
+
+# Build stage
+build:app:
+  stage: build
+  image: node:${NODE_VERSION}-alpine
+  extends: .node_cache
+  before_script:
+    - npm ci --cache .npm --prefer-offline
+  script:
+    - npm run build
+    - npm run typecheck
+  artifacts:
+    paths:
+      - dist/
+    expire_in: 1 week
+  only:
+    - branches
+    - tags
+
+# Test stage
+test:lint:
+  stage: test
+  image: node:${NODE_VERSION}-alpine
+  extends: .node_cache
+  needs: []
+  script:
+    - npm ci --cache .npm --prefer-offline
+    - npm run lint
+    - npm run format:check
+  only:
+    - merge_requests
+    - develop
+    - main
+
+test:unit:
+  stage: test
+  image: node:${NODE_VERSION}-alpine
+  extends: .node_cache
+  needs: ["build:app"]
+  services:
+    - mongo:7.0
+    - redis:7-alpine
+  variables:
+    MONGODB_URI: "mongodb://mongo:27017/cartaisy_test"
+    REDIS_URL: "redis://redis:6379"
+    NODE_ENV: "test"
+    JWT_SECRET: "test-jwt-secret"
+  script:
+    - npm ci --cache .npm --prefer-offline
+    - npm run test:unit
+    - npm run test:coverage
+  coverage: '/Lines\s*:\s*(\d+\.\d+)%/'
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage/cobertura-coverage.xml
+    paths:
+      - coverage/
+    expire_in: 1 week
+  only:
+    - merge_requests
+    - develop
+    - main
+
+test:integration:
+  stage: test
+  image: node:${NODE_VERSION}-alpine
+  extends: .node_cache
+  needs: ["build:app"]
+  services:
+    - name: mongo:7.0
+      alias: mongodb
+    - name: redis:7-alpine
+      alias: redis
+  variables:
+    MONGODB_URI: "mongodb://mongodb:27017/cartaisy_integration"
+    REDIS_URL: "redis://redis:6379"
+    NODE_ENV: "test"
+    JWT_SECRET: "test-jwt-secret"
+    BASE_URL: "http://localhost:3000"
+  before_script:
+    - npm ci --cache .npm --prefer-offline
+  script:
+    - npm run test:integration
+  artifacts:
+    reports:
+      junit: test-results/junit.xml
+    paths:
+      - test-results/
+    expire_in: 1 week
+  only:
+    - merge_requests
+    - develop
+    - main
+
+# Security stage
+security:sast:
+  stage: security
+  needs: []
+  script:
+    - echo "Running SAST scan"
+  only:
+    - merge_requests
+    - develop
+    - main
+
+security:dependency-scan:
+  stage: security
+  image: node:${NODE_VERSION}-alpine
+  extends: .node_cache
+  needs: []
+  script:
+    - npm audit --audit-level=moderate
+    - npx snyk test --severity-threshold=high || true
+  allow_failure: true
+  only:
+    - merge_requests
+    - develop
+    - main
+
+security:container-scan:
+  stage: security
+  image: docker:stable
+  services:
+    - docker:dind
+  needs: []
+  script:
+    - docker build -t $CI_PROJECT_NAME:$CI_COMMIT_SHA .
+    - docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+        aquasec/trivy image --severity HIGH,CRITICAL \
+        $CI_PROJECT_NAME:$CI_COMMIT_SHA
+  allow_failure: true
+  only:
+    - merge_requests
+    - develop
+    - main
+
+# Docker stage
+docker:build:
+  stage: docker
+  image: docker:latest
+  services:
+    - docker:dind
+  needs: ["build:app", "test:unit", "test:integration"]
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - |
+      if [[ "$CI_COMMIT_BRANCH" == "$CI_DEFAULT_BRANCH" ]]; then
+        TAG="latest"
+      elif [[ -n "$CI_COMMIT_TAG" ]]; then
+        TAG="$CI_COMMIT_TAG"
+      else
+        TAG="$CI_COMMIT_SHORT_SHA"
+      fi
+    - docker build 
+        --cache-from $CI_REGISTRY_IMAGE:latest
+        --tag $CI_REGISTRY_IMAGE:$TAG
+        --tag $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
+        --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+        --build-arg VCS_REF=$CI_COMMIT_SHA
+        --build-arg VERSION=$TAG
+        .
+    - docker push $CI_REGISTRY_IMAGE:$TAG
+    - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
+  only:
+    - develop
+    - main
+    - tags
+
+# Deploy stages
+.deploy_template:
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache curl openssh-client
+    - eval $(ssh-agent -s)
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - ssh-keyscan -H $DEPLOY_HOST >> ~/.ssh/known_hosts
+
+deploy:staging:
+  extends: .deploy_template
+  stage: deploy
+  needs: ["docker:build"]
+  environment:
+    name: staging
+    url: https://staging-api.cartaisy.com
+    on_stop: stop:staging
+  variables:
+    DEPLOY_HOST: $STAGING_HOST
+    DEPLOY_USER: $STAGING_USER
+    DEPLOY_PATH: $STAGING_PATH
+    DOCKER_IMAGE: $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
+  script:
+    - |
+      ssh $DEPLOY_USER@$DEPLOY_HOST << EOF
+        cd $DEPLOY_PATH
+        docker-compose pull
+        docker-compose up -d --no-deps --build app
+        docker system prune -f
+      EOF
+    - sleep 30
+    - curl -f https://staging-api.cartaisy.com/api/health || exit 1
+  only:
+    - develop
+  when: manual
+
+deploy:production:
+  extends: .deploy_template
+  stage: deploy
+  needs: ["docker:build", "deploy:staging"]
+  environment:
+    name: production
+    url: https://api.cartaisy.com
+  variables:
+    DEPLOY_HOST: $PROD_HOST
+    DEPLOY_USER: $PROD_USER
+    DEPLOY_PATH: $PROD_PATH
+    DOCKER_IMAGE: $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG
+  script:
+    - |
+      # Create backup before deployment
+      ssh $DEPLOY_USER@$DEPLOY_HOST "cd $DEPLOY_PATH && ./scripts/backup-database.sh"
+      
+      # Blue-green deployment
+      ssh $DEPLOY_USER@$DEPLOY_HOST << EOF
+        cd $DEPLOY_PATH
+        
+        # Determine current color
+        if docker ps | grep -q cartaisy-blue; then
+          CURRENT="blue"
+          TARGET="green"
+        else
+          CURRENT="green"
+          TARGET="blue"
+        fi
+        
+        echo "Deploying to \$TARGET environment"
+        
+        # Deploy to target environment
+        docker-compose -f docker-compose.yml -f docker-compose.\$TARGET.yml up -d --no-deps --build app
+        
+        # Health check
+        sleep 30
+        curl -f http://localhost:3001/api/health || exit 1
+        
+        # Switch traffic
+        ./scripts/switch-traffic.sh \$TARGET
+        
+        # Stop old environment after 5 minutes
+        sleep 300
+        docker-compose -f docker-compose.yml -f docker-compose.\$CURRENT.yml stop app
+      EOF
+  only:
+    - tags
+  when: manual
+
+stop:staging:
+  extends: .deploy_template
+  stage: deploy
+  environment:
+    name: staging
+    action: stop
+  variables:
+    DEPLOY_HOST: $STAGING_HOST
+    DEPLOY_USER: $STAGING_USER
+    DEPLOY_PATH: $STAGING_PATH
+  script:
+    - |
+      ssh $DEPLOY_USER@$DEPLOY_HOST << EOF
+        cd $DEPLOY_PATH
+        docker-compose down
+      EOF
+  when: manual
+  only:
+    - develop
+
+# Rollback job
+rollback:production:
+  extends: .deploy_template
+  stage: deploy
+  environment:
+    name: production
+  variables:
+    DEPLOY_HOST: $PROD_HOST
+    DEPLOY_USER: $PROD_USER
+    DEPLOY_PATH: $PROD_PATH
+  script:
+    - |
+      ssh $DEPLOY_USER@$DEPLOY_HOST << EOF
+        cd $DEPLOY_PATH
+        
+        # Restore from latest backup
+        ./scripts/restore-database.sh --force --backup-id latest
+        
+        # Rollback to previous Docker image
+        docker-compose pull
+        docker-compose up -d --no-deps app
+      EOF
+  when: manual
+  only:
+    - tags
+
+# Notification stage
+notify:slack:
+  stage: notify
+  image: curlimages/curl:latest
+  needs: ["deploy:staging", "deploy:production"]
+  script:
+    - |
+      if [[ "$CI_JOB_STATUS" == "success" ]]; then
+        STATUS_EMOJI="✅"
+        STATUS_TEXT="Deployment Successful"
+      else
+        STATUS_EMOJI="❌"
+        STATUS_TEXT="Deployment Failed"
+      fi
+      
+      curl -X POST $SLACK_WEBHOOK_URL \
+        -H 'Content-Type: application/json' \
+        -d "{
+          \"text\": \"$STATUS_EMOJI $STATUS_TEXT\",
+          \"blocks\": [{
+            \"type\": \"section\",
+            \"text\": {
+              \"type\": \"mrkdwn\",
+              \"text\": \"*Project:* $CI_PROJECT_NAME\n*Environment:* $CI_ENVIRONMENT_NAME\n*Version:* $CI_COMMIT_TAG\n*Commit:* $CI_COMMIT_SHORT_SHA\n*Author:* $GITLAB_USER_NAME\n*Pipeline:* $CI_PIPELINE_URL\"
+            }
+          }]
+        }"
+  when: always
+  only:
+    - develop
+    - main
+    - tags

@@ -1,0 +1,884 @@
+import { Request, Response } from 'express';
+import mongoose from 'mongoose';
+import Product from '../models/Product';
+import ProductView from '../models/ProductView';
+import ProductReview from '../models/ProductReview';
+import ProductCategory from '../models/ProductCategory';
+import SearchHistory from '../models/SearchHistory';
+
+export const getProducts = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const {
+      page = 1,
+      limit = 20,
+      category,
+      brand,
+      priceMin,
+      priceMax,
+      inStock,
+      rating,
+      sortBy = 'relevance',
+      search,
+      tags,
+      featured
+    } = req.query;
+
+    const pageNum = parseInt(page as string);
+    const limitNum = parseInt(limit as string);
+    const skip = (pageNum - 1) * limitNum;
+
+    // Build filter object
+    const filter: any = { status: 'active' };
+
+    if (category) {
+      filter.category = category;
+    }
+
+    if (brand) {
+      filter.vendor = new RegExp(brand as string, 'i');
+    }
+
+    if (priceMin || priceMax) {
+      filter.price = {};
+      if (priceMin) filter.price.$gte = parseFloat(priceMin as string);
+      if (priceMax) filter.price.$lte = parseFloat(priceMax as string);
+    }
+
+    if (inStock === 'true') {
+      filter['inventoryTracking.totalQuantity'] = { $gt: 0 };
+    }
+
+    if (rating) {
+      filter['reviews.averageRating'] = { $gte: parseFloat(rating as string) };
+    }
+
+    if (search) {
+      filter.$text = { $search: search as string };
+    }
+
+    if (tags) {
+      const tagArray = Array.isArray(tags) ? tags : [tags];
+      filter.tags = { $in: tagArray };
+    }
+
+    if (featured === 'true') {
+      filter['mobileDisplay.isFeatured'] = true;
+    }
+
+    // Build sort object
+    let sort: any = {};
+    switch (sortBy) {
+      case 'price_low':
+        sort = { price: 1 };
+        break;
+      case 'price_high':
+        sort = { price: -1 };
+        break;
+      case 'newest':
+        sort = { createdAt: -1 };
+        break;
+      case 'rating':
+        sort = { 'reviews.averageRating': -1 };
+        break;
+      case 'popular':
+        sort = { 'analytics.viewCount': -1 };
+        break;
+      case 'relevance':
+      default:
+        if (search) {
+          sort = { score: { $meta: 'textScore' } };
+        } else {
+          sort = { 'mobileDisplay.priority': -1, createdAt: -1 };
+        }
+        break;
+    }
+
+    const products = await Product.find(filter)
+      .sort(sort)
+      .skip(skip)
+      .limit(limitNum)
+      .populate('category', 'name slug')
+      .select('-seo -inventoryTracking.history -analytics.conversionEvents');
+
+    const total = await Product.countDocuments(filter);
+
+    res.json({
+      success: true,
+      data: {
+        products,
+        pagination: {
+          current: pageNum,
+          total: Math.ceil(total / limitNum),
+          count: products.length,
+          totalProducts: total
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching products:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch products'
+    });
+  }
+};
+
+export const getProduct = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const userId = req.user?.id;
+
+    const product = await Product.findById(id)
+      .populate('category', 'name slug fullPath')
+      .populate('relatedProducts', 'title handle price images mobileDisplay.thumbnailUrl');
+
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: 'Product not found'
+      });
+    }
+
+    // Get recent reviews
+    const reviews = await ProductReview.find({ 
+      product: id, 
+      status: 'approved' 
+    })
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .populate('user', 'name avatar')
+      .select('-adminNotes');
+
+    // Track product view
+    if (userId) {
+      await trackProductView(id, userId, req);
+    }
+
+    // Update analytics
+    await product.updateAnalytics('view');
+
+    res.json({
+      success: true,
+      data: {
+        product,
+        reviews,
+        availability: {
+          inStock: product.inventoryTracking.totalQuantity > 0,
+          quantity: product.inventoryTracking.totalQuantity,
+          lowStock: product.inventoryTracking.lowStockThreshold && 
+                   product.inventoryTracking.totalQuantity <= product.inventoryTracking.lowStockThreshold
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching product:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch product'
+    });
+  }
+};
+
+export const searchProducts = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const {
+      q: query,
+      page = 1,
+      limit = 20,
+      category,
+      priceMin,
+      priceMax,
+      brand,
+      rating,
+      inStock,
+      sortBy = 'relevance'
+    } = req.query;
+
+    if (!query) {
+      return res.status(400).json({
+        success: false,
+        message: 'Search query is required'
+      });
+    }
+
+    const pageNum = parseInt(page as string);
+    const limitNum = parseInt(limit as string);
+    const skip = (pageNum - 1) * limitNum;
+
+    // Build search pipeline
+    const pipeline: any[] = [
+      {
+        $match: {
+          $text: { $search: query as string },
+          status: 'active'
+        }
+      },
+      {
+        $addFields: {
+          score: { $meta: 'textScore' }
+        }
+      }
+    ];
+
+    // Add additional filters
+    const additionalFilters: any = {};
+
+    if (category) {
+      additionalFilters.category = new mongoose.Types.ObjectId(category as string);
+    }
+    if (brand) {
+      additionalFilters.vendor = new RegExp(brand as string, 'i');
+    }
+    if (priceMin || priceMax) {
+      additionalFilters.price = {};
+      if (priceMin) additionalFilters.price.$gte = parseFloat(priceMin as string);
+      if (priceMax) additionalFilters.price.$lte = parseFloat(priceMax as string);
+    }
+    if (rating) {
+      additionalFilters['reviews.averageRating'] = { $gte: parseFloat(rating as string) };
+    }
+    if (inStock === 'true') {
+      additionalFilters['inventoryTracking.totalQuantity'] = { $gt: 0 };
+    }
+
+    if (Object.keys(additionalFilters).length > 0) {
+      pipeline.push({ $match: additionalFilters });
+    }
+
+    // Add sorting
+    let sortStage: any = {};
+    switch (sortBy) {
+      case 'price_low':
+        sortStage = { price: 1 };
+        break;
+      case 'price_high':
+        sortStage = { price: -1 };
+        break;
+      case 'rating':
+        sortStage = { 'reviews.averageRating': -1 };
+        break;
+      case 'popular':
+        sortStage = { 'analytics.viewCount': -1 };
+        break;
+      case 'relevance':
+      default:
+        sortStage = { score: -1 };
+        break;
+    }
+
+    pipeline.push({ $sort: sortStage });
+    pipeline.push({ $skip: skip });
+    pipeline.push({ $limit: limitNum });
+
+    // Add population
+    pipeline.push({
+      $lookup: {
+        from: 'productcategories',
+        localField: 'category',
+        foreignField: '_id',
+        as: 'category'
+      }
+    });
+    pipeline.push({
+      $unwind: {
+        path: '$category',
+        preserveNullAndEmptyArrays: true
+      }
+    });
+
+    const products = await Product.aggregate(pipeline);
+    
+    // Get total count for pagination
+    const countPipeline = pipeline.slice(0, -3); // Remove skip, limit, and lookup
+    countPipeline.push({ $count: 'total' });
+    const countResult = await Product.aggregate(countPipeline);
+    const total = countResult.length > 0 ? countResult[0].total : 0;
+
+    // Save search history
+    const userId = req.user?.id;
+    const sessionId = req.sessionID || 'anonymous';
+    
+    await SearchHistory.create({
+      user: userId,
+      sessionId,
+      query: query as string,
+      normalizedQuery: (query as string).toLowerCase().trim(),
+      queryType: 'text',
+      source: 'search_bar',
+      filters: {
+        category,
+        priceMin: priceMin ? parseFloat(priceMin as string) : undefined,
+        priceMax: priceMax ? parseFloat(priceMax as string) : undefined,
+        brand,
+        rating: rating ? parseFloat(rating as string) : undefined,
+        inStock: inStock === 'true',
+        sortBy
+      },
+      results: {
+        totalResults: total,
+        resultsShown: products.length,
+        hasResults: products.length > 0,
+        topResultId: products.length > 0 ? products[0]._id : undefined,
+        clickedResults: []
+      },
+      device: {
+        platform: req.headers['user-agent']?.includes('Mobile') ? 'mobile' : 'desktop',
+        isMobile: req.headers['user-agent']?.includes('Mobile') || false
+      }
+    });
+
+    res.json({
+      success: true,
+      data: {
+        products,
+        query: query as string,
+        pagination: {
+          current: pageNum,
+          total: Math.ceil(total / limitNum),
+          count: products.length,
+          totalProducts: total
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error searching products:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Search failed'
+    });
+  }
+};
+
+export const getFeaturedProducts = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { limit = 10, category } = req.query;
+    const userId = req.user?.id;
+    const limitNum = parseInt(limit as string);
+
+    const filter: any = {
+      status: 'active',
+      'mobileDisplay.isFeatured': true
+    };
+
+    if (category) {
+      filter.category = category;
+    }
+
+    let products = await Product.find(filter)
+      .sort({ 'mobileDisplay.priority': -1, 'analytics.viewCount': -1 })
+      .limit(limitNum)
+      .populate('category', 'name slug')
+      .select('title handle price images mobileDisplay vendor reviews analytics');
+
+    // Personalization based on user behavior
+    if (userId) {
+      try {
+        // Get user's recent views and preferences
+        const recentViews = await ProductView.find({ user: userId })
+          .sort({ viewedAt: -1 })
+          .limit(20)
+          .populate('product', 'category vendor');
+
+        if (recentViews.length > 0) {
+          const viewedCategories = recentViews
+            .map(view => (view.product as any)?.category)
+            .filter(cat => cat);
+          
+          const viewedVendors = recentViews
+            .map(view => (view.product as any)?.vendor)
+            .filter(vendor => vendor);
+
+          // Boost products from preferred categories/vendors
+          products = products.map(product => {
+            let score = product.mobileDisplay.priority || 0;
+            
+            if (viewedCategories.some(cat => cat.toString() === product.category?.toString())) {
+              score += 10;
+            }
+            if (viewedVendors.includes(product.vendor)) {
+              score += 5;
+            }
+            
+            return { ...product.toObject(), personalizedScore: score };
+          }).sort((a, b) => (b as any).personalizedScore - (a as any).personalizedScore);
+        }
+      } catch (personalizationError) {
+        console.error('Personalization error:', personalizationError);
+        // Continue with non-personalized results
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        products: products.slice(0, limitNum),
+        personalized: !!userId
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching featured products:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch featured products'
+    });
+  }
+};
+
+export const getProductsByCategory = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { categoryId } = req.params;
+    const {
+      page = 1,
+      limit = 20,
+      sortBy = 'priority',
+      priceMin,
+      priceMax,
+      brand,
+      inStock
+    } = req.query;
+
+    const pageNum = parseInt(page as string);
+    const limitNum = parseInt(limit as string);
+    const skip = (pageNum - 1) * limitNum;
+
+    // Get category and its children
+    const category = await ProductCategory.findById(categoryId);
+    if (!category) {
+      return res.status(404).json({
+        success: false,
+        message: 'Category not found'
+      });
+    }
+
+    const childCategories = await category.getAllChildren();
+    const categoryIds = [categoryId, ...childCategories.map(cat => cat._id)];
+
+    // Build filter
+    const filter: any = {
+      status: 'active',
+      category: { $in: categoryIds }
+    };
+
+    if (priceMin || priceMax) {
+      filter.price = {};
+      if (priceMin) filter.price.$gte = parseFloat(priceMin as string);
+      if (priceMax) filter.price.$lte = parseFloat(priceMax as string);
+    }
+
+    if (brand) {
+      filter.vendor = new RegExp(brand as string, 'i');
+    }
+
+    if (inStock === 'true') {
+      filter['inventoryTracking.totalQuantity'] = { $gt: 0 };
+    }
+
+    // Build sort
+    let sort: any = {};
+    switch (sortBy) {
+      case 'price_low':
+        sort = { price: 1 };
+        break;
+      case 'price_high':
+        sort = { price: -1 };
+        break;
+      case 'newest':
+        sort = { createdAt: -1 };
+        break;
+      case 'rating':
+        sort = { 'reviews.averageRating': -1 };
+        break;
+      case 'popular':
+        sort = { 'analytics.viewCount': -1 };
+        break;
+      case 'priority':
+      default:
+        sort = { 'mobileDisplay.priority': -1, createdAt: -1 };
+        break;
+    }
+
+    const products = await Product.find(filter)
+      .sort(sort)
+      .skip(skip)
+      .limit(limitNum)
+      .populate('category', 'name slug')
+      .select('-seo -inventoryTracking.history');
+
+    const total = await Product.countDocuments(filter);
+
+    res.json({
+      success: true,
+      data: {
+        category: {
+          id: category._id,
+          name: category.name,
+          slug: category.slug,
+          description: category.description,
+          fullPath: category.getFullPath()
+        },
+        products,
+        pagination: {
+          current: pageNum,
+          total: Math.ceil(total / limitNum),
+          count: products.length,
+          totalProducts: total
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching products by category:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch products'
+    });
+  }
+};
+
+export const getRecommendations = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { limit = 10, type = 'general' } = req.query;
+    const userId = req.user?.id;
+    const limitNum = parseInt(limit as string);
+
+    if (!userId) {
+      // Return popular products for anonymous users
+      const products = await Product.find({ status: 'active' })
+        .sort({ 'analytics.viewCount': -1, 'reviews.averageRating': -1 })
+        .limit(limitNum)
+        .populate('category', 'name slug')
+        .select('title handle price images mobileDisplay vendor reviews');
+
+      return res.json({
+        success: true,
+        data: {
+          products,
+          type: 'popular',
+          personalized: false
+        }
+      });
+    }
+
+    // Get user's interaction history
+    const recentViews = await ProductView.find({ user: userId })
+      .sort({ viewedAt: -1 })
+      .limit(50)
+      .populate('product', 'category vendor tags');
+
+    const viewedProducts = recentViews.map(view => view.product._id);
+
+    if (recentViews.length === 0) {
+      // New user - return trending products
+      const trendingProducts = await ProductView.getTrendingProducts(limitNum);
+      
+      return res.json({
+        success: true,
+        data: {
+          products: trendingProducts.map(item => item.product),
+          type: 'trending',
+          personalized: false
+        }
+      });
+    }
+
+    // Build recommendation based on user behavior
+    const categoryPreferences = new Map();
+    const vendorPreferences = new Map();
+    const tagPreferences = new Map();
+
+    recentViews.forEach(view => {
+      const product = view.product as any;
+      
+      // Category preferences
+      if (product.category) {
+        const catId = product.category.toString();
+        categoryPreferences.set(catId, (categoryPreferences.get(catId) || 0) + 1);
+      }
+
+      // Vendor preferences
+      if (product.vendor) {
+        vendorPreferences.set(product.vendor, (vendorPreferences.get(product.vendor) || 0) + 1);
+      }
+
+      // Tag preferences
+      if (product.tags) {
+        product.tags.forEach((tag: string) => {
+          tagPreferences.set(tag, (tagPreferences.get(tag) || 0) + 1);
+        });
+      }
+    });
+
+    // Get top preferences
+    const topCategories = Array.from(categoryPreferences.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(entry => entry[0]);
+
+    const topVendors = Array.from(vendorPreferences.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(entry => entry[0]);
+
+    const topTags = Array.from(tagPreferences.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(entry => entry[0]);
+
+    // Build recommendation query
+    const recommendationFilter: any = {
+      status: 'active',
+      _id: { $nin: viewedProducts }, // Exclude already viewed products
+      $or: []
+    };
+
+    if (topCategories.length > 0) {
+      recommendationFilter.$or.push({ category: { $in: topCategories } });
+    }
+    if (topVendors.length > 0) {
+      recommendationFilter.$or.push({ vendor: { $in: topVendors } });
+    }
+    if (topTags.length > 0) {
+      recommendationFilter.$or.push({ tags: { $in: topTags } });
+    }
+
+    // If no preferences found, fall back to popular products
+    if (recommendationFilter.$or.length === 0) {
+      delete recommendationFilter.$or;
+    }
+
+    const recommendedProducts = await Product.find(recommendationFilter)
+      .sort({ 'reviews.averageRating': -1, 'analytics.viewCount': -1 })
+      .limit(limitNum)
+      .populate('category', 'name slug')
+      .select('title handle price images mobileDisplay vendor reviews');
+
+    res.json({
+      success: true,
+      data: {
+        products: recommendedProducts,
+        type: 'personalized',
+        personalized: true,
+        basedOn: {
+          categories: topCategories.length,
+          vendors: topVendors.length,
+          tags: topTags.length
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error generating recommendations:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to generate recommendations'
+    });
+  }
+};
+
+export const trackProductView = async (productId: string, userId: string, req: Request) => {
+  try {
+    const userAgent = req.headers['user-agent'] || '';
+    const isMobile = /Mobile|Android|iPhone|iPad/.test(userAgent);
+    
+    await ProductView.create({
+      user: userId,
+      product: productId,
+      viewedAt: new Date(),
+      session: {
+        sessionId: req.sessionID || 'anonymous',
+        isNewSession: false,
+        sessionStartTime: new Date(),
+        referrer: req.headers.referer,
+        source: 'direct'
+      },
+      device: {
+        userAgent,
+        platform: isMobile ? 'mobile' : 'desktop',
+        isMobile
+      },
+      viewContext: req.query.from as string || 'direct',
+      searchQuery: req.query.search as string
+    });
+  } catch (error) {
+    console.error('Error tracking product view:', error);
+  }
+};
+
+export const getProductReviews = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { productId } = req.params;
+    const {
+      page = 1,
+      limit = 10,
+      sortBy = 'newest',
+      rating,
+      verified
+    } = req.query;
+
+    const pageNum = parseInt(page as string);
+    const limitNum = parseInt(limit as string);
+    const skip = (pageNum - 1) * limitNum;
+
+    const filter: any = {
+      product: productId,
+      status: 'approved'
+    };
+
+    if (rating) {
+      filter.rating = parseInt(rating as string);
+    }
+
+    if (verified === 'true') {
+      filter.verifiedPurchase = true;
+    }
+
+    let sort: any = {};
+    switch (sortBy) {
+      case 'oldest':
+        sort = { createdAt: 1 };
+        break;
+      case 'rating_high':
+        sort = { rating: -1, createdAt: -1 };
+        break;
+      case 'rating_low':
+        sort = { rating: 1, createdAt: -1 };
+        break;
+      case 'helpful':
+        sort = { 'helpfulVotes.helpful': -1, createdAt: -1 };
+        break;
+      case 'newest':
+      default:
+        sort = { createdAt: -1 };
+        break;
+    }
+
+    const reviews = await ProductReview.find(filter)
+      .sort(sort)
+      .skip(skip)
+      .limit(limitNum)
+      .populate('user', 'name avatar')
+      .select('-adminNotes');
+
+    const total = await ProductReview.countDocuments(filter);
+
+    // Get rating distribution
+    const ratingDistribution = await ProductReview.aggregate([
+      { $match: { product: new mongoose.Types.ObjectId(productId), status: 'approved' } },
+      { $group: { _id: '$rating', count: { $sum: 1 } } },
+      { $sort: { _id: -1 } }
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        reviews,
+        pagination: {
+          current: pageNum,
+          total: Math.ceil(total / limitNum),
+          count: reviews.length,
+          totalReviews: total
+        },
+        ratingDistribution
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching product reviews:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch reviews'
+    });
+  }
+};
+
+export const getRelatedProducts = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { productId } = req.params;
+    const { limit = 8 } = req.query;
+    const limitNum = parseInt(limit as string);
+
+    const product = await Product.findById(productId)
+      .populate('category')
+      .select('category vendor tags');
+
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: 'Product not found'
+      });
+    }
+
+    // Find related products based on category, vendor, and tags
+    const relatedProducts = await Product.aggregate([
+      {
+        $match: {
+          _id: { $ne: new mongoose.Types.ObjectId(productId) },
+          status: 'active',
+          $or: [
+            { category: product.category },
+            { vendor: product.vendor },
+            { tags: { $in: product.tags || [] } }
+          ]
+        }
+      },
+      {
+        $addFields: {
+          relevanceScore: {
+            $sum: [
+              { $cond: [{ $eq: ['$category', product.category] }, 3, 0] },
+              { $cond: [{ $eq: ['$vendor', product.vendor] }, 2, 0] },
+              {
+                $size: {
+                  $ifNull: [
+                    { $setIntersection: ['$tags', product.tags || []] },
+                    []
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      },
+      { $sort: { relevanceScore: -1, 'analytics.viewCount': -1 } },
+      { $limit: limitNum },
+      {
+        $lookup: {
+          from: 'productcategories',
+          localField: 'category',
+          foreignField: '_id',
+          as: 'category'
+        }
+      },
+      {
+        $unwind: {
+          path: '$category',
+          preserveNullAndEmptyArrays: true
+        }
+      },
+      {
+        $project: {
+          title: 1,
+          handle: 1,
+          price: 1,
+          images: 1,
+          'mobileDisplay.thumbnailUrl': 1,
+          vendor: 1,
+          'reviews.averageRating': 1,
+          'reviews.count': 1,
+          'category.name': 1,
+          relevanceScore: 1
+        }
+      }
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        products: relatedProducts
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching related products:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch related products'
+    });
+  }
+};
