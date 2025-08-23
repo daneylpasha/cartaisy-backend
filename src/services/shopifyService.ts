@@ -1,4 +1,5 @@
-import Shopify from '@shopify/shopify-api';
+import { shopifyApi, ApiVersion } from '@shopify/shopify-api';
+import { restResources } from '@shopify/shopify-api/rest/admin/2023-10';
 import { tenantConfig } from '../config/tenant';
 import Product from '../models/Product';
 import User from '../models/User';
@@ -50,32 +51,46 @@ interface InventoryLevelsResponse {
   variants: InventoryLevel[];
 }
 
-// Shopify API client configuration
-let shopifyClient: Shopify.Clients.Rest | null = null;
+// Initialize Shopify API
+const shopify = shopifyApi({
+  apiKey: process.env.SHOPIFY_API_KEY || '',
+  apiSecretKey: process.env.SHOPIFY_API_SECRET || '',
+  scopes: ['read_products', 'write_products', 'read_orders', 'write_orders'],
+  hostName: process.env.SHOPIFY_APP_URL || '',
+  apiVersion: ApiVersion.October23,
+  isEmbeddedApp: false,
+  restResources
+});
+
+// Shopify REST client
+interface ShopifySession {
+  shop: string;
+  accessToken: string;
+}
+
+let currentSession: ShopifySession | null = null;
 
 /**
  * Initialize Shopify Admin API client using tenant configuration
  */
-export const getShopifyClient = (): Shopify.Clients.Rest => {
-  if (!shopifyClient) {
-    const { storeUrl, accessToken, apiVersion } = tenantConfig.shopify;
-    
-    if (!storeUrl || !accessToken) {
-      throw new Error('Shopify credentials not configured');
-    }
-
-    // Remove protocol and trailing slash from store URL
-    const shopName = storeUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
-
-    shopifyClient = new Shopify.Clients.Rest({
-      session: {
-        shop: shopName,
-        accessToken: accessToken
-      }
-    });
-  }
+export const getShopifyClient = () => {
+  const { storeUrl, accessToken } = tenantConfig.shopify;
   
-  return shopifyClient;
+  if (!storeUrl || !accessToken) {
+    throw new Error('Shopify credentials not configured');
+  }
+
+  // Remove protocol and trailing slash from store URL
+  const shopName = storeUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
+
+  currentSession = {
+    shop: shopName,
+    accessToken: accessToken
+  };
+
+  return new shopify.rest.Product({
+    session: currentSession
+  });
 };
 
 /**
@@ -641,10 +656,11 @@ export const verifyWebhookSignature = (body: string, signature: string, secret: 
 
 // Helper functions for mapping Shopify data to our models
 
-function mapShopifyAddress(shopifyAddress: any): IAddress | null {
+function mapShopifyAddress(shopifyAddress: any, type: 'billing' | 'shipping' = 'shipping'): IAddress | null {
   if (!shopifyAddress) return null;
   
   return {
+    type,
     firstName: shopifyAddress.first_name,
     lastName: shopifyAddress.last_name,
     company: shopifyAddress.company,

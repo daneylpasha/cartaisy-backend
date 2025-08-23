@@ -4,7 +4,24 @@
  * Central export point for all configuration modules
  */
 
-export * from './deployment';
+export { 
+  config,
+  configManager,
+  AppConfig,
+  appConfig,
+  redisConfig,
+  jwtConfig,
+  emailConfig,
+  shopifyConfig,
+  securityConfig,
+  fileStorageConfig,
+  monitoringConfig,
+  paymentsConfig,
+  backgroundJobsConfig,
+  featureFlags
+} from './deployment';
+
+export { databaseConfig as dbConfig } from './deployment';
 export * from './database';
 export * from './logger';
 

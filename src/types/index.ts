@@ -473,6 +473,21 @@ export interface IShopifyCustomer {
   default_address?: IShopifyAddress;
 }
 
+export interface IShippingInfo {
+  carrier: string;
+  method: string;
+  trackingNumber?: string;
+  trackingUrl?: string;
+  estimatedDelivery?: Date;
+  cost: number;
+  weight?: number;
+  dimensions?: {
+    length: number;
+    width: number;
+    height: number;
+  };
+}
+
 // =============================================================================
 // ORDER TYPES
 // =============================================================================
@@ -817,9 +832,18 @@ export interface AuthenticatedRequest<
 > extends Request<TParams, unknown, TBody, TQuery> {
   user?: {
     _id: ObjectId;
+    id: string; // Convenience getter for _id.toString()
     email: string;
-    role: string;
+    role: 'customer' | 'admin' | 'moderator' | 'premium_customer';
     name: string;
+    isActive: boolean;
+    isVerified: boolean;
+    phone?: string;
+    profile: IUserProfile;
+    addresses: IAddress[];
+    preferences: IUserPreferences;
+    createdAt: Date;
+    lastLoginAt?: Date;
   };
   sessionID?: string;
 }

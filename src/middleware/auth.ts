@@ -1,10 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyToken } from '../utils/jwt';
 import User, { IUser } from '../models/User';
+import { AuthenticatedRequest } from '../types';
 
-interface AuthRequest extends Request {
-  user?: IUser;
-}
+type AuthRequest = AuthenticatedRequest;
 
 /**
  * Authentication middleware

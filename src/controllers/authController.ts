@@ -4,10 +4,10 @@ import User, { IUser } from '../models/User';
 import { generateToken, generateRefreshToken } from '../utils/jwt';
 import { sendWelcomeEmail, sendPasswordResetEmail } from '../utils/email';
 import { SUCCESS_MESSAGES, ERROR_MESSAGES } from '../utils/constants';
+import { AuthenticatedRequest } from '../types';
 
-interface AuthRequest extends Request {
-  user?: IUser;
-}
+// Use AuthenticatedRequest for consistency
+type AuthRequest = AuthenticatedRequest;
 
 /**
  * Register a new user

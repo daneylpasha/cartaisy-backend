@@ -3,16 +3,7 @@ import mongoose from 'mongoose';
 import Order from '../models/Order';
 import OrderTracking from '../models/OrderTracking';
 import Product, { IProductDocument } from '../models/Product';
-
-interface AuthenticatedRequest extends Request {
-  user?: {
-    _id: mongoose.Types.ObjectId;
-    email: string;
-    role: string;
-    name: string;
-    isActive: boolean;
-  };
-}
+import { AuthenticatedRequest } from '../types';
 
 export const getUserOrders = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {

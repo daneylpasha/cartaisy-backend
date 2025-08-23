@@ -5,7 +5,7 @@
  * deployment environments with validation, security, and best practices.
  */
 
-import { config } from 'dotenv';
+import { config as dotenvConfig } from 'dotenv';
 import { z } from 'zod';
 import path from 'path';
 import fs from 'fs';
@@ -16,9 +16,9 @@ const envFile = `.env.${NODE_ENV}`;
 
 // Try to load environment-specific file first, then fallback to .env
 if (fs.existsSync(envFile)) {
-  config({ path: envFile });
+  dotenvConfig({ path: envFile });
 } else {
-  config();
+  dotenvConfig();
 }
 
 // Environment validation schemas
@@ -106,7 +106,7 @@ const FileStorageConfigSchema = z.object({
     secretAccessKey: z.string().optional(),
     region: z.string().default('us-east-1'),
     bucket: z.string().optional()
-  }).default({}),
+  }).default({ region: 'us-east-1' }),
   cdnUrl: z.string().optional()
 });
 
@@ -129,12 +129,12 @@ const PaymentConfigSchema = z.object({
     publishableKey: z.string().optional(),
     webhookSecret: z.string().optional(),
     apiVersion: z.string().default('2023-10-16')
-  }).default({}),
+  }).default({ apiVersion: '2023-10-16' }),
   paypal: z.object({
     clientId: z.string().optional(),
     clientSecret: z.string().optional(),
     mode: z.enum(['sandbox', 'live']).default('sandbox')
-  }).default({})
+  }).default({ mode: 'sandbox' })
 });
 
 const BackgroundJobsConfigSchema = z.object({
@@ -205,7 +205,7 @@ class ConfigurationManager {
       const result = ConfigSchema.safeParse(rawConfig);
 
       if (!result.success) {
-        this.validationErrors = result.error.errors.map(
+        this.validationErrors = result.error.issues.map(
           err => `${err.path.join('.')}: ${err.message}`
         );
         throw new Error(`Configuration validation failed:\n${this.validationErrors.join('\n')}`);
@@ -534,8 +534,7 @@ export const configManager = new ConfigurationManager();
 // Export the configuration object
 export const config = configManager.getConfig();
 
-// Export types
-export { AppConfig };
+// Types are exported inline above
 
 // Export specific config sections for convenience
 export const {
