@@ -11,7 +11,7 @@ COPY package.json yarn.lock ./
 RUN npm install -g yarn@1.22.19 --force
 
 # Install all dependencies (including dev dependencies for build)
-RUN yarn install --frozen-lockfile --production=false
+RUN yarn install --production=false
 
 # Copy source code and config files
 COPY src/ ./src/
@@ -37,7 +37,7 @@ COPY package.json yarn.lock ./
 RUN npm install -g yarn@1.22.19 --force
 
 # Install only production dependencies
-RUN yarn install --frozen-lockfile --production=true
+RUN yarn install --production=true
 
 # Copy built application from builder stage
 COPY --from=builder /app/dist ./dist/
