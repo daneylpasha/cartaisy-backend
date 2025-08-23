@@ -1,0 +1,14 @@
+[providers.node]
+
+[phases.install]
+cmd = "yarn install --frozen-lockfile"
+
+[phases.build]  
+cmd = "yarn build"
+
+[start]
+cmd = "yarn start"
+
+[variables]
+NODE_VERSION = "18"
+YARN_VERSION = "1.22.19"
