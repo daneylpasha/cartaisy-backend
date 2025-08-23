@@ -95,7 +95,8 @@ k8s/
 .prettierrc*
 .editorconfig
 .browserslistrc
-tsconfig.json
 nodemon.json
 jest.config.js
 webpack.config.js
+
+# Note: tsconfig.json is needed for Docker build
