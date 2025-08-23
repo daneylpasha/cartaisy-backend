@@ -1,0 +1,44 @@
+# Railway build optimization
+# Exclude unnecessary files to reduce memory usage during build
+
+# Documentation
+*.md
+docs/
+API-DOCS.md
+CLIENT-DELIVERABLE-PACKAGE.md
+DEPLOYMENT-CHECKLIST.md
+DEPLOYMENT.md
+README.md
+TESTING-RESULTS.md
+
+# Test files
+tests/
+*.test.js
+*.test.ts
+test-*.js
+manual-testing.md
+
+# Development files
+.git/
+.vscode/
+.idea/
+*.log
+*.logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build artifacts from previous builds
+dist/
+*.tsbuildinfo
+
+# Docker files (not needed on Railway)
+Dockerfile
+docker-compose*.yml
+
+# Backup scripts
+scripts/backup-database.js
+scripts/restore-database.js
+
+# Large dependency files
+node_modules/.cache/
