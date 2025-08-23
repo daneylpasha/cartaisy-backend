@@ -2,7 +2,7 @@
   "name": "cartaisy-backend",
   "packageManager": "yarn@1.22.19",
   "scripts": {
-    "build": "npx tsc --noEmit false --skipLibCheck || true && npx tsc-alias -p .",
+    "build": "./node_modules/.bin/tsc --noEmit false --skipLibCheck || true && ./node_modules/.bin/tsc-alias -p .",
     "build:strict": "tsc && tsc-alias",
     "build:dev": "tsc --noEmit && esbuild src/server.ts --bundle --platform=node --outfile=dist/server.js --external:./node_modules/*",
     "start": "node dist/server.js",
