@@ -4,8 +4,8 @@ FROM node:18
 # Set working directory
 WORKDIR /app
 
-# Install yarn globally
-RUN npm install -g yarn@1.22.19
+# Install yarn 3.5.1 to match package.json packageManager (force to overwrite existing)
+RUN npm install -g yarn@3.5.1 --force
 
 # Copy package files first for layer caching
 COPY package.json yarn.lock ./
@@ -22,10 +22,13 @@ COPY railway.json ./
 # Copy source code
 COPY src/ ./src/
 
-# Verify files exist and build
-RUN ls -la . && yarn build
+# Build the application (before cleaning dependencies)
+RUN yarn build
 
-# Clean up dev dependencies to reduce image size
+# Verify build output exists
+RUN ls -la dist/
+
+# Clean up dev dependencies to reduce image size (tsconfig-paths is now a prod dependency)
 RUN yarn install --frozen-lockfile --production && yarn cache clean
 
 # Expose port
@@ -38,5 +41,5 @@ ENV NODE_ENV=production
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3000/api/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1); });" || exit 1
 
-# Start with yarn
-CMD ["yarn", "start"]
+# Start with node directly to avoid yarn overhead
+CMD ["node", "-r", "tsconfig-paths/register", "dist/server.js"]
