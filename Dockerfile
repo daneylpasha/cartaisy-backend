@@ -11,12 +11,12 @@ COPY package.json yarn.lock ./
 RUN npm install -g yarn@1.22.19 --force
 
 # Install all dependencies
-RUN yarn install --frozen-lockfile
+RUN yarn install
 
-# Copy source and config files
-COPY src/ ./src/
-COPY tsconfig.json ./
-COPY tsconfig.dev.json ./
+# Copy all necessary files
+COPY . ./
+# Remove unnecessary files after copy
+RUN rm -rf node_modules .git .gitignore README.md *.md
 
 # Build the application
 RUN yarn build
