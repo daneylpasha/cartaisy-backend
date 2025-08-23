@@ -21,18 +21,17 @@ COPY package.json yarn.lock ./
 # Install all dependencies with yarn
 RUN yarn install --frozen-lockfile
 
-# Copy tsconfig and essential config files
+# Copy all necessary config files
 COPY tsconfig*.json ./
+COPY tsc-alias.config.json ./
 COPY .railwayignore* ./
+COPY railway.json ./
 
 # Copy source code
 COPY src/ ./src/
 
-# Copy other necessary files
-COPY railway.json ./
-
-# Build the application
-RUN yarn build
+# Verify tsconfig.json exists and build
+RUN ls -la tsconfig.json && yarn build
 
 # Clean up dev dependencies to reduce image size
 RUN yarn install --frozen-lockfile --production && yarn cache clean
