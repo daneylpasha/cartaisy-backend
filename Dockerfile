@@ -21,8 +21,15 @@ COPY package.json yarn.lock ./
 # Install all dependencies with yarn
 RUN yarn install --frozen-lockfile
 
+# Copy tsconfig and essential config files
+COPY tsconfig*.json ./
+COPY .railwayignore* ./
+
 # Copy source code
-COPY . .
+COPY src/ ./src/
+
+# Copy other necessary files
+COPY railway.json ./
 
 # Build the application
 RUN yarn build
