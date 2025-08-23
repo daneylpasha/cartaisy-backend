@@ -1,35 +1,55 @@
-# Railway-optimized Dockerfile using standard Node image
-FROM node:18
+# Multi-stage build for optimal Railway deployment
+FROM node:18-slim as builder
+
+# Install system dependencies needed for node-gyp
+RUN apt-get update && apt-get install -y \
+    python3 \
+    make \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
 
-# Install yarn 3.5.1 to match package.json packageManager (force to overwrite existing)
-RUN npm install -g yarn@3.5.1 --force
-
-# Copy package files first for layer caching
+# Copy package files
 COPY package.json yarn.lock ./
 
-# Install all dependencies with yarn
-RUN yarn install --frozen-lockfile
+# Install yarn 1.x (compatible with lockfile)
+RUN npm install -g yarn@1.22.19
 
-# Copy all necessary config files explicitly  
+# Install dependencies
+RUN yarn install --frozen-lockfile --network-timeout 600000
+
+# Copy source and config files
+COPY src/ ./src/
 COPY tsconfig.json ./
 COPY tsconfig.dev.json ./
-COPY tsc-alias.config.json ./
-COPY railway.json ./
 
-# Copy source code
-COPY src/ ./src/
-
-# Build the application (before cleaning dependencies)
+# Build application
 RUN yarn build
 
-# Verify build output exists
-RUN ls -la dist/
+# Production stage
+FROM node:18-slim as production
 
-# Clean up dev dependencies to reduce image size (tsconfig-paths is now a prod dependency)
-RUN yarn install --frozen-lockfile --production && yarn cache clean
+# Set working directory
+WORKDIR /app
+
+# Install yarn
+RUN npm install -g yarn@1.22.19
+
+# Copy package files
+COPY package.json yarn.lock ./
+
+# Install only production dependencies
+RUN yarn install --production --frozen-lockfile --network-timeout 600000
+
+# Copy built application
+COPY --from=builder /app/dist ./dist
+
+# Create non-root user
+RUN groupadd -r nodejs && useradd -r -g nodejs nodejs
+RUN chown -R nodejs:nodejs /app
+USER nodejs
 
 # Expose port
 EXPOSE 3000
@@ -41,5 +61,5 @@ ENV NODE_ENV=production
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3000/api/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1); });" || exit 1
 
-# Start with node directly to avoid yarn overhead
-CMD ["node", "-r", "tsconfig-paths/register", "dist/server.js"]
+# Start application (tsc-alias resolves paths at build time)
+CMD ["node", "dist/server.js"]

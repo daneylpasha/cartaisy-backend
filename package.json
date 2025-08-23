@@ -1,11 +1,11 @@
 {
   "name": "cartaisy-backend",
-  "packageManager": "yarn@3.5.1",
+  "packageManager": "yarn@1.22.19",
   "scripts": {
-    "build": "tsc --noEmit false --skipLibCheck || true && tsc-alias --config tsc-alias.config.json",
+    "build": "tsc --noEmit false --skipLibCheck || true && tsc-alias -p .",
     "build:strict": "tsc && tsc-alias",
     "build:dev": "tsc --noEmit && esbuild src/server.ts --bundle --platform=node --outfile=dist/server.js --external:./node_modules/*",
-    "start": "node -r tsconfig-paths/register dist/server.js",
+    "start": "node dist/server.js",
     "dev": "ts-node -r tsconfig-paths/register src/server.ts",
     "dev:watch": "nodemon --exec \"ts-node -r tsconfig-paths/register src/server.ts\"",
     "test": "jest",
@@ -27,7 +27,6 @@
     "mongoose": "^8.17.2",
     "morgan": "^1.10.1",
     "nodemailer": "^7.0.5",
-    "tsconfig-paths": "^4.2.0",
     "zod": "^4.0.17"
   },
   "devDependencies": {
@@ -58,6 +57,7 @@
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
     "tsc-alias": "^1.8.16",
+    "tsconfig-paths": "^4.2.0",
     "typescript": "^5.9.2"
   }
 }
