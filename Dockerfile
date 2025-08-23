@@ -8,7 +8,7 @@ WORKDIR /app
 COPY package.json yarn.lock ./
 
 # Install yarn 1.22.19 to match package.json
-RUN npm install -g yarn@1.22.19
+RUN npm install -g yarn@1.22.19 --force
 
 # Install all dependencies
 RUN yarn install --frozen-lockfile
