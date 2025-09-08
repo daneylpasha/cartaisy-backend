@@ -1,0 +1,39 @@
+# Railway Environment Variables
+# Copy these to your Railway dashboard
+
+NODE_ENV=production
+PORT=3000
+
+# Database (REQUIRED - Get from MongoDB Atlas)
+MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/cartaisy?retryWrites=true&w=majority
+
+# JWT Secrets (REQUIRED - Change these!)
+JWT_SECRET=your_super_secret_jwt_key_change_this_in_production_123456789
+JWT_REFRESH_SECRET=your_refresh_token_secret_change_this_too_987654321
+
+# Store Configuration
+STORE_NAME=Cartaisy Store
+STORE_DOMAIN=cartaisy.railway.app
+STORE_CURRENCY=USD
+STORE_TIMEZONE=America/New_York
+STORE_COUNTRY=US
+
+# API Configuration
+API_BASE_URL=https://your-app-name.railway.app
+API_VERSION=v1
+FRONTEND_URL=https://your-frontend.vercel.app
+ADMIN_EMAIL=admin@yourdomain.com
+
+# Email (Optional - for email features)
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_USER=your_email@gmail.com
+EMAIL_PASSWORD=your_app_specific_password
+EMAIL_FROM=noreply@cartaisy.com
+
+# Shopify (Optional - only if using Shopify)
+SHOPIFY_STORE_URL=https://your-store.myshopify.com
+SHOPIFY_API_KEY=your_key
+SHOPIFY_API_SECRET=your_secret
+SHOPIFY_ACCESS_TOKEN=your_token
+SHOPIFY_ENABLE_SYNC=false

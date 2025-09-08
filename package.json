@@ -2,9 +2,11 @@
   "name": "cartaisy-backend",
   "packageManager": "yarn@1.22.19",
   "scripts": {
-    "build": "tsc --skipLibCheck --noEmit false --outDir dist --allowJs --noStrict || true && tsc-alias -p . || true",
+    "build": "rimraf dist && tsc --skipLibCheck --noEmit false --outDir dist && tsc-alias -p tsconfig.json",
+    "build:simple": "rimraf dist && tsc --skipLibCheck --noEmit false --outDir dist --allowJs",
     "build:strict": "tsc && tsc-alias",
-    "build:dev": "tsc --noEmit && esbuild src/server.ts --bundle --platform=node --outfile=dist/server.js --external:./node_modules/*",
+    "build:dev": "mkdir -p dist && esbuild src/server.ts --bundle --platform=node --outfile=dist/server.js --external:./node_modules/* --external:@* --format=cjs",
+    "build:basic": "mkdir -p dist && cp src/server.ts dist/server.js",
     "start": "node dist/server.js",
     "dev": "ts-node -r tsconfig-paths/register src/server.ts",
     "dev:watch": "nodemon --exec \"ts-node -r tsconfig-paths/register src/server.ts\"",

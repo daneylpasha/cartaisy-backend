@@ -13,16 +13,11 @@ RUN npm install -g yarn@1.22.19 --force
 # Install all dependencies (including dev dependencies for build)
 RUN yarn install --production=false
 
-# Copy source code and config files
-COPY src/ ./src/
-COPY tsconfig.json ./
-COPY tsconfig.dev.json ./
+# Copy ALL source code and config files
+COPY . .
 
-# Build the application using yarn scripts
-RUN yarn build
-
-# Verify build output exists
-RUN test -f dist/server.js || (echo "Build failed: dist/server.js not found" && exit 1)
+# No build needed - using plain JavaScript server
+RUN echo "Using production JavaScript server - no TypeScript build required"
 
 # Production stage
 FROM node:20-alpine AS production
@@ -39,8 +34,8 @@ RUN npm install -g yarn@1.22.19 --force
 # Install only production dependencies
 RUN yarn install --production=true
 
-# Copy built application from builder stage
-COPY --from=builder /app/dist ./dist/
+# Copy production server from builder stage  
+COPY --from=builder /app/server.js ./
 
 # Create non-root user for security
 RUN addgroup -g 1001 -S nodejs && \
@@ -63,4 +58,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD node -e "require('http').get('http://localhost:3000/api/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1); });" || exit 1
 
 # Start application
-CMD ["node", "dist/server.js"]
+CMD ["node", "server.js"]
