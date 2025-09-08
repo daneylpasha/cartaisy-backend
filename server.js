@@ -12,6 +12,11 @@ const PORT = process.env.PORT || 3000;
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/cartaisy';
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
+console.log('🚀 Starting Cartaisy Backend Server...');
+console.log('📍 Port:', PORT);
+console.log('🌍 Environment:', NODE_ENV);
+console.log('💾 MongoDB URI:', MONGODB_URI ? 'Configured' : 'Not configured');
+
 // Middleware
 app.use(helmet());
 app.use(cors());
@@ -21,11 +26,14 @@ app.use(express.urlencoded({ extended: true }));
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
+  console.log('🏥 Health check requested');
   res.status(200).json({
     status: 'OK',
+    message: 'Cartaisy Backend is healthy',
     timestamp: new Date().toISOString(),
     environment: NODE_ENV,
-    port: PORT
+    port: PORT,
+    uptime: process.uptime()
   });
 });
 
@@ -86,13 +94,21 @@ app.use('*', (req, res) => {
 // Start server
 const startServer = async () => {
   try {
-    await connectDB();
+    // Don't wait for DB connection - start server first
+    connectDB().catch(err => console.log('⚠️ Database connection deferred:', err.message));
     
-    app.listen(PORT, '0.0.0.0', () => {
+    const server = app.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 Cartaisy Backend Server running on port ${PORT}`);
       console.log(`🌍 Environment: ${NODE_ENV}`);
-      console.log(`🏥 Health check: http://localhost:${PORT}/api/health`);
+      console.log(`🏥 Health check: http://0.0.0.0:${PORT}/api/health`);
+      console.log('✅ Server started successfully!');
     });
+
+    server.on('error', (error) => {
+      console.error('❌ Server error:', error.message);
+      process.exit(1);
+    });
+
   } catch (error) {
     console.error('❌ Server startup failed:', error.message);
     process.exit(1);
