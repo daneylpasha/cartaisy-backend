@@ -57,5 +57,5 @@ ENV NODE_ENV=production
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD node -e "require('http').get('http://0.0.0.0:' + (process.env.PORT || 3000) + '/api/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1); });" || exit 1
 
-# Start application
-CMD ["node", "server.js"]
+# Start application - use railway-server.js for Railway deployment
+CMD ["node", "railway-server.js"]

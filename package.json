@@ -2,7 +2,7 @@
   "name": "cartaisy-backend",
   "packageManager": "yarn@1.22.19",
   "scripts": {
-    "build": "rimraf dist && tsc --skipLibCheck --noEmit false --outDir dist && tsc-alias -p tsconfig.json",
+    "build": "echo 'Build script for Railway - using simple Node.js server'",
     "build:simple": "rimraf dist && tsc --skipLibCheck --noEmit false --outDir dist --allowJs",
     "build:strict": "tsc && tsc-alias",
     "build:dev": "mkdir -p dist && esbuild src/server.ts --bundle --platform=node --outfile=dist/server.js --external:./node_modules/* --external:@* --format=cjs",

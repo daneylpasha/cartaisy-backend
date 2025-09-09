@@ -46,14 +46,14 @@ const startServer = async (): Promise<void> => {
       initializeBackgroundJobs();
     }
     
-    app.listen(PORT, () => {
+    app.listen(PORT, '0.0.0.0', () => {
       console.log('\n🚀 =================== SERVER STARTED ===================');
       console.log(`🏪 ${tenantConfig.store.name} API Server`);
       console.log(`📡 Port: ${PORT}`);
       console.log(`🌍 Environment: ${apiConfig.nodeEnv}`);
       console.log(`🔗 Base URL: ${tenantConfig.api.baseUrl}`);
-      console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
-      console.log(`🔐 Auth endpoints: http://localhost:${PORT}/api/${apiConfig.version}/auth/*`);
+      console.log(`📊 Health check: http://0.0.0.0:${PORT}/api/health`);
+      console.log(`🔐 Auth endpoints: http://0.0.0.0:${PORT}/api/${apiConfig.version}/auth/*`);
       
       // Show enabled features
       const enabledFeatures = Object.entries(tenantConfig.features)
