@@ -1,9 +1,10 @@
 const http = require('http');
 
-const PORT = process.env.PORT || 3000;
+console.log('🚀 Starting Cartaisy Backend Server...');
+console.log('📝 All environment variables:', JSON.stringify(process.env, null, 2));
 
-console.log('Starting server...');
-console.log('PORT environment variable:', process.env.PORT);
+const PORT = process.env.PORT || 3000;
+console.log('🔌 Using PORT:', PORT);
 
 // Create a simple server
 const server = http.createServer((req, res) => {
@@ -37,8 +38,20 @@ const server = http.createServer((req, res) => {
 
 // Start server
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`Health check: http://0.0.0.0:${PORT}/api/health`);
+  console.log('✅ Server successfully started!');
+  console.log(`📡 Server running on port ${PORT}`);
+  console.log(`🏥 Health check: http://0.0.0.0:${PORT}/api/health`);
+  console.log(`🌍 Server bound to 0.0.0.0:${PORT}`);
+});
+
+server.on('error', (err) => {
+  console.error('❌ Server failed to start:', err.message);
+  console.error('Stack:', err.stack);
+  process.exit(1);
+});
+
+server.on('listening', () => {
+  console.log('🎉 Server is now listening for connections');
 });
 
 // Handle process termination
