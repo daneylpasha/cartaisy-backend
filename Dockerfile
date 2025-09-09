@@ -2,7 +2,10 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Copy only the server file
+# Copy package.json (needed for Railway)
+COPY package.json .
+
+# Copy the server file
 COPY simple-server.js .
 
 # Expose port
