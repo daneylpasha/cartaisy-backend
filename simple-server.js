@@ -2,6 +2,9 @@ const http = require('http');
 
 const PORT = process.env.PORT || 3000;
 
+console.log('Starting server...');
+console.log('PORT environment variable:', process.env.PORT);
+
 // Create a simple server
 const server = http.createServer((req, res) => {
   console.log(`Request received: ${req.method} ${req.url}`);
