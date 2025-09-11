@@ -14,7 +14,7 @@ export const getUserOrders = async (req: AuthenticatedRequest, res: Response): P
       status,
       startDate,
       endDate
-    } = req.query;
+    } = req.query as any;
 
     if (!userId) {
       res.status(401).json({

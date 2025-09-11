@@ -57,7 +57,7 @@ export const tenantConfig = {
 
   // ============ API CONFIGURATION ============
   api: {
-    baseUrl: process.env.API_BASE_URL || 'http://localhost:3000',
+    baseUrl: process.env.API_BASE_URL || (process.env.RAILWAY_STATIC_URL ? `https://${process.env.RAILWAY_STATIC_URL}` : 'http://localhost:3000'),
     version: process.env.API_VERSION || 'v1',
     frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3000',
     adminEmail: process.env.ADMIN_EMAIL || 'admin@cartaisy.com',
