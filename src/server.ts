@@ -105,68 +105,75 @@
 
 // startServer();
 // server.ts
-import app from './app';
+// server.ts
+import express from 'express';
 import mongoose from 'mongoose';
 import { tenantConfig, databaseConfig, apiConfig } from './config/tenant';
 import { validateRequiredConfig, logConfigSummary } from './config/validateConfig';
 
-// --- Prefer Railway's PORT ---
 const PORT = Number(process.env.PORT) || Number(apiConfig.port) || 3000;
+const MONGODB_URI = databaseConfig.mongodbUri;
 
-// Simple liveness flag
+// 1) Make a lightweight server wrapper
+const server = express();
+
+// liveness flag
 let isReady = false;
 
-// (Optional but recommended) Health endpoints yahin define kar do
-app.get('/api/health', (_req, res) => {
-  // Liveness: server chal raha hai -> ALWAYS 200
+// 2) Health routes FIRST (always 200 on /api/health)
+server.get('/api/health', (_req, res) => {
+  console.log('💗 HEALTH HIT');
   res.status(200).json({ status: 'ok', ready: isReady });
 });
 
-app.get('/api/ready', (_req, res) => {
-  // Readiness: DB waghera
-  const db = mongoose.connection.readyState === 1 ? 'up' : 'down';
-  const ok = db === 'up';
-  res.status(ok ? 200 : 503).json({ status: ok ? 'ready' : 'not-ready', db });
+// (optional) readiness with DB check
+server.get('/api/ready', (_req, res) => {
+  const dbUp = mongoose.connection.readyState === 1;
+  res.status(dbUp ? 200 : 503).json({ status: dbUp ? 'ready' : 'not-ready' });
 });
 
-// --- DB connect helper ---
-const connectDB = async (): Promise<void> => {
-  await mongoose.connect(databaseConfig.mongodbUri, {
-    maxPoolSize: databaseConfig.maxPoolSize,
-    minPoolSize: databaseConfig.minPoolSize,
-    connectTimeoutMS: databaseConfig.connectionTimeout,
-    serverSelectionTimeoutMS: databaseConfig.connectionTimeout,
-  });
-  console.log('🟢 MongoDB connected');
-};
+// 3) Start server immediately (don’t block on DB)
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Server listening on ${PORT}`);
+  console.log(`Health: http://0.0.0.0:${PORT}/api/health`);
+});
 
-// --- Start ASAP, then connect DB (don’t block healthcheck) ---
-const start = async () => {
+// 4) Now do the heavy work in background
+(async () => {
   try {
     validateRequiredConfig();
     logConfigSummary();
 
-    app.listen(PORT, '0.0.0.0', () => {
-      console.log(`🚀 Server listening on ${PORT}`);
-      console.log(`Health: http://0.0.0.0:${PORT}/api/health`);
+    await mongoose.connect(MONGODB_URI, {
+      maxPoolSize: databaseConfig.maxPoolSize,
+      minPoolSize: databaseConfig.minPoolSize,
+      connectTimeoutMS: databaseConfig.connectionTimeout,
+      serverSelectionTimeoutMS: databaseConfig.connectionTimeout,
     });
+    console.log('🟢 MongoDB connected');
 
-    // Connect DB in background — healthcheck abhi pass ho jayega
-    connectDB()
-      .then(() => { isReady = true; })
-      .catch((err) => {
-        console.error('🔴 MongoDB connect error:', err?.message || err);
-        // yahan process.exit(1) mat karo — warna container gir jayega
-      });
+    // dynamic import AFTER DB so app.ts side-effects don't block startup
+    const { default: app } = await import('./app');
 
-    // graceful shutdown handlers as before...
-    process.on('SIGTERM', async () => { await mongoose.connection.close(); process.exit(0); });
-    process.on('SIGINT',  async () => { await mongoose.connection.close(); process.exit(0); });
+    // mount your actual app under /
+    server.use(app);
 
+    isReady = true;
+    console.log(`✅ ${tenantConfig.store.name} backend is ready for ${apiConfig.nodeEnv}`);
   } catch (err: any) {
-    console.error('❌ Startup error:', err.message || err);
-    process.exit(1);
+    console.error('❌ Startup error:', err?.message || err);
+    // do NOT exit — keep healthcheck alive
   }
-};
+})();
 
-start();
+// graceful shutdown
+const shutdown = async (sig: string) => {
+  console.log(`🛑 ${sig} received. Shutting down...`);
+  try { await mongoose.connection.close(); } catch {}
+  process.exit(0);
+};
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('unhandledRejection', (e: any) => { console.error('UNHANDLED REJECTION', e?.message || e); });
+process.on('uncaughtException', (e: any) => { console.error('UNCAUGHT EXCEPTION', e?.message || e); });
+
