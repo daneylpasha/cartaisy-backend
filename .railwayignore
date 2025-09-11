@@ -33,7 +33,6 @@ dist/
 *.tsbuildinfo
 
 # Docker files (not needed on Railway)
-Dockerfile
 docker-compose*.yml
 
 # Backup scripts
