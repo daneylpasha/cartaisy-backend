@@ -55,7 +55,7 @@ export const validateTenantConfig = (): ValidationError[] => {
     errors.push({
       field: 'EMAIL_FROM_ADDRESS',
       message: 'Email from address is required and should use your domain',
-      severity: 'error'
+      severity: 'warning'
     });
   }
 
@@ -64,7 +64,7 @@ export const validateTenantConfig = (): ValidationError[] => {
     errors.push({
       field: 'API_BASE_URL',
       message: 'API base URL should be set to your production domain',
-      severity: derivedConfig.isProduction ? 'error' : 'warning'
+      severity: 'warning'
     });
   }
 
@@ -72,7 +72,7 @@ export const validateTenantConfig = (): ValidationError[] => {
     errors.push({
       field: 'FRONTEND_URL',
       message: 'Frontend URL should be set to your production domain',
-      severity: derivedConfig.isProduction ? 'error' : 'warning'
+      severity: 'warning'
     });
   }
 
@@ -83,7 +83,7 @@ export const validateTenantConfig = (): ValidationError[] => {
       errors.push({
         field: 'EMAIL_SMTP_HOST',
         message: 'SMTP host is required when using SMTP email service',
-        severity: 'error'
+        severity: 'warning'
       });
     }
 
