@@ -1,8 +1,6 @@
 // Simple production server for Railway deployment
 const express = require('express');
 const cors = require('cors');
-const helmet = require('helmet');
-const morgan = require('morgan');
 const mongoose = require('mongoose');
 
 const app = express();
@@ -17,10 +15,8 @@ console.log('📍 Port:', PORT);
 console.log('🌍 Environment:', NODE_ENV);
 console.log('💾 MongoDB URI:', MONGODB_URI ? 'Configured' : 'Not configured');
 
-// Middleware
-app.use(helmet());
+// Basic middleware (simplified for Railway)
 app.use(cors());
-app.use(morgan('combined'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -37,6 +33,51 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Import User model for auth APIs
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+
+// User Schema (inline for production)
+const userSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  email: { type: String, required: true, unique: true },
+  password: { type: String, required: true },
+  role: { type: String, default: 'customer' },
+  isActive: { type: Boolean, default: true },
+  isVerified: { type: Boolean, default: false },
+  createdAt: { type: Date, default: Date.now },
+  lastLoginAt: { type: Date }
+});
+
+// Hash password before saving
+userSchema.pre('save', async function(next) {
+  if (!this.isModified('password')) return next();
+  this.password = await bcrypt.hash(this.password, 12);
+  next();
+});
+
+// Compare password method
+userSchema.methods.comparePassword = async function(password) {
+  return await bcrypt.compare(password, this.password);
+};
+
+// Update last login
+userSchema.methods.updateLastLogin = async function() {
+  this.lastLoginAt = new Date();
+  return await this.save();
+};
+
+const User = mongoose.model('User', userSchema);
+
+// JWT helper functions
+const generateToken = (userId) => {
+  return jwt.sign({ userId }, process.env.JWT_SECRET || 'default-secret', { expiresIn: '24h' });
+};
+
+const generateRefreshToken = (userId) => {
+  return jwt.sign({ userId }, process.env.JWT_REFRESH_SECRET || 'default-refresh-secret', { expiresIn: '7d' });
+};
+
 // Basic API routes
 app.get('/api/status', (req, res) => {
   res.json({
@@ -50,8 +91,157 @@ app.get('/', (req, res) => {
   res.json({
     message: 'Welcome to Cartaisy Backend API',
     docs: '/api/health',
-    status: '/api/status'
+    status: '/api/status',
+    endpoints: {
+      register: '/api/v1/auth/register',
+      login: '/api/v1/auth/login',
+      health: '/api/health'
+    }
   });
+});
+
+// Authentication APIs
+// User Registration
+app.post('/api/v1/auth/register', async (req, res) => {
+  try {
+    const { name, email, password } = req.body;
+
+    // Validation
+    if (!name || !email || !password) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Name, email, and password are required'
+      });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Password must be at least 6 characters long'
+      });
+    }
+
+    // Check if user already exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'User with this email already exists'
+      });
+    }
+
+    // Create new user
+    const user = new User({ name, email, password, role: 'customer' });
+    await user.save();
+
+    // Generate tokens
+    const token = generateToken(user._id.toString());
+    const refreshToken = generateRefreshToken(user._id.toString());
+
+    // Return user data without password
+    const userData = {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      isActive: user.isActive,
+      isVerified: user.isVerified,
+      createdAt: user.createdAt
+    };
+
+    res.status(201).json({
+      status: 'success',
+      message: 'User registered successfully',
+      data: {
+        user: userData,
+        token,
+        refreshToken
+      }
+    });
+
+  } catch (error) {
+    console.error('Registration error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Registration failed. Please try again.'
+    });
+  }
+});
+
+// User Login  
+app.post('/api/v1/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    // Validation
+    if (!email || !password) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Email and password are required'
+      });
+    }
+
+    // Find user
+    const user = await User.findOne({ email }).select('+password');
+    if (!user) {
+      return res.status(401).json({
+        status: 'error',
+        message: 'Invalid email or password'
+      });
+    }
+
+    // Check if user is active
+    if (!user.isActive) {
+      return res.status(403).json({
+        status: 'error',
+        message: 'Your account has been deactivated. Please contact support.'
+      });
+    }
+
+    // Check password
+    const isPasswordCorrect = await user.comparePassword(password);
+    if (!isPasswordCorrect) {
+      return res.status(401).json({
+        status: 'error',
+        message: 'Invalid email or password'
+      });
+    }
+
+    // Update last login
+    await user.updateLastLogin();
+
+    // Generate tokens
+    const token = generateToken(user._id.toString());
+    const refreshToken = generateRefreshToken(user._id.toString());
+
+    // Return user data
+    const userData = {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      isActive: user.isActive,
+      isVerified: user.isVerified,
+      lastLoginAt: user.lastLoginAt
+    };
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Login successful',
+      data: {
+        user: userData,
+        token,
+        refreshToken
+      }
+    });
+
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Login failed. Please try again.'
+    });
+  }
 });
 
 // Database connection
