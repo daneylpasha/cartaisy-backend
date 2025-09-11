@@ -2,15 +2,24 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Copy package.json and install dependencies
-COPY package.json .
-RUN npm install --only=production
+# Copy package files
+COPY package*.json ./
+COPY tsconfig.json ./
 
-# Copy the server file
-COPY server.js .
+# Install all dependencies (including dev dependencies for build)
+RUN npm install
+
+# Copy source code
+COPY src/ ./src/
+
+# Build TypeScript
+RUN npm run build:simple
+
+# Remove dev dependencies for smaller image
+RUN npm prune --production
 
 # Expose port
 EXPOSE 3000
 
-# Start server directly
-CMD ["node", "server.js"]
+# Start the compiled server
+CMD ["node", "dist/server.js"]
