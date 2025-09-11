@@ -106,74 +106,56 @@
 // startServer();
 // server.ts
 // server.ts
+// src/server.ts
 import express from 'express';
 import mongoose from 'mongoose';
 import { tenantConfig, databaseConfig, apiConfig } from './config/tenant';
 import { validateRequiredConfig, logConfigSummary } from './config/validateConfig';
 
 const PORT = Number(process.env.PORT) || Number(apiConfig.port) || 3000;
-const MONGODB_URI = databaseConfig.mongodbUri;
-
-// 1) Make a lightweight server wrapper
 const server = express();
 
-// liveness flag
-let isReady = false;
-
-// 2) Health routes FIRST (always 200 on /api/health)
+// ---- HEALTH: always 200, no imports/logic inside ----
 server.get('/api/health', (_req, res) => {
-  console.log('💗 HEALTH HIT');
-  res.status(200).json({ status: 'ok', ready: isReady });
+  res.status(200).send('OK');   // sirf OK
 });
 
-// (optional) readiness with DB check
+// OPTIONAL readiness
 server.get('/api/ready', (_req, res) => {
-  const dbUp = mongoose.connection.readyState === 1;
-  res.status(dbUp ? 200 : 503).json({ status: dbUp ? 'ready' : 'not-ready' });
+  const up = mongoose.connection.readyState === 1;
+  res.status(up ? 200 : 503).json({ ready: up });
 });
 
-// 3) Start server immediately (don’t block on DB)
+// Start immediately
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Server listening on ${PORT}`);
-  console.log(`Health: http://0.0.0.0:${PORT}/api/health`);
+  console.log(`🚀 Listening on ${PORT}  (health: /api/health)`);
 });
 
-// 4) Now do the heavy work in background
+// Heavy work in background
 (async () => {
   try {
     validateRequiredConfig();
     logConfigSummary();
 
-    await mongoose.connect(MONGODB_URI, {
+    // DB connect non-blocking
+    mongoose.connect(databaseConfig.mongodbUri, {
       maxPoolSize: databaseConfig.maxPoolSize,
       minPoolSize: databaseConfig.minPoolSize,
       connectTimeoutMS: databaseConfig.connectionTimeout,
       serverSelectionTimeoutMS: databaseConfig.connectionTimeout,
-    });
-    console.log('🟢 MongoDB connected');
+    }).then(() => console.log('🟢 Mongo connected'))
+      .catch(e => console.error('🔴 Mongo connect error:', e?.message || e));
 
-    // dynamic import AFTER DB so app.ts side-effects don't block startup
+    // Mount your real app AFTER health is up
     const { default: app } = await import('./app');
-
-    // mount your actual app under /
     server.use(app);
 
-    isReady = true;
-    console.log(`✅ ${tenantConfig.store.name} backend is ready for ${apiConfig.nodeEnv}`);
-  } catch (err: any) {
-    console.error('❌ Startup error:', err?.message || err);
-    // do NOT exit — keep healthcheck alive
+  } catch (e: any) {
+    console.error('❌ Startup error:', e?.message || e);
+    // process ko exit mat karna; health chalti rehni chahiye
   }
 })();
 
 // graceful shutdown
-const shutdown = async (sig: string) => {
-  console.log(`🛑 ${sig} received. Shutting down...`);
-  try { await mongoose.connection.close(); } catch {}
-  process.exit(0);
-};
-process.on('SIGTERM', () => shutdown('SIGTERM'));
-process.on('SIGINT', () => shutdown('SIGINT'));
-process.on('unhandledRejection', (e: any) => { console.error('UNHANDLED REJECTION', e?.message || e); });
-process.on('uncaughtException', (e: any) => { console.error('UNCAUGHT EXCEPTION', e?.message || e); });
-
+process.on('SIGTERM', async () => { try { await mongoose.connection.close(); } catch {} process.exit(0); });
+process.on('SIGINT',  async () => { try { await mongoose.connection.close(); } catch {} process.exit(0); });
