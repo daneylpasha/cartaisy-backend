@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import {
+  signup,
   register,
   login,
   forgotPassword,
@@ -11,6 +12,7 @@ import {
 } from '../controllers/authController';
 import { authenticate } from '../middleware/auth';
 import {
+  validateSignup,
   validateRegister,
   validateLogin,
   validatePasswordReset,
@@ -48,6 +50,15 @@ const passwordResetLimiter = rateLimit({
 /**
  * Public routes (no authentication required)
  */
+
+// User signup (for UI with email, password, confirmPassword)
+router.post(
+  '/signup',
+  authLimiter,
+  validateSignup,
+  handleValidationErrors,
+  signup
+);
 
 // User registration
 router.post(

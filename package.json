@@ -9,7 +9,7 @@
     "build:basic": "mkdir -p dist && cp src/server.ts dist/server.js",
     "start": "node simple-server.js",
     "dev": "ts-node -r tsconfig-paths/register --transpile-only src/server.ts",
-    "dev:watch": "nodemon --exec \"ts-node -r tsconfig-paths/register src/server.ts\"",
+    "dev:watch": "nodemon --exec \"ts-node -r tsconfig-paths/register --transpile-only src/server.ts\"",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",

@@ -283,7 +283,6 @@ export interface IPaymentDetails {
   processedAt?: Date;
 }
 
-
 // =============================================================================
 // REVIEW TYPES
 // =============================================================================
@@ -593,10 +592,25 @@ export interface IOrder extends Document {
   billingAddress: IOrderAddress;
   shippingAddress: IOrderAddress;
   shipping: IOrderShipping;
-  financialStatus: 'pending' | 'authorized' | 'partially_paid' | 'paid' | 'partially_refunded' | 'refunded' | 'voided';
+  financialStatus:
+    | 'pending'
+    | 'authorized'
+    | 'partially_paid'
+    | 'paid'
+    | 'partially_refunded'
+    | 'refunded'
+    | 'voided';
   fulfillmentStatus: 'unfulfilled' | 'partial' | 'fulfilled' | 'restocked' | 'cancelled';
   mobileStatus: {
-    current: 'placed' | 'confirmed' | 'processing' | 'shipped' | 'out_for_delivery' | 'delivered' | 'cancelled' | 'returned';
+    current:
+      | 'placed'
+      | 'confirmed'
+      | 'processing'
+      | 'shipped'
+      | 'out_for_delivery'
+      | 'delivered'
+      | 'cancelled'
+      | 'returned';
     history: IMobileStatusHistory[];
     estimatedDelivery?: Date;
     deliveryInstructions?: string;
@@ -693,7 +707,14 @@ export interface IShopifyOrder {
   discount_codes: IShopifyDiscountCode[];
   email: string;
   estimated_taxes: boolean;
-  financial_status: 'pending' | 'authorized' | 'partially_paid' | 'paid' | 'partially_refunded' | 'refunded' | 'voided';
+  financial_status:
+    | 'pending'
+    | 'authorized'
+    | 'partially_paid'
+    | 'paid'
+    | 'partially_refunded'
+    | 'refunded'
+    | 'voided';
   fulfillment_status?: 'fulfilled' | 'null' | 'partial' | 'restocked';
   gateway?: string;
   landing_site?: string;
@@ -825,11 +846,8 @@ export interface IShopifyShippingLine {
 // EXPRESS REQUEST EXTENSIONS
 // =============================================================================
 
-export interface AuthenticatedRequest<
-  TParams = unknown,
-  TQuery = unknown,
-  TBody = unknown
-> extends Request<TParams, unknown, TBody, TQuery> {
+export interface AuthenticatedRequest<TParams = unknown, TQuery = unknown, TBody = unknown>
+  extends Request<TParams, unknown, TBody, TQuery> {
   user?: {
     _id: ObjectId;
     id: string; // Convenience getter for _id.toString()

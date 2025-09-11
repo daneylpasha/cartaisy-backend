@@ -81,7 +81,7 @@ export const sendEmail = async (
  */
 export const sendWelcomeEmail = async (
   email: string,
-  name: string
+  name?: string
 ): Promise<boolean> => {
   const subject = `Welcome to ${STORE_NAME}!`;
   
