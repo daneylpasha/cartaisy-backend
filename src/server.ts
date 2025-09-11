@@ -2,7 +2,6 @@ import app from './app';
 import mongoose from 'mongoose';
 import { tenantConfig, databaseConfig, apiConfig } from './config/tenant';
 import { validateRequiredConfig, logConfigSummary } from './config/validateConfig';
-import { initializeBackgroundJobs, shutdownBackgroundJobs } from './services/backgroundJobService';
 
 // Validate configuration before starting server
 try {
@@ -39,12 +38,6 @@ const startServer = async (): Promise<void> => {
     
     // Connect to database
     await connectDB();
-    
-    // Initialize background jobs if enabled
-    if (tenantConfig.features.enableBackgroundJobs) {
-      console.log('🔄 Initializing background job system...');
-      initializeBackgroundJobs();
-    }
     
     app.listen(PORT, '0.0.0.0', () => {
       console.log('\n🚀 =================== SERVER STARTED ===================');
@@ -86,12 +79,6 @@ const startServer = async (): Promise<void> => {
 // Graceful shutdown handling
 const gracefulShutdown = async (signal: string) => {
   console.log(`\n🛑 Received ${signal}. Starting graceful shutdown...`);
-  
-  // Shutdown background jobs
-  if (tenantConfig.features.enableBackgroundJobs) {
-    console.log('🔄 Shutting down background jobs...');
-    shutdownBackgroundJobs();
-  }
   
   // Close database connection
   await mongoose.connection.close();

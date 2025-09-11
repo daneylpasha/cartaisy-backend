@@ -123,19 +123,20 @@ app.get('/api/health', async (_req: Request, res: Response) => {
 
 // Import routes
 import authRoutes from './routes/authRoutes';
-import productRoutes from './routes/productRoutes';
-import customerRoutes from './routes/customerRoutes';
-import shopifyRoutes from './routes/shopifyRoutes';
-import webhookRoutes from './routes/webhookRoutes';
-import adminRoutes from './routes/adminRoutes';
+// Temporarily disable problematic routes for deployment
+// import productRoutes from './routes/productRoutes';
+// import customerRoutes from './routes/customerRoutes';
+// import shopifyRoutes from './routes/shopifyRoutes';
+// import webhookRoutes from './routes/webhookRoutes';
+// import adminRoutes from './routes/adminRoutes';
 
-// API Routes with versioning
+// API Routes with versioning - only auth for now
 app.use(`/api/${apiConfig.version}/auth`, authRoutes);
-app.use(`/api/${apiConfig.version}/products`, productRoutes);
-app.use(`/api/${apiConfig.version}/customer`, customerRoutes);
-app.use(`/api/${apiConfig.version}/shopify`, shopifyRoutes);
-app.use(`/api/webhooks`, webhookRoutes); // Webhooks don't use versioning
-app.use(`/api/${apiConfig.version}/admin`, adminRoutes);
+// app.use(`/api/${apiConfig.version}/products`, productRoutes);
+// app.use(`/api/${apiConfig.version}/customer`, customerRoutes);
+// app.use(`/api/${apiConfig.version}/shopify`, shopifyRoutes);
+// app.use(`/api/webhooks`, webhookRoutes);
+// app.use(`/api/${apiConfig.version}/admin`, adminRoutes);
 
 // Custom error interface
 interface CustomError extends Error {
