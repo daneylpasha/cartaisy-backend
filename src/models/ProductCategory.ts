@@ -264,7 +264,7 @@ ProductCategorySchema.pre('save', async function(next) {
   // Update path based on parent
   if (this.parent && this.isModified('parent')) {
     try {
-      const parent = await this.constructor.findById(this.parent) as IProductCategory;
+      const parent = await (this.constructor as any).findById(this.parent) as IProductCategory;
       if (parent) {
         this.level = parent.level + 1;
         this.path = `${parent.path}/${this.handle}`;
@@ -284,7 +284,7 @@ ProductCategorySchema.pre('save', async function(next) {
 ProductCategorySchema.post('save', async function() {
   if (this.parent && this.isNew) {
     try {
-      await this.constructor.findByIdAndUpdate(this.parent, {
+      await (this.constructor as any).findByIdAndUpdate(this.parent, {
         $addToSet: { children: this._id }
       });
     } catch (error) {
@@ -298,13 +298,13 @@ ProductCategorySchema.pre('deleteOne', { document: true, query: false }, async f
   try {
     // Remove from parent's children array
     if (this.parent) {
-      await this.constructor.findByIdAndUpdate(this.parent, {
+      await (this.constructor as any).findByIdAndUpdate(this.parent, {
         $pull: { children: this._id }
       });
     }
     
     // Update children to have no parent (move to root level)
-    await this.constructor.updateMany(
+    await (this.constructor as any).updateMany(
       { parent: this._id },
       { $unset: { parent: 1 }, level: 0 }
     );

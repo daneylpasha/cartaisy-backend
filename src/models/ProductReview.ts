@@ -196,13 +196,13 @@ ProductReviewSchema.methods.isSpam = function(): boolean {
 // Pre-save hooks
 ProductReviewSchema.pre('save', function(next) {
   // Auto-detect spam
-  if (this.isModified('reportCount') && this.isSpam() && this.status === 'approved') {
+  if (this.isModified('reportCount') && (this as any).isSpam() && this.status === 'approved') {
     this.status = 'pending';
   }
   
   // Update helpful count
   if (this.isModified('helpfulVotes')) {
-    this.updateHelpfulCount();
+    (this as any).updateHelpfulCount();
   }
   
   next();

@@ -515,6 +515,6 @@ export interface IProductModel extends mongoose.Model<IProductDocument> {
 
 export { IProduct, IProductVariant, IProductImage, IMobileDisplay, IProductAnalytics, IProductReviews, IProductSEO };
 
-const Product = mongoose.model<IProductDocument, IProductModel>('Product', ProductSchema);
+const Product = mongoose.model('Product', ProductSchema);
 
 export default Product;

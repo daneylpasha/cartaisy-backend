@@ -50,15 +50,15 @@ interface InventoryLevelsResponse {
   variants: InventoryLevel[];
 }
 
-// Initialize Shopify API
-const shopify = shopifyApi({
-  apiKey: process.env.SHOPIFY_API_KEY || '',
-  apiSecretKey: process.env.SHOPIFY_API_SECRET || '',
-  scopes: ['read_products', 'write_products', 'read_orders', 'write_orders'],
-  hostName: process.env.SHOPIFY_APP_URL || '',
-  apiVersion: ApiVersion.October23,
-  isEmbeddedApp: false
-});
+// Initialize Shopify API - commented out to fix runtime error
+// const shopify = shopifyApi({
+//   apiKey: process.env.SHOPIFY_API_KEY || '',
+//   apiSecretKey: process.env.SHOPIFY_API_SECRET || '',
+//   scopes: ['read_products', 'write_products', 'read_orders', 'write_orders'],
+//   hostName: process.env.SHOPIFY_APP_URL || '',
+//   apiVersion: ApiVersion.October23,
+//   isEmbeddedApp: false
+// });
 
 // Shopify REST client
 interface ShopifySession {

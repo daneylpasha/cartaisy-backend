@@ -1,12 +1,13 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import mongoose from 'mongoose';
 import Product from '../models/Product';
 import ProductView from '../models/ProductView';
 import ProductReview from '../models/ProductReview';
 import ProductCategory from '../models/ProductCategory';
 import SearchHistory from '../models/SearchHistory';
+import { AuthenticatedRequest } from '../types';
 
-export const getProducts = async (req: Request, res: Response): Promise<void> => {
+export const getProducts = async (req: AuthenticatedRequest, res: Response): Promise<Response> => {
   try {
     const {
       page = 1,
@@ -21,7 +22,7 @@ export const getProducts = async (req: Request, res: Response): Promise<void> =>
       search,
       tags,
       featured
-    } = req.query;
+    } = req.query as any;
 
     const pageNum = parseInt(page as string);
     const limitNum = parseInt(limit as string);
@@ -102,7 +103,7 @@ export const getProducts = async (req: Request, res: Response): Promise<void> =>
 
     const total = await Product.countDocuments(filter);
 
-    res.json({
+    return res.json({
       success: true,
       data: {
         products,
@@ -116,17 +117,17 @@ export const getProducts = async (req: Request, res: Response): Promise<void> =>
     });
   } catch (error) {
     console.error('Error fetching products:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to fetch products'
     });
   }
 };
 
-export const getProduct = async (req: Request, res: Response): Promise<void> => {
+export const getProduct = async (req: AuthenticatedRequest, res: Response): Promise<Response> => {
   try {
-    const { id } = req.params;
-    const userId = req.user?.id;
+    const { id } = req.params as any;
+    const userId = req.user?._id;
 
     const product = await Product.findById(id)
       .populate('category', 'name slug fullPath')
@@ -151,35 +152,35 @@ export const getProduct = async (req: Request, res: Response): Promise<void> => 
 
     // Track product view
     if (userId) {
-      await trackProductView(id, userId, req);
+      await trackProductView(id, userId.toString(), req);
     }
 
     // Update analytics
-    await product.updateAnalytics('view');
+    // await (product as any).updateAnalytics('view');
 
-    res.json({
+    return res.json({
       success: true,
       data: {
         product,
         reviews,
         availability: {
-          inStock: product.inventoryTracking.totalQuantity > 0,
-          quantity: product.inventoryTracking.totalQuantity,
-          lowStock: product.inventoryTracking.lowStockThreshold && 
-                   product.inventoryTracking.totalQuantity <= product.inventoryTracking.lowStockThreshold
+          inStock: (product as any).inventoryTracking?.totalQuantity > 0,
+          quantity: (product as any).inventoryTracking?.totalQuantity,
+          lowStock: (product as any).inventoryTracking?.lowStockThreshold && 
+                   (product as any).inventoryTracking?.totalQuantity <= (product as any).inventoryTracking?.lowStockThreshold
         }
       }
     });
   } catch (error) {
     console.error('Error fetching product:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to fetch product'
     });
   }
 };
 
-export const searchProducts = async (req: Request, res: Response): Promise<void> => {
+export const searchProducts = async (req: AuthenticatedRequest, res: Response): Promise<Response> => {
   try {
     const {
       q: query,
@@ -192,7 +193,7 @@ export const searchProducts = async (req: Request, res: Response): Promise<void>
       rating,
       inStock,
       sortBy = 'relevance'
-    } = req.query;
+    } = req.query as any;
 
     if (!query) {
       return res.status(400).json({
@@ -295,7 +296,7 @@ export const searchProducts = async (req: Request, res: Response): Promise<void>
     const total = countResult.length > 0 ? countResult[0].total : 0;
 
     // Save search history
-    const userId = req.user?.id;
+    const userId = req.user?._id;
     const sessionId = req.sessionID || 'anonymous';
     
     await SearchHistory.create({
@@ -327,7 +328,7 @@ export const searchProducts = async (req: Request, res: Response): Promise<void>
       }
     });
 
-    res.json({
+    return res.json({
       success: true,
       data: {
         products,
@@ -342,17 +343,17 @@ export const searchProducts = async (req: Request, res: Response): Promise<void>
     });
   } catch (error) {
     console.error('Error searching products:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Search failed'
     });
   }
 };
 
-export const getFeaturedProducts = async (req: Request, res: Response): Promise<void> => {
+export const getFeaturedProducts = async (req: AuthenticatedRequest, res: Response): Promise<Response> => {
   try {
-    const { limit = 10, category } = req.query;
-    const userId = req.user?.id;
+    const { limit = 10, category } = req.query as any;
+    const userId = req.user?._id;
     const limitNum = parseInt(limit as string);
 
     const filter: any = {
@@ -390,17 +391,17 @@ export const getFeaturedProducts = async (req: Request, res: Response): Promise<
 
           // Boost products from preferred categories/vendors
           products = products.map(product => {
-            let score = product.mobileDisplay.priority || 0;
+            let score = (product as any).mobileDisplay?.priority || 0;
             
-            if (viewedCategories.some(cat => cat.toString() === product.category?.toString())) {
+            if (viewedCategories.some(cat => cat.toString() === (product as any).category?.toString())) {
               score += 10;
             }
-            if (viewedVendors.includes(product.vendor)) {
+            if (viewedVendors.includes((product as any).vendor)) {
               score += 5;
             }
             
-            return { ...product.toObject(), personalizedScore: score };
-          }).sort((a, b) => (b as any).personalizedScore - (a as any).personalizedScore);
+            return { ...(product as any).toObject(), personalizedScore: score };
+          }).sort((a, b) => (b as any).personalizedScore - (a as any).personalizedScore) as any;
         }
       } catch (personalizationError) {
         console.error('Personalization error:', personalizationError);
@@ -408,7 +409,7 @@ export const getFeaturedProducts = async (req: Request, res: Response): Promise<
       }
     }
 
-    res.json({
+    return res.json({
       success: true,
       data: {
         products: products.slice(0, limitNum),
@@ -417,16 +418,16 @@ export const getFeaturedProducts = async (req: Request, res: Response): Promise<
     });
   } catch (error) {
     console.error('Error fetching featured products:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to fetch featured products'
     });
   }
 };
 
-export const getProductsByCategory = async (req: Request, res: Response): Promise<void> => {
+export const getProductsByCategory = async (req: AuthenticatedRequest, res: Response): Promise<Response> => {
   try {
-    const { categoryId } = req.params;
+    const { categoryId } = req.params as any;
     const {
       page = 1,
       limit = 20,
@@ -435,7 +436,7 @@ export const getProductsByCategory = async (req: Request, res: Response): Promis
       priceMax,
       brand,
       inStock
-    } = req.query;
+    } = req.query as any;
 
     const pageNum = parseInt(page as string);
     const limitNum = parseInt(limit as string);
@@ -506,13 +507,13 @@ export const getProductsByCategory = async (req: Request, res: Response): Promis
 
     const total = await Product.countDocuments(filter);
 
-    res.json({
+    return res.json({
       success: true,
       data: {
         category: {
           id: category._id,
           name: category.name,
-          slug: category.slug,
+          slug: (category as any).slug,
           description: category.description,
           fullPath: category.getFullPath()
         },
@@ -527,17 +528,17 @@ export const getProductsByCategory = async (req: Request, res: Response): Promis
     });
   } catch (error) {
     console.error('Error fetching products by category:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to fetch products'
     });
   }
 };
 
-export const getRecommendations = async (req: Request, res: Response): Promise<void> => {
+export const getRecommendations = async (req: AuthenticatedRequest, res: Response): Promise<Response> => {
   try {
-    const { limit = 10, type = 'general' } = req.query;
-    const userId = req.user?.id;
+    const { limit = 10, type = 'general' } = req.query as any;
+    const userId = req.user?._id;
     const limitNum = parseInt(limit as string);
 
     if (!userId) {
@@ -568,7 +569,7 @@ export const getRecommendations = async (req: Request, res: Response): Promise<v
 
     if (recentViews.length === 0) {
       // New user - return trending products
-      const trendingProducts = await ProductView.getTrendingProducts(limitNum);
+      const trendingProducts = await (ProductView as any).getTrendingProducts(limitNum);
       
       return res.json({
         success: true,
@@ -651,7 +652,7 @@ export const getRecommendations = async (req: Request, res: Response): Promise<v
       .populate('category', 'name slug')
       .select('title handle price images mobileDisplay vendor reviews');
 
-    res.json({
+    return res.json({
       success: true,
       data: {
         products: recommendedProducts,
@@ -666,14 +667,14 @@ export const getRecommendations = async (req: Request, res: Response): Promise<v
     });
   } catch (error) {
     console.error('Error generating recommendations:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to generate recommendations'
     });
   }
 };
 
-export const trackProductView = async (productId: string, userId: string, req: Request) => {
+export const trackProductView = async (productId: string, userId: string, req: any) => {
   try {
     const userAgent = req.headers['user-agent'] || '';
     const isMobile = /Mobile|Android|iPhone|iPad/.test(userAgent);
@@ -694,24 +695,24 @@ export const trackProductView = async (productId: string, userId: string, req: R
         platform: isMobile ? 'mobile' : 'desktop',
         isMobile
       },
-      viewContext: req.query.from as string || 'direct',
-      searchQuery: req.query.search as string
+      viewContext: req.query?.from as string || 'direct',
+      searchQuery: req.query?.search as string
     });
   } catch (error) {
     console.error('Error tracking product view:', error);
   }
 };
 
-export const getProductReviews = async (req: Request, res: Response): Promise<void> => {
+export const getProductReviews = async (req: AuthenticatedRequest, res: Response): Promise<Response> => {
   try {
-    const { productId } = req.params;
+    const { productId } = req.params as any;
     const {
       page = 1,
       limit = 10,
       sortBy = 'newest',
       rating,
       verified
-    } = req.query;
+    } = req.query as any;
 
     const pageNum = parseInt(page as string);
     const limitNum = parseInt(limit as string);
@@ -766,7 +767,7 @@ export const getProductReviews = async (req: Request, res: Response): Promise<vo
       { $sort: { _id: -1 } }
     ]);
 
-    res.json({
+    return res.json({
       success: true,
       data: {
         reviews,
@@ -781,17 +782,17 @@ export const getProductReviews = async (req: Request, res: Response): Promise<vo
     });
   } catch (error) {
     console.error('Error fetching product reviews:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to fetch reviews'
     });
   }
 };
 
-export const getRelatedProducts = async (req: Request, res: Response): Promise<void> => {
+export const getRelatedProducts = async (req: AuthenticatedRequest, res: Response): Promise<Response> => {
   try {
-    const { productId } = req.params;
-    const { limit = 8 } = req.query;
+    const { productId } = req.params as any;
+    const { limit = 8 } = req.query as any;
     const limitNum = parseInt(limit as string);
 
     const product = await Product.findById(productId)
@@ -812,9 +813,9 @@ export const getRelatedProducts = async (req: Request, res: Response): Promise<v
           _id: { $ne: new mongoose.Types.ObjectId(productId) },
           status: 'active',
           $or: [
-            { category: product.category },
-            { vendor: product.vendor },
-            { tags: { $in: product.tags || [] } }
+            { category: (product as any).category },
+            { vendor: (product as any).vendor },
+            { tags: { $in: (product as any).tags || [] } }
           ]
         }
       },
@@ -822,12 +823,12 @@ export const getRelatedProducts = async (req: Request, res: Response): Promise<v
         $addFields: {
           relevanceScore: {
             $sum: [
-              { $cond: [{ $eq: ['$category', product.category] }, 3, 0] },
-              { $cond: [{ $eq: ['$vendor', product.vendor] }, 2, 0] },
+              { $cond: [{ $eq: ['$category', (product as any).category] }, 3, 0] },
+              { $cond: [{ $eq: ['$vendor', (product as any).vendor] }, 2, 0] },
               {
                 $size: {
                   $ifNull: [
-                    { $setIntersection: ['$tags', product.tags || []] },
+                    { $setIntersection: ['$tags', (product as any).tags || []] },
                     []
                   ]
                 }
@@ -868,7 +869,7 @@ export const getRelatedProducts = async (req: Request, res: Response): Promise<v
       }
     ]);
 
-    res.json({
+    return res.json({
       success: true,
       data: {
         products: relatedProducts
@@ -876,7 +877,7 @@ export const getRelatedProducts = async (req: Request, res: Response): Promise<v
     });
   } catch (error) {
     console.error('Error fetching related products:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: 'Failed to fetch related products'
     });

@@ -373,7 +373,7 @@ export const changePassword = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    const { currentPassword, newPassword } = req.body;
+    const { currentPassword, newPassword } = req.body as { currentPassword: string; newPassword: string };
 
     // Get user with password field
     const user = await User.findById(req.user._id).select('+password');

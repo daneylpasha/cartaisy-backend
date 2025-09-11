@@ -63,8 +63,22 @@ export const authenticate = async (
       return;
     }
 
-    // Attach user to request object
-    req.user = user;
+    // Attach user to request object with proper typing
+    req.user = {
+      _id: user._id,
+      id: user._id.toString(),
+      email: user.email,
+      role: user.role,
+      name: user.name,
+      isActive: user.isActive,
+      isVerified: user.isVerified,
+      phone: user.phone,
+      profile: user.profile,
+      addresses: user.addresses,
+      preferences: user.preferences,
+      createdAt: user.createdAt,
+      lastLoginAt: user.lastLoginAt
+    };
     
     next();
   } catch (error) {
@@ -101,7 +115,21 @@ export const optionalAuthenticate = async (
       const user = await User.findById(decoded.userId).select('-password');
       
       if (user && user.isActive) {
-        req.user = user;
+        req.user = {
+          _id: user._id,
+          id: user._id.toString(),
+          email: user.email,
+          role: user.role,
+          name: user.name,
+          isActive: user.isActive,
+          isVerified: user.isVerified,
+          phone: user.phone,
+          profile: user.profile,
+          addresses: user.addresses,
+          preferences: user.preferences,
+          createdAt: user.createdAt,
+          lastLoginAt: user.lastLoginAt
+        };
       }
     } catch (error) {
       // Invalid token, continue without user
