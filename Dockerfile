@@ -21,11 +21,21 @@
 FROM node:20-alpine
 WORKDIR /app
 
+# Copy package files
 COPY package*.json ./
 COPY tsconfig*.json ./
-RUN npm ci        # ts-node devDep ho to bhi install ho jayega (NODE_ENV abhi set nahi)
 
+# Install ALL dependencies (including devDependencies for ts-node)
+RUN npm ci --include=dev
+
+# Copy source code
 COPY src ./src
+
+# Set production environment
 ENV NODE_ENV=production
-EXPOSE 8080
-CMD ["node", "-r", "ts-node/register/transpile-only", "src/server.ts"]
+
+# Don't hardcode port - Railway will set PORT env variable
+# EXPOSE is just documentation, Railway ignores it
+
+# Start with ts-node
+CMD ["npx", "ts-node", "--transpile-only", "src/server.ts"]

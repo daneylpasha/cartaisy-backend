@@ -109,7 +109,8 @@
 // src/server.ts
 import express from 'express';
 import mongoose from 'mongoose';
-import { tenantConfig, databaseConfig, apiConfig } from './config/tenant';
+import app from './app';
+import { databaseConfig, apiConfig } from './config/tenant';
 import { validateRequiredConfig, logConfigSummary } from './config/validateConfig';
 
 const PORT = Number(process.env.PORT) || Number(apiConfig.port) || 3000;
@@ -147,7 +148,6 @@ server.listen(PORT, '0.0.0.0', () => {
       .catch(e => console.error('🔴 Mongo connect error:', e?.message || e));
 
     // Mount your real app AFTER health is up
-    const { default: app } = await import('./app');
     server.use(app);
 
   } catch (e: any) {
