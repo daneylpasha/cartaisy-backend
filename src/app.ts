@@ -22,8 +22,14 @@ const limiter = rateLimit({
   max: tenantConfig.security.rateLimitMaxRequests,
   message: {
     error: 'Too many requests, please try again later.'
-  }
+  },
+  standardHeaders: true,
+  legacyHeaders: false
 });
+
+// Trust proxy for Railway/production deployments
+app.set('trust proxy', 1);
+
 app.use(`/api/${apiConfig.version}/`, limiter);
 
 // Logging (see all requests in console)
