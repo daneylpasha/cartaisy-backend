@@ -132,6 +132,9 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Listening on ${PORT}  (health: /api/health)`);
 });
 
+// Mount app routes immediately for production
+server.use(app);
+
 // Heavy work in background
 (async () => {
   try {
@@ -139,16 +142,13 @@ server.listen(PORT, '0.0.0.0', () => {
     logConfigSummary();
 
     // DB connect non-blocking
-    mongoose.connect(databaseConfig.mongodbUri, {
+    await mongoose.connect(databaseConfig.mongodbUri, {
       maxPoolSize: databaseConfig.maxPoolSize,
       minPoolSize: databaseConfig.minPoolSize,
       connectTimeoutMS: databaseConfig.connectionTimeout,
       serverSelectionTimeoutMS: databaseConfig.connectionTimeout,
-    }).then(() => console.log('🟢 Mongo connected'))
-      .catch(e => console.error('🔴 Mongo connect error:', e?.message || e));
-
-    // Mount your real app AFTER health is up
-    server.use(app);
+    });
+    console.log('🟢 Mongo connected');
 
   } catch (e: any) {
     console.error('❌ Startup error:', e?.message || e);
