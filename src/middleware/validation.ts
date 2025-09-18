@@ -72,6 +72,7 @@ export const validateEmailVerification = [
 
 /**
  * Validation rules for profile update
+ * Validates common fields if they're present, but allows any fields to be updated
  */
 export const validateProfileUpdate = [
   body('name')
@@ -79,12 +80,12 @@ export const validateProfileUpdate = [
     .trim()
     .isLength({ min: 2, max: 50 }).withMessage('Name must be between 2 and 50 characters')
     .matches(/^[a-zA-Z\s]+$/).withMessage('Name can only contain letters and spaces'),
-  
+
   body('phone')
     .optional()
     .trim()
     .matches(/^[\d\s\-\+\(\)]+$/).withMessage('Invalid phone number format'),
-  
+
   body('dateOfBirth')
     .optional()
     .isISO8601().withMessage('Invalid date format')
@@ -97,6 +98,33 @@ export const validateProfileUpdate = [
       }
       if (age > 120) {
         throw new Error('Invalid date of birth');
+      }
+      return true;
+    }),
+
+  body('avatar')
+    .optional()
+    .trim()
+    .isURL().withMessage('Avatar must be a valid URL'),
+
+  body('bio')
+    .optional()
+    .trim()
+    .isLength({ max: 500 }).withMessage('Bio must not exceed 500 characters'),
+
+  body('addresses')
+    .optional()
+    .isArray().withMessage('Addresses must be an array'),
+
+  body('addresses.*.type')
+    .optional()
+    .isIn(['shipping', 'billing']).withMessage('Address type must be either shipping or billing'),
+
+  // Custom validation to ensure at least one field is provided
+  body()
+    .custom((value) => {
+      if (Object.keys(value).length === 0) {
+        throw new Error('At least one field must be provided for update');
       }
       return true;
     })
