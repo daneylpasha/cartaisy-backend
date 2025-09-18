@@ -384,13 +384,14 @@ export const completeProfile = async (req: AuthRequest, res: Response): Promise<
       return;
     }
 
-    // Define allowed fields for profile completion
-    const allowedFields = ['name', 'phone'];
+    // Define restricted fields that cannot be updated through this API
+    const restrictedFields = ['_id', 'email', 'password', 'role', 'isVerified', 'isActive',
+                             'passwordResetToken', 'passwordResetExpires', 'createdAt', 'updatedAt'];
 
-    if (!allowedFields.includes(field)) {
+    if (restrictedFields.includes(field)) {
       res.status(400).json({
         status: 'error',
-        message: `Invalid field. Allowed fields: ${allowedFields.join(', ')}`
+        message: `Cannot update restricted field: ${field}`
       });
       return;
     }
@@ -406,7 +407,7 @@ export const completeProfile = async (req: AuthRequest, res: Response): Promise<
       return;
     }
 
-    // Check if field already has a value
+    // Check if field already has a value (optional - remove if you want to allow updates)
     const fieldValue = currentUser[field as keyof typeof currentUser];
     if (fieldValue && fieldValue !== '') {
       res.status(400).json({
@@ -421,15 +422,34 @@ export const completeProfile = async (req: AuthRequest, res: Response): Promise<
       return;
     }
 
-    // Build update object
+    // Build update object - handle nested fields for profile
     const updateObj: Record<string, any> = {};
-    updateObj[field] = value;
 
-    // Update user
+    // List of fields that should go into profile subdocument
+    const profileFields = ['avatar', 'dateOfBirth', 'gender', 'interests',
+                          'bio', 'occupation', 'company', 'website', 'socialLinks'];
+
+    // List of fields that should go into preferences
+    const preferencesFields = ['currency', 'language', 'theme', 'notifications'];
+
+    if (profileFields.includes(field)) {
+      updateObj[`profile.${field}`] = value;
+    } else if (preferencesFields.includes(field)) {
+      updateObj[`preferences.${field}`] = value;
+    } else {
+      // Direct field on user document (like name, phone, lastName, etc.)
+      updateObj[field] = value;
+    }
+
+    // Update user with strict: false to allow dynamic fields
     const user = await User.findByIdAndUpdate(
       req.user._id,
       { $set: updateObj },
-      { new: true, runValidators: true }
+      {
+        new: true,
+        runValidators: true,
+        strict: false  // Allow fields not in schema
+      }
     );
 
     if (!user) {
@@ -440,8 +460,11 @@ export const completeProfile = async (req: AuthRequest, res: Response): Promise<
       return;
     }
 
-    // Check if profile is complete
+    // Check if profile is complete (minimum required fields)
     const isProfileComplete = !!(user.name && user.phone);
+
+    // Return complete user object with dynamic fields
+    const userObj = user.toObject();
 
     res.status(200).json({
       status: 'success',
@@ -449,9 +472,10 @@ export const completeProfile = async (req: AuthRequest, res: Response): Promise<
       data: {
         user: {
           id: user._id,
-          name: user.name,
           email: user.email,
-          phone: user.phone,
+          name: userObj.name,
+          phone: userObj.phone,
+          [field]: value,  // Include the newly added field
           isProfileComplete
         }
       }

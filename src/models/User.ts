@@ -319,6 +319,7 @@ const UserSchema = new Schema<IUser>({
   }
 }, {
   timestamps: true,
+  strict: false,  // Allow dynamic fields not defined in schema
   toJSON: {
     virtuals: true,
     transform: function(_doc, ret): any {
