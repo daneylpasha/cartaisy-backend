@@ -395,6 +395,32 @@ export const completeProfile = async (req: AuthRequest, res: Response): Promise<
       return;
     }
 
+    // Get current user to check if field already exists
+    const currentUser = await User.findById(req.user._id);
+
+    if (!currentUser) {
+      res.status(404).json({
+        status: 'error',
+        message: 'User not found'
+      });
+      return;
+    }
+
+    // Check if field already has a value
+    const fieldValue = currentUser[field as keyof typeof currentUser];
+    if (fieldValue && fieldValue !== '') {
+      res.status(400).json({
+        status: 'error',
+        message: `${field} is already set. Cannot update existing ${field}.`,
+        data: {
+          field,
+          currentValue: fieldValue,
+          isProfileComplete: !!(currentUser.name && currentUser.phone)
+        }
+      });
+      return;
+    }
+
     // Build update object
     const updateObj: Record<string, any> = {};
     updateObj[field] = value;
@@ -419,7 +445,7 @@ export const completeProfile = async (req: AuthRequest, res: Response): Promise<
 
     res.status(200).json({
       status: 'success',
-      message: `${field} updated successfully`,
+      message: `${field} added successfully`,
       data: {
         user: {
           id: user._id,
