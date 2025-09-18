@@ -14,7 +14,7 @@ type AuthRequest = AuthenticatedRequest;
  */
 export const register = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { name, email, password } = req.body;
+    const { email, password } = req.body;
 
     // Check if user already exists
     const existingUser = await User.findOne({ email });
@@ -26,9 +26,8 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // Create new user
+    // Create new user (name will be added later via updateProfile)
     const user = new User({
-      name,
       email,
       password,
       role: 'customer' // Default role for new registrations
@@ -41,7 +40,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     const refreshToken = generateRefreshToken((user._id as any).toString());
 
     // Send welcome email (don't wait for it)
-    sendWelcomeEmail(email, name).catch(err => 
+    sendWelcomeEmail(email, email).catch(err =>
       console.error('Failed to send welcome email:', err)
     );
 
@@ -353,6 +352,86 @@ export const updateProfile = async (req: AuthRequest, res: Response): Promise<vo
     });
   } catch (error) {
     console.error('Update profile error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to update profile. Please try again.'
+    });
+  }
+};
+
+/**
+ * Complete Profile - Step by step profile completion after registration
+ * Can be called multiple times to update different fields
+ */
+export const completeProfile = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({
+        status: 'error',
+        message: 'User not authenticated'
+      });
+      return;
+    }
+
+    const { field, value } = req.body;
+
+    // Validate input
+    if (!field || value === undefined) {
+      res.status(400).json({
+        status: 'error',
+        message: 'Field and value are required'
+      });
+      return;
+    }
+
+    // Define allowed fields for profile completion
+    const allowedFields = ['name', 'phone'];
+
+    if (!allowedFields.includes(field)) {
+      res.status(400).json({
+        status: 'error',
+        message: `Invalid field. Allowed fields: ${allowedFields.join(', ')}`
+      });
+      return;
+    }
+
+    // Build update object
+    const updateObj: Record<string, any> = {};
+    updateObj[field] = value;
+
+    // Update user
+    const user = await User.findByIdAndUpdate(
+      req.user._id,
+      { $set: updateObj },
+      { new: true, runValidators: true }
+    );
+
+    if (!user) {
+      res.status(404).json({
+        status: 'error',
+        message: 'User not found'
+      });
+      return;
+    }
+
+    // Check if profile is complete
+    const isProfileComplete = !!(user.name && user.phone);
+
+    res.status(200).json({
+      status: 'success',
+      message: `${field} updated successfully`,
+      data: {
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          phone: user.phone,
+          isProfileComplete
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Complete profile error:', error);
     res.status(500).json({
       status: 'error',
       message: 'Failed to update profile. Please try again.'

@@ -208,7 +208,7 @@ const UserSchema = new Schema<IUser>({
   // Core User Information
   name: {
     type: String,
-    required: [true, 'Name is required'],
+    required: false, // Made optional for step-by-step registration
     trim: true,
     maxlength: [100, 'Name cannot exceed 100 characters'],
     minlength: [2, 'Name must be at least 2 characters long']

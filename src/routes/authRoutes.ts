@@ -7,6 +7,7 @@ import {
   resetPassword,
   getProfile,
   updateProfile,
+  completeProfile,
   changePassword
 } from '../controllers/authController';
 import { authenticate } from '../middleware/auth';
@@ -103,6 +104,13 @@ router.patch(
   validateProfileUpdate,
   handleValidationErrors,
   updateProfile
+);
+
+// Complete profile step-by-step (for new users)
+router.post(
+  '/complete-profile',
+  authenticate,
+  completeProfile
 );
 
 // Change password (for authenticated users)
