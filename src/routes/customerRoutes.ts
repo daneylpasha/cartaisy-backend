@@ -1,4 +1,5 @@
 import express from 'express';
+import { homescreenController } from '../controllers/homescreenController';
 
 // Wishlist controllers
 import {
@@ -68,6 +69,22 @@ import { requireAuth, optionalAuth, requireAdmin } from '../middleware/auth';
 import { validateObjectId } from '../middleware/validation';
 
 const router = express.Router();
+
+// =============================================================================
+// HOMESCREEN ROUTE
+// =============================================================================
+
+/**
+ * GET /api/v1/customer/homescreen
+ * Get all homescreen data including carousel items
+ */
+router.get('/homescreen', homescreenController.getHomescreenData);
+
+// Individual homescreen component endpoints for selective updates
+// These can be uncommented and implemented as needed:
+// router.get('/homescreen/carousel', homescreenController.getCarouselOnly);
+// router.get('/homescreen/featured', homescreenController.getFeaturedOnly);
+// router.get('/homescreen/categories', homescreenController.getCategoriesOnly);
 
 // =============================================================================
 // WISHLIST ROUTES

@@ -137,6 +137,9 @@ import customerRoutes from './routes/customerRoutes';
 import shopifyRoutes from './routes/shopifyRoutes';
 import webhookRoutes from './routes/webhookRoutes';
 import adminRoutes from './routes/adminRoutes';
+import carouselRoutes from './routes/carouselRoutes';
+import categoryGridRoutes from './routes/categoryGridRoutes';
+import calloutBannerRoutes from './routes/calloutBannerRoutes';
 
 // API Routes with versioning
 app.use(`/api/${apiConfig.version}/auth`, authRoutes);
@@ -145,6 +148,9 @@ app.use(`/api/${apiConfig.version}/customer`, customerRoutes);
 app.use(`/api/${apiConfig.version}/shopify`, shopifyRoutes);
 app.use(`/api/webhooks`, webhookRoutes);
 app.use(`/api/${apiConfig.version}/admin`, adminRoutes);
+app.use(`/api/${apiConfig.version}`, carouselRoutes);
+app.use(`/api/${apiConfig.version}`, categoryGridRoutes);
+app.use(`/api/${apiConfig.version}`, calloutBannerRoutes);
 
 // Custom error interface
 interface CustomError extends Error {

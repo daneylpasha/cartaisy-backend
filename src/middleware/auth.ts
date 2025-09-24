@@ -175,3 +175,4 @@ export const requireAuth = authenticate;
 export const optionalAuth = optionalAuthenticate;
 export const requireAdmin = [authenticate, authorize('admin')];
 export const requireModerator = [authenticate, authorize('admin', 'moderator')];
+export const authenticateAdmin = requireAdmin;
