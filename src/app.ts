@@ -140,6 +140,7 @@ import adminRoutes from './routes/adminRoutes';
 import carouselRoutes from './routes/carouselRoutes';
 import categoryGridRoutes from './routes/categoryGridRoutes';
 import calloutBannerRoutes from './routes/calloutBannerRoutes';
+import collectionDisplayRoutes from './routes/collectionDisplayRoutes';
 
 // API Routes with versioning
 app.use(`/api/${apiConfig.version}/auth`, authRoutes);
@@ -151,6 +152,7 @@ app.use(`/api/${apiConfig.version}/admin`, adminRoutes);
 app.use(`/api/${apiConfig.version}`, carouselRoutes);
 app.use(`/api/${apiConfig.version}`, categoryGridRoutes);
 app.use(`/api/${apiConfig.version}`, calloutBannerRoutes);
+app.use(`/api/${apiConfig.version}`, collectionDisplayRoutes);
 
 // Custom error interface
 interface CustomError extends Error {

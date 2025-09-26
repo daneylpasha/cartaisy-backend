@@ -4,6 +4,7 @@ import Product from '../models/Product';
 import ProductCategory from '../models/ProductCategory';
 import CategoryGrid from '../models/CategoryGrid';
 import CalloutBanner from '../models/CalloutBanner';
+import CollectionDisplay from '../models/CollectionDisplay';
 
 // Homescreen component services - modular and reusable
 const homescreenServices = {
@@ -47,6 +48,14 @@ const homescreenServices = {
       .lean();
   },
 
+  // Collection displays component data (dynamic collection UI layouts)
+  async getCollectionDisplays() {
+    return CollectionDisplay.find({ isActive: true })
+      .sort({ order: 1 })
+      .select('type collectionId order title')
+      .lean();
+  },
+
   // New arrivals component data
   async getNewArrivals() {
     return Product.find({ published: true })
@@ -83,6 +92,7 @@ export const homescreenController = {
         categories,
         categoryGrid,
         calloutBanners,
+        collectionDisplays,
         newArrivals,
         bestSellers
       ] = await Promise.all([
@@ -91,6 +101,7 @@ export const homescreenController = {
         homescreenServices.getCategories(),
         homescreenServices.getCategoryGrid(),
         homescreenServices.getCalloutBanners(),
+        homescreenServices.getCollectionDisplays(),
         homescreenServices.getNewArrivals(),
         homescreenServices.getBestSellers()
       ]);
@@ -114,6 +125,9 @@ export const homescreenController = {
           // Promotional content
           calloutBanners,
 
+          // Dynamic collection layouts
+          collectionDisplays,
+
           // Future components will go here:
           // promoBanners: await homescreenServices.getPromoBanners(),
           // recentlyViewed: await homescreenServices.getRecentlyViewed(userId),
@@ -127,6 +141,7 @@ export const homescreenController = {
             categoriesCount: categories.length,
             categoryGridItemsCount: categoryGrid.length,
             calloutBannersCount: calloutBanners.length,
+            collectionDisplaysCount: collectionDisplays.length,
             newArrivalsCount: newArrivals.length,
             bestSellersCount: bestSellers.length,
             lastUpdated: new Date().toISOString()
