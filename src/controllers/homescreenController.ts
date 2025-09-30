@@ -5,6 +5,9 @@ import ProductCategory from '../models/ProductCategory';
 import CategoryGrid from '../models/CategoryGrid';
 import CalloutBanner from '../models/CalloutBanner';
 import CollectionDisplay from '../models/CollectionDisplay';
+import CategoryCollectionGrid from '../models/CategoryCollectionGrid';
+import PromoBanner from '../models/PromoBanner';
+import CollectionShowcase from '../models/CollectionShowcase';
 
 // Homescreen component services - modular and reusable
 const homescreenServices = {
@@ -74,8 +77,31 @@ const homescreenServices = {
       .lean();
   },
 
+  // Category Collection Grid component data (Categories you might like)
+  async getCategoryCollectionGrid() {
+    return CategoryCollectionGrid.find({ isActive: true })
+      .sort({ position: 1 })
+      .select('title subtitle collections')
+      .lean();
+  },
+
+  // Promo Banners component data (Promotional deals)
+  async getPromoBanners() {
+    return PromoBanner.find({ isActive: true })
+      .sort({ position: 1 })
+      .select('image title subtitle ctaText collectionId backgroundColor textColor buttonColor')
+      .lean();
+  },
+
+  // Collection Showcase component data (Multiple collections with different UI types)
+  async getCollectionShowcases() {
+    return CollectionShowcase.find({ isActive: true })
+      .sort({ position: 1 })
+      .select('type title collections')
+      .lean();
+  },
+
   // Future homescreen components can be added here:
-  // async getPromoBanners() { ... }
   // async getRecentlyViewed(userId) { ... }
   // async getRecommendations(userId) { ... }
   // async getBrandSpotlight() { ... }
@@ -93,6 +119,9 @@ export const homescreenController = {
         categoryGrid,
         calloutBanners,
         collectionDisplays,
+        categoryCollectionGrid,
+        promoBanners,
+        collectionShowcases,
         newArrivals,
         bestSellers
       ] = await Promise.all([
@@ -102,6 +131,9 @@ export const homescreenController = {
         homescreenServices.getCategoryGrid(),
         homescreenServices.getCalloutBanners(),
         homescreenServices.getCollectionDisplays(),
+        homescreenServices.getCategoryCollectionGrid(),
+        homescreenServices.getPromoBanners(),
+        homescreenServices.getCollectionShowcases(),
         homescreenServices.getNewArrivals(),
         homescreenServices.getBestSellers()
       ]);
@@ -124,12 +156,14 @@ export const homescreenController = {
 
           // Promotional content
           calloutBanners,
+          promoBanners,
 
           // Dynamic collection layouts
           collectionDisplays,
+          categoryCollectionGrid,
+          collectionShowcases,
 
           // Future components will go here:
-          // promoBanners: await homescreenServices.getPromoBanners(),
           // recentlyViewed: await homescreenServices.getRecentlyViewed(userId),
           // recommendations: await homescreenServices.getRecommendations(userId),
           // brandSpotlight: await homescreenServices.getBrandSpotlight(),
@@ -142,6 +176,9 @@ export const homescreenController = {
             categoryGridItemsCount: categoryGrid.length,
             calloutBannersCount: calloutBanners.length,
             collectionDisplaysCount: collectionDisplays.length,
+            categoryCollectionGridCount: categoryCollectionGrid.length,
+            promoBannersCount: promoBanners.length,
+            collectionShowcasesCount: collectionShowcases.length,
             newArrivalsCount: newArrivals.length,
             bestSellersCount: bestSellers.length,
             lastUpdated: new Date().toISOString()
