@@ -1,0 +1,474 @@
+/* tslint:disable */
+/* eslint-disable */
+// WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+import type { TsoaRoute } from '@tsoa/runtime';
+import {  fetchMiddlewares, ExpressTemplateService } from '@tsoa/runtime';
+// WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+import { HomescreenController } from './../controllers/homescreenController';
+// WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+import { FavoritesController } from './../controllers/favoritesController';
+import { expressAuthentication } from './../authentication';
+// @ts-ignore - no great way to install types from subpackage
+import type { Request as ExRequest, Response as ExResponse, RequestHandler, Router } from 'express';
+
+const expressAuthenticationRecasted = expressAuthentication as (req: ExRequest, securityName: string, scopes?: string[], res?: ExResponse) => Promise<any>;
+
+
+// WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+
+const models: TsoaRoute.Models = {
+    "PromoTag": {
+        "dataType": "refObject",
+        "properties": {
+            "text": {"dataType":"string"},
+            "imageUrl": {"dataType":"string"},
+            "backgroundColor": {"dataType":"string"},
+            "textColor": {"dataType":"string"},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "CarouselItem": {
+        "dataType": "refObject",
+        "properties": {
+            "imageUrl": {"dataType":"string","required":true},
+            "title": {"dataType":"string","required":true},
+            "subtitle": {"dataType":"string","required":true},
+            "ctaText": {"dataType":"string","required":true},
+            "collectionId": {"dataType":"string","required":true},
+            "endsAt": {"dataType":"string"},
+            "promoTag": {"ref":"PromoTag"},
+            "isActive": {"dataType":"boolean","required":true},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "CategoryGridItem": {
+        "dataType": "refObject",
+        "properties": {
+            "imageUrl": {"dataType":"string","required":true},
+            "title": {"dataType":"string","required":true},
+            "collectionId": {"dataType":"string","required":true},
+            "isActive": {"dataType":"boolean","required":true},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "Action": {
+        "dataType": "refObject",
+        "properties": {
+            "type": {"dataType":"union","subSchemas":[{"dataType":"enum","enums":["collection"]},{"dataType":"enum","enums":["navigation"]}],"required":true},
+            "collectionId": {"dataType":"string"},
+            "navigateTo": {"dataType":"string"},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "CalloutBannerItem": {
+        "dataType": "refObject",
+        "properties": {
+            "imageUrl": {"dataType":"string","required":true},
+            "title": {"dataType":"string","required":true},
+            "subTitle": {"dataType":"string","required":true},
+            "buttonText": {"dataType":"string","required":true},
+            "action": {"ref":"Action","required":true},
+            "position": {"dataType":"double","required":true},
+            "isActive": {"dataType":"boolean","required":true},
+            "backgroundColor": {"dataType":"string"},
+            "textColor": {"dataType":"string"},
+            "buttonColor": {"dataType":"string"},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "PromoBannerItem": {
+        "dataType": "refObject",
+        "properties": {
+            "image": {"dataType":"string","required":true},
+            "title": {"dataType":"string","required":true},
+            "subtitle": {"dataType":"string","required":true},
+            "ctaText": {"dataType":"string","required":true},
+            "collectionId": {"dataType":"string","required":true},
+            "position": {"dataType":"double","required":true},
+            "isActive": {"dataType":"boolean","required":true},
+            "backgroundColor": {"dataType":"string"},
+            "textColor": {"dataType":"string"},
+            "buttonColor": {"dataType":"string"},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "Product": {
+        "dataType": "refObject",
+        "properties": {
+            "productId": {"dataType":"string","required":true},
+            "title": {"dataType":"string","required":true},
+            "description": {"dataType":"string"},
+            "images": {"dataType":"array","array":{"dataType":"string"},"required":true},
+            "price": {"dataType":"double","required":true},
+            "compareAtPrice": {"dataType":"double"},
+            "currency": {"dataType":"string","required":true},
+            "inStock": {"dataType":"boolean","required":true},
+            "availableQuantity": {"dataType":"double","required":true},
+            "totalQuantity": {"dataType":"double","required":true},
+            "rating": {"dataType":"double","required":true},
+            "reviewsCount": {"dataType":"double","required":true},
+            "handle": {"dataType":"string"},
+            "vendor": {"dataType":"string"},
+            "tags": {"dataType":"array","array":{"dataType":"string"}},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "Collection": {
+        "dataType": "refObject",
+        "properties": {
+            "id": {"dataType":"string","required":true},
+            "title": {"dataType":"string","required":true},
+            "description": {"dataType":"string"},
+            "handle": {"dataType":"string"},
+            "image": {"dataType":"string"},
+            "products": {"dataType":"array","array":{"dataType":"refObject","ref":"Product"},"required":true},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "CollectionDisplay": {
+        "dataType": "refObject",
+        "properties": {
+            "type": {"dataType":"union","subSchemas":[{"dataType":"enum","enums":["large_row"]},{"dataType":"enum","enums":["small_grid"]},{"dataType":"enum","enums":["medium_row"]}],"required":true},
+            "order": {"dataType":"double","required":true},
+            "collection": {"ref":"Collection","required":true},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "CategoryCollectionItem": {
+        "dataType": "refObject",
+        "properties": {
+            "image": {"dataType":"string","required":true},
+            "title": {"dataType":"string","required":true},
+            "collectionId": {"dataType":"string","required":true},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "CategoryCollectionGridItem": {
+        "dataType": "refObject",
+        "properties": {
+            "title": {"dataType":"string","required":true},
+            "subtitle": {"dataType":"string","required":true},
+            "collections": {"dataType":"array","array":{"dataType":"refObject","ref":"CategoryCollectionItem"},"required":true},
+            "position": {"dataType":"double","required":true},
+            "isActive": {"dataType":"boolean","required":true},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "ShowcaseCollectionItem": {
+        "dataType": "refObject",
+        "properties": {
+            "image": {"dataType":"string","required":true},
+            "title": {"dataType":"string","required":true},
+            "collectionId": {"dataType":"string","required":true},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "CollectionShowcaseItem": {
+        "dataType": "refObject",
+        "properties": {
+            "type": {"dataType":"union","subSchemas":[{"dataType":"enum","enums":["grid"]},{"dataType":"enum","enums":["circular"]}],"required":true},
+            "title": {"dataType":"string","required":true},
+            "icon": {"dataType":"string"},
+            "collections": {"dataType":"array","array":{"dataType":"refObject","ref":"ShowcaseCollectionItem"},"required":true},
+            "position": {"dataType":"double","required":true},
+            "isActive": {"dataType":"boolean","required":true},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "HomescreenMetadata": {
+        "dataType": "refObject",
+        "properties": {
+            "carouselItemsCount": {"dataType":"double","required":true},
+            "categoryGridItemsCount": {"dataType":"double","required":true},
+            "calloutBannersCount": {"dataType":"double","required":true},
+            "promoBannersCount": {"dataType":"double","required":true},
+            "collectionDisplaysCount": {"dataType":"double","required":true},
+            "categoryCollectionGridCount": {"dataType":"double","required":true},
+            "collectionShowcasesCount": {"dataType":"double","required":true},
+            "lastUpdated": {"dataType":"string","required":true},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "HomescreenData": {
+        "dataType": "refObject",
+        "properties": {
+            "carousel": {"dataType":"array","array":{"dataType":"refObject","ref":"CarouselItem"},"required":true},
+            "categoryGrid": {"dataType":"array","array":{"dataType":"refObject","ref":"CategoryGridItem"},"required":true},
+            "calloutBanners": {"dataType":"array","array":{"dataType":"refObject","ref":"CalloutBannerItem"},"required":true},
+            "promoBanners": {"dataType":"array","array":{"dataType":"refObject","ref":"PromoBannerItem"},"required":true},
+            "collectionDisplays": {"dataType":"array","array":{"dataType":"refObject","ref":"CollectionDisplay"},"required":true},
+            "categoryCollectionGrid": {"dataType":"array","array":{"dataType":"refObject","ref":"CategoryCollectionGridItem"},"required":true},
+            "collectionShowcases": {"dataType":"array","array":{"dataType":"refObject","ref":"CollectionShowcaseItem"},"required":true},
+            "metadata": {"ref":"HomescreenMetadata","required":true},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "HomescreenResponse": {
+        "dataType": "refObject",
+        "properties": {
+            "success": {"dataType":"boolean","required":true},
+            "data": {"ref":"HomescreenData","required":true},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "FavoritesResponse": {
+        "dataType": "refObject",
+        "properties": {
+            "success": {"dataType":"boolean","required":true},
+            "data": {"dataType":"nestedObjectLiteral","nestedProperties":{"productIds":{"dataType":"array","array":{"dataType":"string"},"required":true}},"required":true},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "FavoriteOperationResponse": {
+        "dataType": "refObject",
+        "properties": {
+            "success": {"dataType":"boolean","required":true},
+            "message": {"dataType":"string","required":true},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "FavoriteRequest": {
+        "dataType": "refObject",
+        "properties": {
+            "productId": {"dataType":"string","required":true},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+};
+const templateService = new ExpressTemplateService(models, {"noImplicitAdditionalProperties":"throw-on-extras","bodyCoercion":true});
+
+// WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+
+
+
+
+export function RegisterRoutes(app: Router) {
+
+    // ###########################################################################################################
+    //  NOTE: If you do not see routes for all of your controllers in this file, then you might not have informed tsoa of where to look
+    //      Please look into the "controllerPathGlobs" config option described in the readme: https://github.com/lukeautry/tsoa
+    // ###########################################################################################################
+
+
+    
+        const argsHomescreenController_getHomescreenData: Record<string, TsoaRoute.ParameterSchema> = {
+        };
+        app.get('/api/v1/customer/homescreen',
+            ...(fetchMiddlewares<RequestHandler>(HomescreenController)),
+            ...(fetchMiddlewares<RequestHandler>(HomescreenController.prototype.getHomescreenData)),
+
+            async function HomescreenController_getHomescreenData(request: ExRequest, response: ExResponse, next: any) {
+
+            // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+
+            let validatedArgs: any[] = [];
+            try {
+                validatedArgs = templateService.getValidatedArgs({ args: argsHomescreenController_getHomescreenData, request, response });
+
+                const controller = new HomescreenController();
+
+              await templateService.apiHandler({
+                methodName: 'getHomescreenData',
+                controller,
+                response,
+                next,
+                validatedArgs,
+                successStatus: undefined,
+              });
+            } catch (err) {
+                return next(err);
+            }
+        });
+        // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+        const argsFavoritesController_getFavorites: Record<string, TsoaRoute.ParameterSchema> = {
+                request: {"in":"request","name":"request","required":true,"dataType":"object"},
+        };
+        app.get('/api/v1/customer/favorites',
+            authenticateMiddleware([{"jwt":[]}]),
+            ...(fetchMiddlewares<RequestHandler>(FavoritesController)),
+            ...(fetchMiddlewares<RequestHandler>(FavoritesController.prototype.getFavorites)),
+
+            async function FavoritesController_getFavorites(request: ExRequest, response: ExResponse, next: any) {
+
+            // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+
+            let validatedArgs: any[] = [];
+            try {
+                validatedArgs = templateService.getValidatedArgs({ args: argsFavoritesController_getFavorites, request, response });
+
+                const controller = new FavoritesController();
+
+              await templateService.apiHandler({
+                methodName: 'getFavorites',
+                controller,
+                response,
+                next,
+                validatedArgs,
+                successStatus: undefined,
+              });
+            } catch (err) {
+                return next(err);
+            }
+        });
+        // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+        const argsFavoritesController_addFavorite: Record<string, TsoaRoute.ParameterSchema> = {
+                body: {"in":"body","name":"body","required":true,"ref":"FavoriteRequest"},
+                request: {"in":"request","name":"request","required":true,"dataType":"object"},
+        };
+        app.post('/api/v1/customer/favorites',
+            authenticateMiddleware([{"jwt":[]}]),
+            ...(fetchMiddlewares<RequestHandler>(FavoritesController)),
+            ...(fetchMiddlewares<RequestHandler>(FavoritesController.prototype.addFavorite)),
+
+            async function FavoritesController_addFavorite(request: ExRequest, response: ExResponse, next: any) {
+
+            // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+
+            let validatedArgs: any[] = [];
+            try {
+                validatedArgs = templateService.getValidatedArgs({ args: argsFavoritesController_addFavorite, request, response });
+
+                const controller = new FavoritesController();
+
+              await templateService.apiHandler({
+                methodName: 'addFavorite',
+                controller,
+                response,
+                next,
+                validatedArgs,
+                successStatus: undefined,
+              });
+            } catch (err) {
+                return next(err);
+            }
+        });
+        // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+        const argsFavoritesController_removeFavorite: Record<string, TsoaRoute.ParameterSchema> = {
+                productId: {"in":"path","name":"productId","required":true,"dataType":"string"},
+                request: {"in":"request","name":"request","required":true,"dataType":"object"},
+        };
+        app.delete('/api/v1/customer/favorites/:productId',
+            authenticateMiddleware([{"jwt":[]}]),
+            ...(fetchMiddlewares<RequestHandler>(FavoritesController)),
+            ...(fetchMiddlewares<RequestHandler>(FavoritesController.prototype.removeFavorite)),
+
+            async function FavoritesController_removeFavorite(request: ExRequest, response: ExResponse, next: any) {
+
+            // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+
+            let validatedArgs: any[] = [];
+            try {
+                validatedArgs = templateService.getValidatedArgs({ args: argsFavoritesController_removeFavorite, request, response });
+
+                const controller = new FavoritesController();
+
+              await templateService.apiHandler({
+                methodName: 'removeFavorite',
+                controller,
+                response,
+                next,
+                validatedArgs,
+                successStatus: undefined,
+              });
+            } catch (err) {
+                return next(err);
+            }
+        });
+        // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+
+
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+
+    function authenticateMiddleware(security: TsoaRoute.Security[] = []) {
+        return async function runAuthenticationMiddleware(request: any, response: any, next: any) {
+
+            // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+
+            // keep track of failed auth attempts so we can hand back the most
+            // recent one.  This behavior was previously existing so preserving it
+            // here
+            const failedAttempts: any[] = [];
+            const pushAndRethrow = (error: any) => {
+                failedAttempts.push(error);
+                throw error;
+            };
+
+            const secMethodOrPromises: Promise<any>[] = [];
+            for (const secMethod of security) {
+                if (Object.keys(secMethod).length > 1) {
+                    const secMethodAndPromises: Promise<any>[] = [];
+
+                    for (const name in secMethod) {
+                        secMethodAndPromises.push(
+                            expressAuthenticationRecasted(request, name, secMethod[name], response)
+                                .catch(pushAndRethrow)
+                        );
+                    }
+
+                    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+
+                    secMethodOrPromises.push(Promise.all(secMethodAndPromises)
+                        .then(users => { return users[0]; }));
+                } else {
+                    for (const name in secMethod) {
+                        secMethodOrPromises.push(
+                            expressAuthenticationRecasted(request, name, secMethod[name], response)
+                                .catch(pushAndRethrow)
+                        );
+                    }
+                }
+            }
+
+            // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+
+            try {
+                request['user'] = await Promise.any(secMethodOrPromises);
+
+                // Response was sent in middleware, abort
+                if (response.writableEnded) {
+                    return;
+                }
+
+                next();
+            }
+            catch(err) {
+                // Show most recent error as response
+                const error = failedAttempts.pop();
+                error.status = error.status || 401;
+
+                // Response was sent in middleware, abort
+                if (response.writableEnded) {
+                    return;
+                }
+                next(error);
+            }
+
+            // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+        }
+    }
+
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+}
+
+// WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa

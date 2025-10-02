@@ -2,11 +2,9 @@ import mongoose, { Document, Schema } from 'mongoose';
 
 // Action types for callout banners
 interface ICalloutAction {
-  type: 'collection' | 'navigation' | 'external' | 'modal';
-  collectionId?: number;
+  type: 'collection' | 'navigation';
+  collectionId?: string;
   navigateTo?: string;
-  externalUrl?: string;
-  modalId?: string;
 }
 
 export interface ICalloutBanner extends Document {
@@ -28,23 +26,17 @@ const CalloutActionSchema: Schema = new Schema({
   type: {
     type: String,
     required: true,
-    enum: ['collection', 'navigation', 'external', 'modal']
+    enum: ['collection', 'navigation']
   },
   collectionId: {
-    type: Number,
+    type: String,
+    trim: true,
     required: function(this: ICalloutAction) { return this.type === 'collection'; }
   },
   navigateTo: {
     type: String,
+    trim: true,
     required: function(this: ICalloutAction) { return this.type === 'navigation'; }
-  },
-  externalUrl: {
-    type: String,
-    required: function(this: ICalloutAction) { return this.type === 'external'; }
-  },
-  modalId: {
-    type: String,
-    required: function(this: ICalloutAction) { return this.type === 'modal'; }
   }
 }, { _id: false });
 

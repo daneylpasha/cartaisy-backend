@@ -5,7 +5,7 @@ export interface IPromoBanner extends Document {
   title: string;
   subtitle: string;
   ctaText: string;
-  collectionId: number;
+  collectionId: string;
   position: number;
   isActive: boolean;
   backgroundColor?: string;
@@ -38,8 +38,9 @@ const PromoBannerSchema: Schema = new Schema(
       trim: true
     },
     collectionId: {
-      type: Number,
-      required: true
+      type: String,
+      required: true,
+      trim: true
     },
     position: {
       type: Number,

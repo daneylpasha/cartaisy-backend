@@ -4,12 +4,13 @@ import mongoose, { Document, Schema } from 'mongoose';
 interface IShowcaseCollectionItem {
   image: string;
   title: string;
-  collectionId: number;
+  collectionId: string;
 }
 
 export interface ICollectionShowcase extends Document {
   type: 'grid' | 'circular';  // Different UI layouts
   title: string;
+  icon?: string;  // Optional icon for the showcase section
   collections: IShowcaseCollectionItem[];
   position: number;
   isActive: boolean;
@@ -29,8 +30,9 @@ const ShowcaseCollectionItemSchema: Schema = new Schema({
     trim: true
   },
   collectionId: {
-    type: Number,
-    required: true
+    type: String,
+    required: true,
+    trim: true
   }
 }, { _id: false });
 
@@ -46,6 +48,11 @@ const CollectionShowcaseSchema: Schema = new Schema(
       type: String,
       required: true,
       trim: true
+    },
+    icon: {
+      type: String,
+      trim: true,
+      required: false
     },
     collections: {
       type: [ShowcaseCollectionItemSchema],

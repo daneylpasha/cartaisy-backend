@@ -4,7 +4,7 @@ import mongoose, { Document, Schema } from 'mongoose';
 interface ICollectionItem {
   image: string;
   title: string;
-  collectionId: number;
+  collectionId: string;
 }
 
 export interface ICategoryCollectionGrid extends Document {
@@ -29,8 +29,9 @@ const CollectionItemSchema: Schema = new Schema({
     trim: true
   },
   collectionId: {
-    type: Number,
-    required: true
+    type: String,
+    required: true,
+    trim: true
   }
 }, { _id: false });
 

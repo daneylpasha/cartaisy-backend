@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
+import swaggerUi from 'swagger-ui-express';
 import { tenantConfig, apiConfig, derivedConfig } from './config/tenant';
 
 const app: Application = express();
@@ -153,6 +154,30 @@ app.use(`/api/${apiConfig.version}`, carouselRoutes);
 app.use(`/api/${apiConfig.version}`, categoryGridRoutes);
 app.use(`/api/${apiConfig.version}`, calloutBannerRoutes);
 app.use(`/api/${apiConfig.version}`, collectionDisplayRoutes);
+
+// tsoa generated routes (auto-generated, includes controllers with decorators)
+try {
+  const { RegisterRoutes } = require('./generated/routes');
+  RegisterRoutes(app);
+} catch (error) {
+  console.warn('tsoa routes not generated yet. Run: npm run generate');
+}
+
+// OpenAPI/Swagger documentation
+try {
+  const swaggerDocument = require('../public/swagger.json');
+  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument, {
+    customSiteTitle: 'Cartaisy API Documentation',
+    customCss: '.swagger-ui .topbar { display: none }',
+  }));
+  // Serve raw JSON for Orval
+  app.get('/api-docs.json', (_req: Request, res: Response) => {
+    res.json(swaggerDocument);
+  });
+  console.log('📚 API Docs available at: /api-docs');
+} catch (error) {
+  console.warn('⚠️ OpenAPI spec not found. Run: npm run generate:spec');
+}
 
 // Custom error interface
 interface CustomError extends Error {

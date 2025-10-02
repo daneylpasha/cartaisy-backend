@@ -2,7 +2,7 @@ import mongoose, { Document, Schema } from 'mongoose';
 
 export interface ICollectionDisplay extends Document {
   type: 'large_row' | 'small_grid' | 'medium_row';
-  collectionId: number;
+  collectionId: string;
   order: number;
   title?: string;
   isActive: boolean;
@@ -18,8 +18,9 @@ const CollectionDisplaySchema: Schema = new mongoose.Schema({
     index: true
   },
   collectionId: {
-    type: Number,
+    type: String,
     required: true,
+    trim: true,
     index: true
   },
   order: {

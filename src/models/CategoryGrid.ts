@@ -3,7 +3,7 @@ import mongoose, { Document, Schema } from 'mongoose';
 export interface ICategoryGrid extends Document {
   imageUrl: string;
   title: string;
-  collectionId: number;
+  collectionId: string;
   position: number;
   isActive: boolean;
   createdAt: Date;
@@ -23,8 +23,9 @@ const CategoryGridSchema: Schema = new Schema(
       trim: true
     },
     collectionId: {
-      type: Number,
-      required: true
+      type: String,
+      required: true,
+      trim: true
     },
     position: {
       type: Number,

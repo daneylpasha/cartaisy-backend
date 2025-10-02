@@ -1,0 +1,174 @@
+{
+	"openapi": "3.0.0",
+	"components": {
+		"securitySchemes": {
+			"jwt": {
+				"type": "http",
+				"scheme": "bearer",
+				"bearerFormat": "JWT",
+				"description": "JWT authentication token"
+			}
+		}
+	},
+	"info": {
+		"title": "Cartaisy API",
+		"version": "1.0.0",
+		"description": "E-commerce backend API with Shopify integration"
+	},
+	"paths": {
+		"/customer/homescreen": {
+			"get": {
+				"operationId": "GetHomescreenData",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HomescreenResponse"
+								}
+							}
+						}
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Get complete homescreen data\nReturns all components needed to render the mobile app home screen",
+				"tags": [
+					"Homescreen"
+				],
+				"security": [],
+				"parameters": []
+			}
+		},
+		"/customer/favorites": {
+			"get": {
+				"operationId": "GetFavorites",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/FavoritesResponse"
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "Unauthorized"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Get user's favorite product IDs\nReturns a simple array of product IDs for efficient client-side merging",
+				"tags": [
+					"Favorites"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": []
+			},
+			"post": {
+				"operationId": "AddFavorite",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/FavoriteOperationResponse"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "Bad Request"
+					},
+					"401": {
+						"description": "Unauthorized"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Add a product to favorites",
+				"tags": [
+					"Favorites"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/FavoriteRequest"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/customer/favorites/{productId}": {
+			"delete": {
+				"operationId": "RemoveFavorite",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/FavoriteOperationResponse"
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "Unauthorized"
+					},
+					"404": {
+						"description": "Not Found"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Remove a product from favorites",
+				"tags": [
+					"Favorites"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "productId",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				]
+			}
+		}
+	},
+	"servers": [
+		{
+			"url": "http://localhost:3000/api/v1",
+			"description": "Development server"
+		}
+	]
+}

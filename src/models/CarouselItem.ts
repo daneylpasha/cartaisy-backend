@@ -1,17 +1,46 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
+// PromoTag for carousel items
+interface IPromoTag {
+  text?: string;
+  imageUrl?: string;
+  backgroundColor?: string;
+  textColor?: string;
+}
+
 export interface ICarouselItem extends Document {
   imageUrl: string;
   label: string;
   title: string;
-  subTitle: string;
-  buttonText: string;
-  collectionId: number;
+  subtitle: string;
+  ctaText: string;
+  collectionId: string;
+  endsAt?: Date;
+  promoTag?: IPromoTag;
   position: number;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
+
+const PromoTagSchema: Schema = new Schema({
+  text: {
+    type: String,
+    trim: true
+  },
+  imageUrl: {
+    type: String,
+    trim: true
+  },
+  backgroundColor: {
+    type: String,
+    trim: true
+  },
+  textColor: {
+    type: String,
+    trim: true
+  }
+}, { _id: false });
 
 const CarouselItemSchema: Schema = new Schema(
   {
@@ -30,20 +59,29 @@ const CarouselItemSchema: Schema = new Schema(
       required: true,
       trim: true
     },
-    subTitle: {
+    subtitle: {
       type: String,
       required: true,
       trim: true
     },
-    buttonText: {
+    ctaText: {
       type: String,
       required: true,
       trim: true,
       default: 'Shop Now'
     },
     collectionId: {
-      type: Number,
-      required: true
+      type: String,
+      required: true,
+      trim: true
+    },
+    endsAt: {
+      type: Date,
+      required: false
+    },
+    promoTag: {
+      type: PromoTagSchema,
+      required: false
     },
     position: {
       type: Number,

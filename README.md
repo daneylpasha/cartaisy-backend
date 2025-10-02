@@ -412,6 +412,58 @@ NODE_ENV=development npm run dev
 - **Testing**: Jest unit and integration tests
 - **Documentation**: JSDoc comments for all functions
 
+---
+
+## 🚀 Quick Start
+
+### 1. Setup Environment
+
+```bash
+# Copy environment template
+cp .env.example .env
+
+# Edit .env with your credentials:
+# - MONGODB_URI
+# - JWT_SECRET
+# - SHOPIFY_SHOP_DOMAIN
+# - SHOPIFY_STOREFRONT_ACCESS_TOKEN
+```
+
+### 2. Install & Run
+
+```bash
+npm install
+npm run generate  # Generate TSOA routes
+npm run dev       # Start development server
+```
+
+### 3. Verify
+
+- API Docs: http://localhost:3000/api-docs
+- Test endpoint: `curl http://localhost:3000/api/v1/customer/homescreen`
+
+---
+
+## 📚 Documentation
+
+- **[API.md](API.md)** - Complete API reference
+- **[MIGRATION.md](MIGRATION.md)** - React Native migration guide
+- **[CLAUDE.md](CLAUDE.md)** - Architecture and development guidelines
+
+---
+
+## 🔐 Shopify Setup
+
+**Required:** Storefront Access Token (NOT API Key/Secret)
+
+1. Shopify Admin → Settings → Apps and sales channels
+2. "Develop apps" → Create custom app
+3. Configure "Storefront API" scopes (read_products, read_collections)
+4. Generate **Storefront Access Token**
+5. Add to `.env`: `SHOPIFY_STOREFRONT_ACCESS_TOKEN=<your_token>`
+
+---
+
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

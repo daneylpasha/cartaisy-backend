@@ -17,9 +17,11 @@ export const carouselController = {
         imageUrl: item.imageUrl,
         label: item.label,
         title: item.title,
-        subTitle: item.subTitle,
-        buttonText: item.buttonText || 'Shop Now',
+        subtitle: item.subtitle,
+        ctaText: item.ctaText || 'Shop Now',
         collectionId: item.collectionId,
+        endsAt: item.endsAt,
+        promoTag: item.promoTag,
         position: item.position !== undefined ? item.position : index,
         isActive: item.isActive !== undefined ? item.isActive : true
       }));
@@ -56,9 +58,11 @@ export const carouselController = {
         imageUrl: item.imageUrl,
         label: item.label,
         title: item.title,
-        subTitle: item.subTitle,
-        buttonText: item.buttonText || 'Shop Now',
+        subtitle: item.subtitle,
+        ctaText: item.ctaText || 'Shop Now',
         collectionId: item.collectionId,
+        endsAt: item.endsAt,
+        promoTag: item.promoTag,
         position: item.position !== undefined ? item.position : index,
         isActive: item.isActive !== undefined ? item.isActive : true
       }));

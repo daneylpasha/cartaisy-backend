@@ -1,0 +1,38 @@
+{
+  "entryFile": "src/app.ts",
+  "noImplicitAdditionalProperties": "throw-on-extras",
+  "controllerPathGlobs": ["src/controllers/**/*.ts"],
+  "spec": {
+    "outputDirectory": "public",
+    "specVersion": 3,
+    "spec": {
+      "info": {
+        "title": "Cartaisy API",
+        "version": "1.0.0",
+        "description": "E-commerce backend API with Shopify integration"
+      },
+      "servers": [
+        {
+          "url": "http://localhost:3000/api/v1",
+          "description": "Development server"
+        }
+      ],
+      "components": {
+        "securitySchemes": {
+          "jwt": {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "JWT",
+            "description": "JWT authentication token"
+          }
+        }
+      }
+    }
+  },
+  "routes": {
+    "routesDir": "src/generated",
+    "middleware": "express",
+    "basePath": "/api/v1",
+    "authenticationModule": "./src/authentication"
+  }
+}
