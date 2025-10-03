@@ -1,0 +1,3 @@
+#!/bin/sh
+npm run generate:spec
+git add public/swagger.json
