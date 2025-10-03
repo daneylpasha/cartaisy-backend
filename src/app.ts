@@ -10,10 +10,9 @@ const app: Application = express();
 
 // Security Middleware (protects your API)
 app.use(helmet()); // Adds security headers
+// CORS: Allow all origins for mobile app backend
 app.use(cors({
-  origin: derivedConfig.isProduction 
-    ? apiConfig.frontendUrl 
-    : '*', // Allow all origins in development
+  origin: '*', // Mobile apps need unrestricted CORS
   credentials: true
 }));
 
