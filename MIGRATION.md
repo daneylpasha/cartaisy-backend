@@ -4,6 +4,28 @@
 
 The backend now integrates with Shopify Storefront API. Your React Native app needs updates to consume the new data structure and add type-safe API client generation.
 
+## Prerequisites
+
+**IMPORTANT:** For professional team collaboration, deploy your backend first:
+
+### Deploy Backend
+
+Choose a deployment platform:
+
+**Railway (Recommended):**
+```bash
+npm i -g @railway/cli
+railway login
+railway init
+railway up
+```
+
+**Other options:** Render, Heroku, Vercel, or your own domain
+
+You'll get a URL like: `https://cartaisy-backend.railway.app`
+
+Once deployed, your team can sync types without running the backend locally!
+
 ---
 
 ## Breaking Changes
@@ -71,24 +93,20 @@ npm install --save-dev orval
 npm install axios @tanstack/react-query
 ```
 
-### 2. Copy OpenAPI Spec to Your Project
+### 2. Create `orval.config.ts`
 
-Since your React Native project is on a different machine, copy the OpenAPI spec file:
-
-1. **Copy from backend:** `public/swagger.json`
-2. **Paste to React Native:** `api-spec/swagger.json` (create the folder)
-
-**Note:** The localhost URL inside swagger.json doesn't matter - Orval only reads type definitions. You'll configure the actual API URL in `apiClient.ts` (Step 4).
-
-### 3. Create `orval.config.ts`
+**IMPORTANT:** For professional team environments, Orval should fetch types directly from your deployed backend URL.
 
 ```typescript
 import { defineConfig } from 'orval';
 
+// Use your deployed backend URL (Railway, Render, Vercel, etc.)
+const BACKEND_URL = process.env.BACKEND_URL || 'https://your-deployed-backend.railway.app';
+
 export default defineConfig({
   cartaisy: {
     input: {
-      target: './api-spec/swagger.json', // Local file instead of URL
+      target: `${BACKEND_URL}/api-docs.json`, // Fetch from deployed backend
     },
     output: {
       mode: 'tags-split',
@@ -106,26 +124,41 @@ export default defineConfig({
 });
 ```
 
-**Alternative:** If backend is deployed, use the deployed URL:
-```typescript
-target: 'https://your-api.com/api-docs.json',
+**For local development only:**
+```bash
+BACKEND_URL=http://localhost:3000 npm run generate:api
 ```
 
-### 4. Create `src/api/apiClient.ts`
+### 3. Create `src/api/apiClient.ts`
 
-**IMPORTANT:** The localhost URL in `swagger.json` doesn't matter. Orval only reads schemas/types. You configure the actual API URL here:
+**Professional multi-environment setup:**
 
 ```typescript
 import axios, { AxiosRequestConfig } from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Configure your actual backend URL here (not from swagger.json)
-const API_BASE_URL = __DEV__
-  ? 'http://YOUR_BACKEND_IP:3000/api/v1'  // Update with your backend machine IP
-  : 'https://your-deployed-api.com/api/v1';
+// Environment-based API URLs
+const API_URLS = {
+  production: 'https://your-backend.railway.app/api/v1',
+  staging: 'https://your-backend-staging.railway.app/api/v1',
+  development: 'http://localhost:3000/api/v1',
+};
+
+// Automatically detect environment
+const getApiUrl = () => {
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    return process.env.EXPO_PUBLIC_API_URL; // From .env file
+  }
+
+  if (__DEV__) {
+    return API_URLS.development; // Only for local dev
+  }
+
+  return API_URLS.production;
+};
 
 const axiosInstance = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: getApiUrl(),
   timeout: 10000,
   headers: { 'Content-Type': 'application/json' },
 });
@@ -154,20 +187,36 @@ export const customInstance = <T>(config: AxiosRequestConfig): Promise<T> => {
 };
 ```
 
-### 5. Add Script to package.json
+### 4. Add Scripts to package.json
 
 ```json
 {
   "scripts": {
-    "generate:api": "orval"
+    "types:sync": "orval",
+    "types:sync:staging": "BACKEND_URL=https://your-backend-staging.railway.app orval",
+    "types:sync:local": "BACKEND_URL=http://localhost:3000 orval"
   }
 }
+```
+
+### 5. Create `.env` File
+
+```env
+# Production backend URL
+EXPO_PUBLIC_API_URL=https://your-backend.railway.app/api/v1
+
+# Or for staging
+# EXPO_PUBLIC_API_URL=https://your-backend-staging.railway.app/api/v1
 ```
 
 ### 6. Generate Client
 
 ```bash
-npm run generate:api
+# Sync types from deployed backend (team members don't need local backend!)
+npm run types:sync
+
+# Or from local backend (for backend developers only)
+npm run types:sync:local
 ```
 
 ---
@@ -327,6 +376,10 @@ When you open your React Native project in Claude Code, paste this:
 ```
 I have a React Native app consuming APIs from my Node.js backend. The backend was updated with Shopify integration and I need to migrate my app.
 
+BACKEND INFO:
+- Deployed at: [YOUR_DEPLOYED_BACKEND_URL] (e.g., https://cartaisy-backend.railway.app)
+- OpenAPI spec available at: [YOUR_BACKEND_URL]/api-docs.json
+
 BACKEND CHANGES:
 1. New Favorites API (JWT protected):
    - GET /api/v1/customer/favorites
@@ -340,12 +393,9 @@ BACKEND CHANGES:
 
 3. JWT Secret changed - all users must re-authenticate
 
-4. OpenAPI spec: I have the swagger.json file in api-spec/swagger.json
-   (Note: The localhost URL in swagger.json is ignored - Orval only reads schemas/types)
-
 TASKS:
-1. Setup Orval for type-safe API client generation using local swagger.json
-2. Create apiClient.ts with correct backend URL (my backend is at: [YOUR_BACKEND_IP]:3000)
+1. Setup Orval to fetch types from deployed backend URL
+2. Create environment-aware apiClient.ts (production/staging/development)
 3. Replace manual API calls with generated React Query hooks
 4. Update field names throughout the app
 5. Add Favorites feature with heart button
@@ -353,13 +403,13 @@ TASKS:
 7. Handle JWT authentication and force re-login
 
 Please help me:
-1. Setup Orval configuration (use local file: ./api-spec/swagger.json)
-2. Create apiClient.ts with my backend URL
-3. Generate API client
+1. Setup Orval configuration to fetch from: [YOUR_BACKEND_URL]/api-docs.json
+2. Create professional multi-environment apiClient.ts
+3. Generate API client types
 4. Migrate components systematically
 5. Add new UI features
 
-Start by setting up Orval with the local swagger.json file, then show me what was generated.
+Start by setting up Orval to fetch types from the deployed backend URL.
 ```
 
 Claude will guide you through the migration step-by-step.
@@ -370,12 +420,16 @@ Claude will guide you through the migration step-by-step.
 
 ### Orval generation fails
 ```bash
-# Make sure swagger.json exists
-ls api-spec/swagger.json
+# Test backend connection
+curl https://your-backend.railway.app/api-docs.json
 
-# If missing, copy from backend repo
+# If fails, check:
+# 1. Is backend deployed and running?
+# 2. Is CORS enabled for /api-docs.json?
+# 3. Is URL correct in orval.config.ts?
+
 # Then generate
-npm run generate:api
+npm run types:sync
 ```
 
 ### TypeScript errors
