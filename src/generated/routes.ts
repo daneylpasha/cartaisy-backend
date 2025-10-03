@@ -4,6 +4,8 @@
 import type { TsoaRoute } from '@tsoa/runtime';
 import {  fetchMiddlewares, ExpressTemplateService } from '@tsoa/runtime';
 // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+import { ProductDetailController } from './../controllers/productDetailController';
+// WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
 import { HomescreenController } from './../controllers/homescreenController';
 // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
 import { FavoritesController } from './../controllers/favoritesController';
@@ -17,6 +19,75 @@ const expressAuthenticationRecasted = expressAuthentication as (req: ExRequest, 
 // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
 
 const models: TsoaRoute.Models = {
+    "ProductOption": {
+        "dataType": "refObject",
+        "properties": {
+            "name": {"dataType":"string","required":true},
+            "value": {"dataType":"string","required":true},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "ProductVariant": {
+        "dataType": "refObject",
+        "properties": {
+            "id": {"dataType":"string","required":true},
+            "title": {"dataType":"string","required":true},
+            "price": {"dataType":"double","required":true},
+            "compareAtPrice": {"dataType":"double"},
+            "availableForSale": {"dataType":"boolean","required":true},
+            "quantityAvailable": {"dataType":"double","required":true},
+            "selectedOptions": {"dataType":"array","array":{"dataType":"refObject","ref":"ProductOption"},"required":true},
+            "image": {"dataType":"string"},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "ProductBadges": {
+        "dataType": "refObject",
+        "properties": {
+            "isBestSeller": {"dataType":"boolean","required":true},
+            "discountPercentage": {"dataType":"double"},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "ProductDetail": {
+        "dataType": "refObject",
+        "properties": {
+            "productId": {"dataType":"string","required":true},
+            "title": {"dataType":"string","required":true},
+            "description": {"dataType":"string","required":true},
+            "descriptionHtml": {"dataType":"string","required":true},
+            "images": {"dataType":"array","array":{"dataType":"string"},"required":true},
+            "price": {"dataType":"double","required":true},
+            "compareAtPrice": {"dataType":"double"},
+            "currency": {"dataType":"string","required":true},
+            "vendor": {"dataType":"string","required":true},
+            "productType": {"dataType":"string","required":true},
+            "tags": {"dataType":"array","array":{"dataType":"string"},"required":true},
+            "handle": {"dataType":"string","required":true},
+            "availableForSale": {"dataType":"boolean","required":true},
+            "totalInventory": {"dataType":"double","required":true},
+            "inStock": {"dataType":"boolean","required":true},
+            "variants": {"dataType":"array","array":{"dataType":"refObject","ref":"ProductVariant"},"required":true},
+            "rating": {"dataType":"double","required":true},
+            "reviewsCount": {"dataType":"double","required":true},
+            "soldThisMonth": {"dataType":"double","required":true},
+            "badges": {"ref":"ProductBadges","required":true},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "ProductDetailResponse": {
+        "dataType": "refObject",
+        "properties": {
+            "success": {"dataType":"boolean","required":true},
+            "data": {"ref":"ProductDetail","required":true},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
     "PromoTag": {
         "dataType": "refObject",
         "properties": {
@@ -270,6 +341,36 @@ export function RegisterRoutes(app: Router) {
 
 
     
+        const argsProductDetailController_getProductDetail: Record<string, TsoaRoute.ParameterSchema> = {
+                productId: {"in":"path","name":"productId","required":true,"dataType":"string"},
+        };
+        app.get('/api/v1/products/:productId',
+            ...(fetchMiddlewares<RequestHandler>(ProductDetailController)),
+            ...(fetchMiddlewares<RequestHandler>(ProductDetailController.prototype.getProductDetail)),
+
+            async function ProductDetailController_getProductDetail(request: ExRequest, response: ExResponse, next: any) {
+
+            // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+
+            let validatedArgs: any[] = [];
+            try {
+                validatedArgs = templateService.getValidatedArgs({ args: argsProductDetailController_getProductDetail, request, response });
+
+                const controller = new ProductDetailController();
+
+              await templateService.apiHandler({
+                methodName: 'getProductDetail',
+                controller,
+                response,
+                next,
+                validatedArgs,
+                successStatus: undefined,
+              });
+            } catch (err) {
+                return next(err);
+            }
+        });
+        // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsHomescreenController_getHomescreenData: Record<string, TsoaRoute.ParameterSchema> = {
         };
         app.get('/api/v1/customer/homescreen',

@@ -89,8 +89,9 @@ router.get('/category/:categoryId', validateObjectId('categoryId'), getProductsB
  * @desc Get single product with related products and reviews
  * @access Public (tracks view if authenticated)
  * @param {string} id - Product ID
+ * @note This route is now handled by ProductDetailController (TSOA)
  */
-router.get('/:id', validateObjectId('id'), optionalAuth, getProduct);
+// router.get('/:id', validateObjectId('id'), optionalAuth, getProduct);
 
 /**
  * @route GET /api/v1/products/:id/reviews

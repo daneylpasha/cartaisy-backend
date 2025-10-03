@@ -257,6 +257,85 @@ class ShopifyStorefrontService {
   }
 
   /**
+   * Get a single product by ID with full details including variants
+   */
+  async getProductById(productId: string): Promise<any> {
+    // Format ID to Shopify GID format if needed
+    const formattedId = productId.startsWith('gid://shopify/Product/')
+      ? productId
+      : `gid://shopify/Product/${productId}`;
+
+    const query = `
+      query getProductById($id: ID!) {
+        product(id: $id) {
+          id
+          title
+          description
+          descriptionHtml
+          handle
+          vendor
+          productType
+          tags
+          availableForSale
+          totalInventory
+          priceRange {
+            minVariantPrice {
+              amount
+              currencyCode
+            }
+            maxVariantPrice {
+              amount
+              currencyCode
+            }
+          }
+          compareAtPriceRange {
+            minVariantPrice {
+              amount
+              currencyCode
+            }
+          }
+          images(first: 10) {
+            edges {
+              node {
+                url
+                altText
+              }
+            }
+          }
+          variants(first: 100) {
+            edges {
+              node {
+                id
+                title
+                price {
+                  amount
+                  currencyCode
+                }
+                compareAtPrice {
+                  amount
+                  currencyCode
+                }
+                availableForSale
+                quantityAvailable
+                selectedOptions {
+                  name
+                  value
+                }
+                image {
+                  url
+                  altText
+                }
+              }
+            }
+          }
+        }
+      }
+    `;
+
+    return this.query<any>(query, { id: formattedId });
+  }
+
+  /**
    * Check if service is properly configured
    */
   isConfigured(): boolean {

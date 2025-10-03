@@ -1,640 +1,213 @@
 {
-  "openapi": "3.0.0",
-  "info": {
-    "title": "Cartaisy API",
-    "version": "1.0.0",
-    "description": "E-commerce backend API with Shopify integration"
-  },
-  "servers": [
-    {
-      "url": "http://localhost:3000/api/v1",
-      "description": "Development server"
-    }
-  ],
-  "components": {
-    "securitySchemes": {
-      "jwt": {
-        "type": "http",
-        "scheme": "bearer",
-        "bearerFormat": "JWT",
-        "description": "JWT authentication token"
-      }
-    },
-    "schemas": {
-      "FavoritesResponse": {
-        "type": "object",
-        "required": ["success", "data"],
-        "properties": {
-          "success": {
-            "type": "boolean"
-          },
-          "data": {
-            "type": "object",
-            "required": ["productIds"],
-            "properties": {
-              "productIds": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              }
-            }
-          }
-        }
-      },
-      "FavoriteRequest": {
-        "type": "object",
-        "required": ["productId"],
-        "properties": {
-          "productId": {
-            "type": "string"
-          }
-        }
-      },
-      "FavoriteOperationResponse": {
-        "type": "object",
-        "required": ["success", "message"],
-        "properties": {
-          "success": {
-            "type": "boolean"
-          },
-          "message": {
-            "type": "string"
-          }
-        }
-      },
-      "PromoTag": {
-        "type": "object",
-        "properties": {
-          "text": {
-            "type": "string"
-          },
-          "imageUrl": {
-            "type": "string"
-          },
-          "backgroundColor": {
-            "type": "string"
-          },
-          "textColor": {
-            "type": "string"
-          }
-        }
-      },
-      "Action": {
-        "type": "object",
-        "required": ["type"],
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["collection", "navigation"]
-          },
-          "collectionId": {
-            "type": "string"
-          },
-          "navigateTo": {
-            "type": "string"
-          }
-        }
-      },
-      "Product": {
-        "type": "object",
-        "required": ["productId", "title", "images", "price", "currency", "inStock", "availableQuantity", "totalQuantity", "rating", "reviewsCount"],
-        "properties": {
-          "productId": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
-          },
-          "images": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "price": {
-            "type": "number"
-          },
-          "compareAtPrice": {
-            "type": "number"
-          },
-          "currency": {
-            "type": "string"
-          },
-          "inStock": {
-            "type": "boolean"
-          },
-          "availableQuantity": {
-            "type": "number"
-          },
-          "totalQuantity": {
-            "type": "number"
-          },
-          "rating": {
-            "type": "number"
-          },
-          "reviewsCount": {
-            "type": "number"
-          },
-          "handle": {
-            "type": "string"
-          },
-          "vendor": {
-            "type": "string"
-          },
-          "tags": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        }
-      },
-      "Collection": {
-        "type": "object",
-        "required": ["id", "title", "products"],
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
-          },
-          "handle": {
-            "type": "string"
-          },
-          "image": {
-            "type": "string"
-          },
-          "products": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Product"
-            }
-          }
-        }
-      },
-      "CarouselItem": {
-        "type": "object",
-        "required": ["imageUrl", "title", "subtitle", "ctaText", "collectionId", "isActive"],
-        "properties": {
-          "imageUrl": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "subtitle": {
-            "type": "string"
-          },
-          "ctaText": {
-            "type": "string"
-          },
-          "collectionId": {
-            "type": "string"
-          },
-          "endsAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "promoTag": {
-            "$ref": "#/components/schemas/PromoTag"
-          },
-          "isActive": {
-            "type": "boolean"
-          }
-        }
-      },
-      "CategoryGridItem": {
-        "type": "object",
-        "required": ["imageUrl", "title", "collectionId", "isActive"],
-        "properties": {
-          "imageUrl": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "collectionId": {
-            "type": "string"
-          },
-          "isActive": {
-            "type": "boolean"
-          }
-        }
-      },
-      "CalloutBannerItem": {
-        "type": "object",
-        "required": ["imageUrl", "title", "subTitle", "buttonText", "action", "position", "isActive"],
-        "properties": {
-          "imageUrl": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "subTitle": {
-            "type": "string"
-          },
-          "buttonText": {
-            "type": "string"
-          },
-          "action": {
-            "$ref": "#/components/schemas/Action"
-          },
-          "position": {
-            "type": "number"
-          },
-          "isActive": {
-            "type": "boolean"
-          },
-          "backgroundColor": {
-            "type": "string"
-          },
-          "textColor": {
-            "type": "string"
-          },
-          "buttonColor": {
-            "type": "string"
-          }
-        }
-      },
-      "PromoBannerItem": {
-        "type": "object",
-        "required": ["image", "title", "subtitle", "ctaText", "collectionId", "position", "isActive"],
-        "properties": {
-          "image": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "subtitle": {
-            "type": "string"
-          },
-          "ctaText": {
-            "type": "string"
-          },
-          "collectionId": {
-            "type": "string"
-          },
-          "position": {
-            "type": "number"
-          },
-          "isActive": {
-            "type": "boolean"
-          },
-          "backgroundColor": {
-            "type": "string"
-          },
-          "textColor": {
-            "type": "string"
-          },
-          "buttonColor": {
-            "type": "string"
-          }
-        }
-      },
-      "CollectionDisplay": {
-        "type": "object",
-        "required": ["type", "order", "collection"],
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["large_row", "small_grid", "medium_row"]
-          },
-          "order": {
-            "type": "number"
-          },
-          "collection": {
-            "$ref": "#/components/schemas/Collection"
-          }
-        }
-      },
-      "CategoryCollectionItem": {
-        "type": "object",
-        "required": ["image", "title", "collectionId"],
-        "properties": {
-          "image": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "collectionId": {
-            "type": "string"
-          }
-        }
-      },
-      "CategoryCollectionGridItem": {
-        "type": "object",
-        "required": ["title", "subtitle", "collections", "position", "isActive"],
-        "properties": {
-          "title": {
-            "type": "string"
-          },
-          "subtitle": {
-            "type": "string"
-          },
-          "collections": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/CategoryCollectionItem"
-            }
-          },
-          "position": {
-            "type": "number"
-          },
-          "isActive": {
-            "type": "boolean"
-          }
-        }
-      },
-      "ShowcaseCollectionItem": {
-        "type": "object",
-        "required": ["image", "title", "collectionId"],
-        "properties": {
-          "image": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "collectionId": {
-            "type": "string"
-          }
-        }
-      },
-      "CollectionShowcaseItem": {
-        "type": "object",
-        "required": ["type", "title", "collections", "position", "isActive"],
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["grid", "circular"]
-          },
-          "title": {
-            "type": "string"
-          },
-          "icon": {
-            "type": "string"
-          },
-          "collections": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ShowcaseCollectionItem"
-            }
-          },
-          "position": {
-            "type": "number"
-          },
-          "isActive": {
-            "type": "boolean"
-          }
-        }
-      },
-      "HomescreenMetadata": {
-        "type": "object",
-        "required": ["carouselItemsCount", "categoryGridItemsCount", "calloutBannersCount", "promoBannersCount", "collectionDisplaysCount", "categoryCollectionGridCount", "collectionShowcasesCount", "lastUpdated"],
-        "properties": {
-          "carouselItemsCount": {
-            "type": "number"
-          },
-          "categoryGridItemsCount": {
-            "type": "number"
-          },
-          "calloutBannersCount": {
-            "type": "number"
-          },
-          "promoBannersCount": {
-            "type": "number"
-          },
-          "collectionDisplaysCount": {
-            "type": "number"
-          },
-          "categoryCollectionGridCount": {
-            "type": "number"
-          },
-          "collectionShowcasesCount": {
-            "type": "number"
-          },
-          "lastUpdated": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
-      },
-      "HomescreenData": {
-        "type": "object",
-        "required": ["carousel", "categoryGrid", "calloutBanners", "promoBanners", "collectionDisplays", "categoryCollectionGrid", "collectionShowcases", "metadata"],
-        "properties": {
-          "carousel": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/CarouselItem"
-            }
-          },
-          "categoryGrid": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/CategoryGridItem"
-            }
-          },
-          "calloutBanners": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/CalloutBannerItem"
-            }
-          },
-          "promoBanners": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/PromoBannerItem"
-            }
-          },
-          "collectionDisplays": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/CollectionDisplay"
-            }
-          },
-          "categoryCollectionGrid": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/CategoryCollectionGridItem"
-            }
-          },
-          "collectionShowcases": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/CollectionShowcaseItem"
-            }
-          },
-          "metadata": {
-            "$ref": "#/components/schemas/HomescreenMetadata"
-          }
-        }
-      },
-      "HomescreenResponse": {
-        "type": "object",
-        "required": ["success", "data"],
-        "properties": {
-          "success": {
-            "type": "boolean"
-          },
-          "data": {
-            "$ref": "#/components/schemas/HomescreenData"
-          }
-        }
-      }
-    }
-  },
-  "paths": {
-    "/customer/homescreen": {
-      "get": {
-        "operationId": "GetHomescreenData",
-        "tags": ["Homescreen"],
-        "summary": "Get complete homescreen data",
-        "description": "Returns all components needed to render the mobile app home screen",
-        "responses": {
-          "200": {
-            "description": "Homescreen data retrieved successfully",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HomescreenResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal Server Error"
-          }
-        },
-        "security": []
-      }
-    },
-    "/customer/favorites": {
-      "get": {
-        "operationId": "GetFavorites",
-        "tags": ["Favorites"],
-        "summary": "Get user's favorite product IDs",
-        "description": "Returns a simple array of product IDs for efficient client-side merging",
-        "responses": {
-          "200": {
-            "description": "Favorites retrieved successfully",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/FavoritesResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "500": {
-            "description": "Internal Server Error"
-          }
-        },
-        "security": [
-          {
-            "jwt": []
-          }
-        ]
-      },
-      "post": {
-        "operationId": "AddFavorite",
-        "tags": ["Favorites"],
-        "summary": "Add a product to favorites",
-        "responses": {
-          "200": {
-            "description": "Product added to favorites successfully",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/FavoriteOperationResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Bad Request"
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "500": {
-            "description": "Internal Server Error"
-          }
-        },
-        "security": [
-          {
-            "jwt": []
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/FavoriteRequest"
-              }
-            }
-          }
-        }
-      }
-    },
-    "/customer/favorites/{productId}": {
-      "delete": {
-        "operationId": "RemoveFavorite",
-        "tags": ["Favorites"],
-        "summary": "Remove a product from favorites",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "productId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "description": "The ID of the product to remove from favorites"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Product removed from favorites successfully",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/FavoriteOperationResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "404": {
-            "description": "Favorite not found"
-          },
-          "500": {
-            "description": "Internal Server Error"
-          }
-        },
-        "security": [
-          {
-            "jwt": []
-          }
-        ]
-      }
-    }
-  }
+	"openapi": "3.0.0",
+	"components": {
+		"securitySchemes": {
+			"jwt": {
+				"type": "http",
+				"scheme": "bearer",
+				"bearerFormat": "JWT",
+				"description": "JWT authentication token"
+			}
+		}
+	},
+	"info": {
+		"title": "Cartaisy API",
+		"version": "1.0.0",
+		"description": "E-commerce backend API with Shopify integration"
+	},
+	"paths": {
+		"/products/{productId}": {
+			"get": {
+				"operationId": "GetProductDetail",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ProductDetailResponse"
+								}
+							}
+						}
+					},
+					"404": {
+						"description": "Product not found"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Get detailed product information by ID",
+				"tags": [
+					"Products"
+				],
+				"security": [],
+				"parameters": [
+					{
+						"description": "- Shopify product ID (numeric or GID format)",
+						"in": "path",
+						"name": "productId",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				]
+			}
+		},
+		"/customer/homescreen": {
+			"get": {
+				"operationId": "GetHomescreenData",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/HomescreenResponse"
+								}
+							}
+						}
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Get complete homescreen data\nReturns all components needed to render the mobile app home screen",
+				"tags": [
+					"Homescreen"
+				],
+				"security": [],
+				"parameters": []
+			}
+		},
+		"/customer/favorites": {
+			"get": {
+				"operationId": "GetFavorites",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/FavoritesResponse"
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "Unauthorized"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Get user's favorite product IDs\nReturns a simple array of product IDs for efficient client-side merging",
+				"tags": [
+					"Favorites"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": []
+			},
+			"post": {
+				"operationId": "AddFavorite",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/FavoriteOperationResponse"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "Bad Request"
+					},
+					"401": {
+						"description": "Unauthorized"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Add a product to favorites",
+				"tags": [
+					"Favorites"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/FavoriteRequest"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/customer/favorites/{productId}": {
+			"delete": {
+				"operationId": "RemoveFavorite",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/FavoriteOperationResponse"
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "Unauthorized"
+					},
+					"404": {
+						"description": "Not Found"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Remove a product from favorites",
+				"tags": [
+					"Favorites"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [
+					{
+						"in": "path",
+						"name": "productId",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				]
+			}
+		}
+	},
+	"servers": [
+		{
+			"url": "http://localhost:3000/api/v1",
+			"description": "Development server"
+		}
+	]
 }
