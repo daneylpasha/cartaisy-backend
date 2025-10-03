@@ -7,7 +7,7 @@
     "build:strict": "tsc && tsc-alias",
     "build:dev": "mkdir -p dist && esbuild src/server.ts --bundle --platform=node --outfile=dist/server.js --external:./node_modules/* --external:@* --format=cjs",
     "build:basic": "mkdir -p dist && cp src/server.ts dist/server.js",
-    "start": "node dist/server.js",
+    "start": "node --require @swc-node/register -r tsconfig-paths/register src/server.ts",
     "dev": "npm run build && npm start",
     "dev:watch": "nodemon --exec \"npm run generate && ts-node -r tsconfig-paths/register src/server.ts\"",
     "generate": "npm run generate:spec && npm run generate:routes",
@@ -23,6 +23,7 @@
   },
   "dependencies": {
     "@shopify/shopify-api": "^11.14.1",
+    "@swc-node/register": "^1.11.1",
     "@types/node-cron": "^3.0.11",
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
@@ -36,11 +37,15 @@
     "morgan": "^1.10.1",
     "node-cron": "^4.2.1",
     "nodemailer": "^7.0.5",
+    "reflect-metadata": "^0.2.2",
     "swagger-ui-express": "^5.0.1",
     "tsoa": "^6.6.0",
     "zod": "^4.0.17"
   },
   "devDependencies": {
+    "@swc/cli": "^0.7.8",
+    "@swc/core": "^1.13.5",
+    "@swc/helpers": "^0.5.17",
     "@types/bcryptjs": "^3.0.0",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.3",

@@ -46,6 +46,12 @@
   "exclude": ["node_modules", "dist", "**/*.test.ts"],
   "ts-node": {
     "require": ["tsconfig-paths/register"],
-    "compiler": "typescript"
+    "transpileOnly": true,
+    "files": true,
+    "swc": true,
+    "compilerOptions": {
+      "module": "commonjs",
+      "target": "ES2020"
+    }
   }
 }
