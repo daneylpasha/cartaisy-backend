@@ -17,14 +17,12 @@
           "description": "Development server"
         }
       ],
-      "components": {
-        "securitySchemes": {
-          "jwt": {
-            "type": "http",
-            "scheme": "bearer",
-            "bearerFormat": "JWT",
-            "description": "JWT authentication token"
-          }
+      "securityDefinitions": {
+        "jwt": {
+          "type": "http",
+          "scheme": "bearer",
+          "bearerFormat": "JWT",
+          "description": "JWT authentication token"
         }
       }
     }
