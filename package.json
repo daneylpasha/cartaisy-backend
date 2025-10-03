@@ -18,7 +18,8 @@
     "test:coverage": "jest --coverage",
     "type-check": "tsc --noEmit",
     "clean": "rimraf dist",
-    "prepare": "husky"
+    "prepare": "husky",
+    "prepush": "npm run generate:spec && git add public/swagger.json"
   },
   "dependencies": {
     "@shopify/shopify-api": "^11.14.1",
