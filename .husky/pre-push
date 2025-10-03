@@ -1,2 +1,2 @@
 #!/bin/sh
-npm run prepush
+# Disabled - using pre-commit instead
