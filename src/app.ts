@@ -10,10 +10,12 @@ const app: Application = express();
 
 // Security Middleware (protects your API)
 app.use(helmet()); // Adds security headers
+// CORS: Use function to allow all origins (required for React Native)
 app.use(cors({
-  origin: derivedConfig.isProduction
-    ? apiConfig.frontendUrl
-    : '*', // Allow all origins in development
+  origin: function (origin, callback) {
+    // Allow all origins (mobile apps don't have fixed origin)
+    callback(null, true);
+  },
   credentials: true
 }));
 
