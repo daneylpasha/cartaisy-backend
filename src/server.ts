@@ -117,8 +117,9 @@ const PORT = Number(process.env.PORT) || Number(apiConfig.port) || 3000;
 const server = express();
 
 // ---- HEALTH: always 200, no imports/logic inside ----
+// Lightweight health check for Railway deployment checks
 server.get('/api/health', (_req, res) => {
-  res.status(200).send('OK');   // sirf OK
+  res.status(200).send('OK');
 });
 
 // OPTIONAL readiness
