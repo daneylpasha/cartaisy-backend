@@ -144,9 +144,10 @@ class ShopifyStorefrontService {
     `;
 
     // Ensure the collection ID has the correct Shopify GID format
-    const formattedId = collectionId.startsWith('gid://')
-      ? collectionId
-      : `gid://shopify/Collection/${collectionId}`;
+    const collectionIdStr = String(collectionId);
+    const formattedId = collectionIdStr.startsWith('gid://')
+      ? collectionIdStr
+      : `gid://shopify/Collection/${collectionIdStr}`;
 
     return this.query<ShopifyCollectionByIdResponse>(query, {
       id: formattedId,
