@@ -13,7 +13,7 @@ app.use(helmet()); // Adds security headers
 // CORS: Allow all origins for mobile app backend
 app.use(cors({
   origin: '*', // Mobile apps need unrestricted CORS
-  credentials: true
+  credentials: false // Cannot use credentials with wildcard origin
 }));
 
 // Rate limiting (prevents spam/abuse)
