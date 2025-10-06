@@ -53,7 +53,10 @@ export class ProductDetailController extends Controller {
         Product.findOne({ productId: numericProductId }).lean(),
         // Fetch metafields from Admin API (gracefully handle if not configured)
         shopifyStorefront.isAdminConfigured()
-          ? shopifyStorefront.getProductMetafields(productId).catch(() => ({ data: { product: { metafields: { edges: [] } } } }))
+          ? shopifyStorefront.getProductMetafields(productId).catch((error) => {
+              console.error('Failed to fetch metafields from Admin API:', error.message);
+              return { data: { product: { metafields: { edges: [] } } } };
+            })
           : Promise.resolve({ data: { product: { metafields: { edges: [] } } } }),
       ]);
 
@@ -143,16 +146,12 @@ export class ProductDetailController extends Controller {
 
   /**
    * Transform Shopify metafields to API format
-   * Filters out Shopify system metafields (those starting with shopify_ or spr_)
+   * Only includes custom metafields (namespace: "custom")
    */
   private transformMetafields(metafieldEdges: any[]): ProductMetafield[] {
     return metafieldEdges
       .map((edge) => edge.node)
-      .filter((metafield) => {
-        // Exclude Shopify system metafields
-        const namespace = metafield.namespace || '';
-        return !namespace.startsWith('shopify_') && !namespace.startsWith('spr_');
-      })
+      .filter((metafield) => metafield.namespace === 'custom')
       .map((metafield) => ({
         namespace: metafield.namespace,
         key: metafield.key,
