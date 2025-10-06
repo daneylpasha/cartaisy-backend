@@ -387,7 +387,7 @@ class ShopifyStorefrontService {
 
   /**
    * Get product metafields using Admin API
-   * Only fetches custom metafields (namespace: "custom")
+   * Fetches all metafields (will be filtered in controller if needed)
    */
   async getProductMetafields(productId: string): Promise<any> {
     // Format ID to Shopify GID format if needed
@@ -398,7 +398,7 @@ class ShopifyStorefrontService {
     const query = `
       query getProductMetafields($id: ID!) {
         product(id: $id) {
-          metafields(first: 100, namespace: "custom") {
+          metafields(first: 100) {
             edges {
               node {
                 namespace

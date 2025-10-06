@@ -143,11 +143,16 @@ export class ProductDetailController extends Controller {
 
   /**
    * Transform Shopify metafields to API format
-   * Note: Only custom metafields (namespace "custom") are fetched from Admin API
+   * Filters out Shopify system metafields (those starting with shopify_ or spr_)
    */
   private transformMetafields(metafieldEdges: any[]): ProductMetafield[] {
     return metafieldEdges
       .map((edge) => edge.node)
+      .filter((metafield) => {
+        // Exclude Shopify system metafields
+        const namespace = metafield.namespace || '';
+        return !namespace.startsWith('shopify_') && !namespace.startsWith('spr_');
+      })
       .map((metafield) => ({
         namespace: metafield.namespace,
         key: metafield.key,
