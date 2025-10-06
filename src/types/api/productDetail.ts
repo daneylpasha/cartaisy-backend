@@ -7,6 +7,17 @@ export interface ProductOption {
 }
 
 /**
+ * Product metafield (custom field from Shopify)
+ */
+export interface ProductMetafield {
+  namespace: string;
+  key: string;
+  value: string;
+  type: string;
+  description?: string;
+}
+
+/**
  * Product variant details
  */
 export interface ProductVariant {
@@ -52,6 +63,9 @@ export interface ProductDetail {
 
   // Variants
   variants: ProductVariant[];
+
+  // Metafields (custom fields from Shopify)
+  metafields: ProductMetafield[];
 
   // MongoDB enrichment
   rating: number;

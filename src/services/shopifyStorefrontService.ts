@@ -258,7 +258,7 @@ class ShopifyStorefrontService {
   }
 
   /**
-   * Get a single product by ID with full details including variants
+   * Get a single product by ID with full details including variants and metafields
    */
   async getProductById(productId: string): Promise<any> {
     // Format ID to Shopify GID format if needed
@@ -326,6 +326,17 @@ class ShopifyStorefrontService {
                   url
                   altText
                 }
+              }
+            }
+          }
+          metafields(first: 100) {
+            edges {
+              node {
+                namespace
+                key
+                value
+                type
+                description
               }
             }
           }

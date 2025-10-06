@@ -69,6 +69,34 @@
 				"type": "object",
 				"additionalProperties": false
 			},
+			"ProductMetafield": {
+				"description": "Product metafield (custom field from Shopify)",
+				"properties": {
+					"namespace": {
+						"type": "string"
+					},
+					"key": {
+						"type": "string"
+					},
+					"value": {
+						"type": "string"
+					},
+					"type": {
+						"type": "string"
+					},
+					"description": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"namespace",
+					"key",
+					"value",
+					"type"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
 			"ProductBadges": {
 				"description": "Product badges",
 				"properties": {
@@ -149,6 +177,12 @@
 						},
 						"type": "array"
 					},
+					"metafields": {
+						"items": {
+							"$ref": "#/components/schemas/ProductMetafield"
+						},
+						"type": "array"
+					},
 					"rating": {
 						"type": "number",
 						"format": "double"
@@ -181,6 +215,7 @@
 					"totalInventory",
 					"inStock",
 					"variants",
+					"metafields",
 					"rating",
 					"reviewsCount",
 					"soldThisMonth",

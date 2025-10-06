@@ -8,6 +8,7 @@ import {
   ProductDetail,
   ProductVariant,
   ProductBadges,
+  ProductMetafield,
 } from '../types/api/productDetail';
 
 /**
@@ -77,6 +78,9 @@ export class ProductDetailController extends Controller {
         // Variants
         variants: this.transformVariants(shopifyProduct.variants?.edges || []),
 
+        // Metafields (custom fields only)
+        metafields: this.transformMetafields(shopifyProduct.metafields?.edges || []),
+
         // MongoDB enrichment
         rating: productData?.reviews?.averageRating || 0,
         reviewsCount: productData?.reviews?.count || 0,
@@ -131,6 +135,23 @@ export class ProductDetailController extends Controller {
         image: variant.image?.url,
       };
     });
+  }
+
+  /**
+   * Transform Shopify metafields to API format
+   * Filters for custom metafields only (namespace "custom")
+   */
+  private transformMetafields(metafieldEdges: any[]): ProductMetafield[] {
+    return metafieldEdges
+      .map((edge) => edge.node)
+      .filter((metafield) => metafield.namespace === 'custom')
+      .map((metafield) => ({
+        namespace: metafield.namespace,
+        key: metafield.key,
+        value: metafield.value,
+        type: metafield.type,
+        description: metafield.description,
+      }));
   }
 
   /**

@@ -43,6 +43,18 @@ const models: TsoaRoute.Models = {
         "additionalProperties": false,
     },
     // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "ProductMetafield": {
+        "dataType": "refObject",
+        "properties": {
+            "namespace": {"dataType":"string","required":true},
+            "key": {"dataType":"string","required":true},
+            "value": {"dataType":"string","required":true},
+            "type": {"dataType":"string","required":true},
+            "description": {"dataType":"string"},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
     "ProductBadges": {
         "dataType": "refObject",
         "properties": {
@@ -71,6 +83,7 @@ const models: TsoaRoute.Models = {
             "totalInventory": {"dataType":"double","required":true},
             "inStock": {"dataType":"boolean","required":true},
             "variants": {"dataType":"array","array":{"dataType":"refObject","ref":"ProductVariant"},"required":true},
+            "metafields": {"dataType":"array","array":{"dataType":"refObject","ref":"ProductMetafield"},"required":true},
             "rating": {"dataType":"double","required":true},
             "reviewsCount": {"dataType":"double","required":true},
             "soldThisMonth": {"dataType":"double","required":true},
