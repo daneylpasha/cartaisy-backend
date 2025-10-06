@@ -11,13 +11,18 @@ import {
  */
 class ShopifyStorefrontService {
   private client: AxiosInstance;
+  private adminClient: AxiosInstance;
   private storefrontToken: string;
+  private adminToken: string;
   private shopDomain: string;
+  private storeUrl: string;
   private apiVersion: string;
 
   constructor() {
     this.shopDomain = process.env.SHOPIFY_SHOP_DOMAIN || '';
     this.storefrontToken = process.env.SHOPIFY_STOREFRONT_ACCESS_TOKEN || '';
+    this.adminToken = process.env.SHOPIFY_ADMIN_ACCESS_TOKEN || '';
+    this.storeUrl = process.env.SHOPIFY_STORE_URL || '';
     this.apiVersion = process.env.SHOPIFY_API_VERSION || '2025-01';
 
     if (!this.shopDomain || !this.storefrontToken) {
@@ -26,17 +31,34 @@ class ShopifyStorefrontService {
         'Set SHOPIFY_SHOP_DOMAIN and SHOPIFY_STOREFRONT_ACCESS_TOKEN in .env'
       );
       this.client = null as any;
-      return;
+    } else {
+      this.client = axios.create({
+        baseURL: `https://${this.shopDomain}/api/${this.apiVersion}/graphql.json`,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Shopify-Storefront-Access-Token': this.storefrontToken,
+        },
+        timeout: 5000, // Reduced from 10s to 5s for better UX
+      });
     }
 
-    this.client = axios.create({
-      baseURL: `https://${this.shopDomain}/api/${this.apiVersion}/graphql.json`,
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Shopify-Storefront-Access-Token': this.storefrontToken,
-      },
-      timeout: 5000, // Reduced from 10s to 5s for better UX
-    });
+    // Initialize Admin API client
+    if (!this.storeUrl || !this.adminToken) {
+      console.warn(
+        '⚠️ Shopify Admin API credentials not configured. Metafields will not be available.',
+        'Set SHOPIFY_STORE_URL and SHOPIFY_ADMIN_ACCESS_TOKEN in .env'
+      );
+      this.adminClient = null as any;
+    } else {
+      this.adminClient = axios.create({
+        baseURL: `${this.storeUrl}/admin/api/${this.apiVersion}/graphql.json`,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Shopify-Access-Token': this.adminToken,
+        },
+        timeout: 5000,
+      });
+    }
   }
 
   /**
@@ -258,7 +280,8 @@ class ShopifyStorefrontService {
   }
 
   /**
-   * Get a single product by ID with full details including variants and metafields
+   * Get a single product by ID with full details including variants
+   * Note: Metafields are fetched separately via Admin API
    */
   async getProductById(productId: string): Promise<any> {
     // Format ID to Shopify GID format if needed
@@ -329,7 +352,53 @@ class ShopifyStorefrontService {
               }
             }
           }
-          metafields(first: 100) {
+        }
+      }
+    `;
+
+    return this.query<any>(query, { id: formattedId });
+  }
+
+  /**
+   * Execute a GraphQL query against Shopify Admin API
+   */
+  private async queryAdmin<T>(graphqlQuery: string, variables: any = {}): Promise<T> {
+    if (!this.adminClient) {
+      throw new Error('Shopify Admin API not configured. Check environment variables.');
+    }
+
+    try {
+      const response = await this.adminClient.post('', {
+        query: graphqlQuery,
+        variables,
+      });
+
+      if (response.data.errors) {
+        console.error('Shopify Admin GraphQL errors:', response.data.errors);
+        throw new Error(`Shopify Admin API error: ${response.data.errors[0]?.message || 'Unknown error'}`);
+      }
+
+      return response.data;
+    } catch (error: any) {
+      console.error('Shopify Admin API request failed:', error.message);
+      throw new Error(`Failed to fetch data from Shopify Admin API: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get product metafields using Admin API
+   * Only fetches custom metafields (namespace: "custom")
+   */
+  async getProductMetafields(productId: string): Promise<any> {
+    // Format ID to Shopify GID format if needed
+    const formattedId = productId.startsWith('gid://shopify/Product/')
+      ? productId
+      : `gid://shopify/Product/${productId}`;
+
+    const query = `
+      query getProductMetafields($id: ID!) {
+        product(id: $id) {
+          metafields(first: 100, namespace: "custom") {
             edges {
               node {
                 namespace
@@ -344,7 +413,7 @@ class ShopifyStorefrontService {
       }
     `;
 
-    return this.query<any>(query, { id: formattedId });
+    return this.queryAdmin<any>(query, { id: formattedId });
   }
 
   /**
@@ -352,6 +421,13 @@ class ShopifyStorefrontService {
    */
   isConfigured(): boolean {
     return !!(this.shopDomain && this.storefrontToken);
+  }
+
+  /**
+   * Check if Admin API is configured
+   */
+  isAdminConfigured(): boolean {
+    return !!(this.storeUrl && this.adminToken);
   }
 }
 

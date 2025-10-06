@@ -47,10 +47,14 @@ export class ProductDetailController extends Controller {
       // Extract numeric product ID for MongoDB queries
       const numericProductId = shopifyProduct.id.split('/').pop() || productId;
 
-      // Fetch MongoDB enrichment data in parallel
-      const [productMetrics, productData] = await Promise.all([
+      // Fetch MongoDB enrichment data and Admin API metafields in parallel
+      const [productMetrics, productData, metafieldsResponse] = await Promise.all([
         ProductMetrics.findOne({ productId: numericProductId }).lean(),
         Product.findOne({ productId: numericProductId }).lean(),
+        // Fetch metafields from Admin API (gracefully handle if not configured)
+        shopifyStorefront.isAdminConfigured()
+          ? shopifyStorefront.getProductMetafields(productId).catch(() => ({ data: { product: { metafields: { edges: [] } } } }))
+          : Promise.resolve({ data: { product: { metafields: { edges: [] } } } }),
       ]);
 
       // Transform Shopify product data
@@ -78,8 +82,8 @@ export class ProductDetailController extends Controller {
         // Variants
         variants: this.transformVariants(shopifyProduct.variants?.edges || []),
 
-        // Metafields (custom fields only)
-        metafields: this.transformMetafields(shopifyProduct.metafields?.edges || []),
+        // Metafields (custom fields from Admin API)
+        metafields: this.transformMetafields(metafieldsResponse?.data?.product?.metafields?.edges || []),
 
         // MongoDB enrichment
         rating: productData?.reviews?.averageRating || 0,
@@ -139,12 +143,11 @@ export class ProductDetailController extends Controller {
 
   /**
    * Transform Shopify metafields to API format
-   * Filters for custom metafields only (namespace "custom")
+   * Note: Only custom metafields (namespace "custom") are fetched from Admin API
    */
   private transformMetafields(metafieldEdges: any[]): ProductMetafield[] {
     return metafieldEdges
       .map((edge) => edge.node)
-      .filter((metafield) => metafield.namespace === 'custom')
       .map((metafield) => ({
         namespace: metafield.namespace,
         key: metafield.key,
