@@ -417,6 +417,319 @@ class ShopifyStorefrontService {
   }
 
   /**
+   * Create a new cart with optional items
+   */
+  async createCart(items?: Array<{ merchandiseId: string; quantity: number }>): Promise<any> {
+    const query = `
+      mutation cartCreate($input: CartInput!) {
+        cartCreate(input: $input) {
+          cart {
+            id
+            lines(first: 100) {
+              edges {
+                node {
+                  id
+                  quantity
+                  merchandise {
+                    ... on ProductVariant {
+                      id
+                      title
+                      priceV2 {
+                        amount
+                        currencyCode
+                      }
+                      compareAtPriceV2 {
+                        amount
+                        currencyCode
+                      }
+                      quantityAvailable
+                      image {
+                        url
+                      }
+                      product {
+                        id
+                        title
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            estimatedCost {
+              totalAmount {
+                amount
+                currencyCode
+              }
+              subtotalAmount {
+                amount
+                currencyCode
+              }
+            }
+          }
+          userErrors {
+            field
+            message
+          }
+        }
+      }
+    `;
+
+    const input: any = {};
+    if (items && items.length > 0) {
+      input.lines = items.map((item) => ({
+        merchandiseId: item.merchandiseId,
+        quantity: item.quantity,
+      }));
+    }
+
+    return this.query<any>(query, { input });
+  }
+
+  /**
+   * Get cart by ID
+   */
+  async getCart(cartId: string): Promise<any> {
+    const query = `
+      query getCart($cartId: ID!) {
+        cart(id: $cartId) {
+          id
+          lines(first: 100) {
+            edges {
+              node {
+                id
+                quantity
+                merchandise {
+                  ... on ProductVariant {
+                    id
+                    title
+                    priceV2 {
+                      amount
+                      currencyCode
+                    }
+                    compareAtPriceV2 {
+                      amount
+                      currencyCode
+                    }
+                    quantityAvailable
+                    image {
+                      url
+                    }
+                    product {
+                      id
+                      title
+                    }
+                  }
+                }
+              }
+            }
+          }
+          estimatedCost {
+            totalAmount {
+              amount
+              currencyCode
+            }
+            subtotalAmount {
+              amount
+              currencyCode
+            }
+          }
+        }
+      }
+    `;
+
+    return this.query<any>(query, { cartId });
+  }
+
+  /**
+   * Add items to cart
+   */
+  async addCartLines(
+    cartId: string,
+    lines: Array<{ merchandiseId: string; quantity: number }>
+  ): Promise<any> {
+    const query = `
+      mutation cartLinesAdd($cartId: ID!, $lines: [CartLineInput!]!) {
+        cartLinesAdd(cartId: $cartId, lines: $lines) {
+          cart {
+            id
+            lines(first: 100) {
+              edges {
+                node {
+                  id
+                  quantity
+                  merchandise {
+                    ... on ProductVariant {
+                      id
+                      title
+                      priceV2 {
+                        amount
+                        currencyCode
+                      }
+                      compareAtPriceV2 {
+                        amount
+                        currencyCode
+                      }
+                      quantityAvailable
+                      image {
+                        url
+                      }
+                      product {
+                        id
+                        title
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            estimatedCost {
+              totalAmount {
+                amount
+                currencyCode
+              }
+              subtotalAmount {
+                amount
+                currencyCode
+              }
+            }
+          }
+          userErrors {
+            field
+            message
+          }
+        }
+      }
+    `;
+
+    return this.query<any>(query, { cartId, lines });
+  }
+
+  /**
+   * Update cart line quantity
+   */
+  async updateCartLines(
+    cartId: string,
+    lines: Array<{ id: string; quantity: number }>
+  ): Promise<any> {
+    const query = `
+      mutation cartLinesUpdate($cartId: ID!, $lines: [CartLineUpdateInput!]!) {
+        cartLinesUpdate(cartId: $cartId, lines: $lines) {
+          cart {
+            id
+            lines(first: 100) {
+              edges {
+                node {
+                  id
+                  quantity
+                  merchandise {
+                    ... on ProductVariant {
+                      id
+                      title
+                      priceV2 {
+                        amount
+                        currencyCode
+                      }
+                      compareAtPriceV2 {
+                        amount
+                        currencyCode
+                      }
+                      quantityAvailable
+                      image {
+                        url
+                      }
+                      product {
+                        id
+                        title
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            estimatedCost {
+              totalAmount {
+                amount
+                currencyCode
+              }
+              subtotalAmount {
+                amount
+                currencyCode
+              }
+            }
+          }
+          userErrors {
+            field
+            message
+          }
+        }
+      }
+    `;
+
+    return this.query<any>(query, { cartId, lines });
+  }
+
+  /**
+   * Remove lines from cart
+   */
+  async removeCartLines(cartId: string, lineIds: string[]): Promise<any> {
+    const query = `
+      mutation cartLinesRemove($cartId: ID!, $lineIds: [ID!]!) {
+        cartLinesRemove(cartId: $cartId, lineIds: $lineIds) {
+          cart {
+            id
+            lines(first: 100) {
+              edges {
+                node {
+                  id
+                  quantity
+                  merchandise {
+                    ... on ProductVariant {
+                      id
+                      title
+                      priceV2 {
+                        amount
+                        currencyCode
+                      }
+                      compareAtPriceV2 {
+                        amount
+                        currencyCode
+                      }
+                      quantityAvailable
+                      image {
+                        url
+                      }
+                      product {
+                        id
+                        title
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            estimatedCost {
+              totalAmount {
+                amount
+                currencyCode
+              }
+              subtotalAmount {
+                amount
+                currencyCode
+              }
+            }
+          }
+          userErrors {
+            field
+            message
+          }
+        }
+      }
+    `;
+
+    return this.query<any>(query, { cartId, lineIds });
+  }
+
+  /**
    * Check if service is properly configured
    */
   isConfigured(): boolean {
