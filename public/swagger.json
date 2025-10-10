@@ -877,6 +877,218 @@
 				"type": "object",
 				"additionalProperties": false
 			},
+			"CollectionProduct": {
+				"description": "Product item in collection response",
+				"properties": {
+					"id": {
+						"type": "string"
+					},
+					"title": {
+						"type": "string"
+					},
+					"description": {
+						"type": "string"
+					},
+					"handle": {
+						"type": "string"
+					},
+					"vendor": {
+						"type": "string"
+					},
+					"productType": {
+						"type": "string"
+					},
+					"tags": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array"
+					},
+					"availableForSale": {
+						"type": "boolean"
+					},
+					"totalInventory": {
+						"type": "number",
+						"format": "double"
+					},
+					"minPrice": {
+						"type": "number",
+						"format": "double"
+					},
+					"maxPrice": {
+						"type": "number",
+						"format": "double"
+					},
+					"compareAtPrice": {
+						"type": "number",
+						"format": "double",
+						"nullable": true
+					},
+					"currency": {
+						"type": "string"
+					},
+					"images": {
+						"items": {
+							"properties": {
+								"altText": {
+									"type": "string",
+									"nullable": true
+								},
+								"url": {
+									"type": "string"
+								}
+							},
+							"required": [
+								"altText",
+								"url"
+							],
+							"type": "object"
+						},
+						"type": "array"
+					},
+					"variants": {
+						"items": {
+							"properties": {
+								"quantityAvailable": {
+									"type": "number",
+									"format": "double"
+								},
+								"availableForSale": {
+									"type": "boolean"
+								},
+								"price": {
+									"type": "number",
+									"format": "double"
+								},
+								"title": {
+									"type": "string"
+								},
+								"id": {
+									"type": "string"
+								}
+							},
+							"required": [
+								"quantityAvailable",
+								"availableForSale",
+								"price",
+								"title",
+								"id"
+							],
+							"type": "object"
+						},
+						"type": "array"
+					}
+				},
+				"required": [
+					"id",
+					"title",
+					"description",
+					"handle",
+					"vendor",
+					"productType",
+					"tags",
+					"availableForSale",
+					"totalInventory",
+					"minPrice",
+					"maxPrice",
+					"compareAtPrice",
+					"currency",
+					"images",
+					"variants"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"CollectionProductsData": {
+				"description": "Collection products list response",
+				"properties": {
+					"collectionId": {
+						"type": "string"
+					},
+					"collectionTitle": {
+						"type": "string"
+					},
+					"collectionDescription": {
+						"type": "string"
+					},
+					"products": {
+						"items": {
+							"$ref": "#/components/schemas/CollectionProduct"
+						},
+						"type": "array"
+					},
+					"pageInfo": {
+						"properties": {
+							"startCursor": {
+								"type": "string",
+								"nullable": true
+							},
+							"endCursor": {
+								"type": "string",
+								"nullable": true
+							},
+							"hasPreviousPage": {
+								"type": "boolean"
+							},
+							"hasNextPage": {
+								"type": "boolean"
+							}
+						},
+						"required": [
+							"startCursor",
+							"endCursor",
+							"hasPreviousPage",
+							"hasNextPage"
+						],
+						"type": "object"
+					},
+					"totalCount": {
+						"type": "number",
+						"format": "double"
+					}
+				},
+				"required": [
+					"collectionId",
+					"collectionTitle",
+					"collectionDescription",
+					"products",
+					"pageInfo",
+					"totalCount"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"CollectionProductsResponse": {
+				"description": "Collection products API response",
+				"properties": {
+					"success": {
+						"type": "boolean"
+					},
+					"data": {
+						"$ref": "#/components/schemas/CollectionProductsData"
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"ProductCollectionSortKey": {
+				"type": "string",
+				"enum": [
+					"BEST_SELLING",
+					"COLLECTION_DEFAULT",
+					"CREATED",
+					"ID",
+					"MANUAL",
+					"PRICE",
+					"RELEVANCE",
+					"TITLE"
+				],
+				"description": "Sort options for collection products"
+			},
 			"CartLineItem": {
 				"description": "Cart line item details",
 				"properties": {
@@ -1250,6 +1462,85 @@
 						"in": "path",
 						"name": "productId",
 						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				]
+			}
+		},
+		"/collections/{collectionId}/products": {
+			"get": {
+				"operationId": "GetCollectionProducts",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CollectionProductsResponse"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "Bad Request"
+					},
+					"404": {
+						"description": "Collection not found"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Get products from a collection with pagination, filtering, and sorting",
+				"tags": [
+					"Collections"
+				],
+				"security": [],
+				"parameters": [
+					{
+						"description": "- Shopify collection ID (numeric or GID format)",
+						"in": "path",
+						"name": "collectionId",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"description": "- Number of products per page (default: 20)",
+						"in": "query",
+						"name": "limit",
+						"required": false,
+						"schema": {
+							"format": "double",
+							"type": "number"
+						}
+					},
+					{
+						"description": "- Pagination cursor for fetching next page",
+						"in": "query",
+						"name": "cursor",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"description": "- Sort order for products",
+						"in": "query",
+						"name": "sortKey",
+						"required": false,
+						"schema": {
+							"$ref": "#/components/schemas/ProductCollectionSortKey"
+						}
+					},
+					{
+						"description": "- JSON string of ProductFilter array for filtering products",
+						"in": "query",
+						"name": "filters",
+						"required": false,
 						"schema": {
 							"type": "string"
 						}

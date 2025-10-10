@@ -178,6 +178,106 @@ class ShopifyStorefrontService {
   }
 
   /**
+   * Get collection products with pagination, filtering, and sorting
+   */
+  async getCollectionProducts(
+    collectionId: string,
+    options: {
+      limit?: number;
+      cursor?: string;
+      sortKey?: string;
+      filters?: any[];
+    } = {}
+  ): Promise<any> {
+    const { limit = 20, cursor, sortKey = 'COLLECTION_DEFAULT', filters = [] } = options;
+
+    const query = `
+      query getCollectionProducts($id: ID!, $limit: Int!, $cursor: String, $sortKey: ProductCollectionSortKeys, $filters: [ProductFilter!]) {
+        collection(id: $id) {
+          id
+          title
+          description
+          handle
+          products(first: $limit, after: $cursor, sortKey: $sortKey, filters: $filters) {
+            edges {
+              node {
+                id
+                title
+                description
+                handle
+                vendor
+                productType
+                tags
+                availableForSale
+                totalInventory
+                priceRange {
+                  minVariantPrice {
+                    amount
+                    currencyCode
+                  }
+                  maxVariantPrice {
+                    amount
+                    currencyCode
+                  }
+                }
+                compareAtPriceRange {
+                  minVariantPrice {
+                    amount
+                    currencyCode
+                  }
+                }
+                images(first: 5) {
+                  edges {
+                    node {
+                      url
+                      altText
+                    }
+                  }
+                }
+                variants(first: 10) {
+                  edges {
+                    node {
+                      id
+                      title
+                      price {
+                        amount
+                        currencyCode
+                      }
+                      availableForSale
+                      quantityAvailable
+                    }
+                  }
+                }
+              }
+              cursor
+            }
+            pageInfo {
+              hasNextPage
+              hasPreviousPage
+              endCursor
+              startCursor
+            }
+          }
+        }
+      }
+    `;
+
+    // Ensure the collection ID has the correct Shopify GID format
+    const collectionIdStr = String(collectionId);
+    const formattedId = collectionIdStr.startsWith('gid://')
+      ? collectionIdStr
+      : `gid://shopify/Collection/${collectionIdStr}`;
+
+    return this.query<any>(query, {
+      id: formattedId,
+      limit,
+      cursor: cursor || null,
+      sortKey,
+      filters: filters.length > 0 ? filters : null,
+    });
+  }
+
+  /**
    * Get products with optional filtering
    */
   async getProducts(
