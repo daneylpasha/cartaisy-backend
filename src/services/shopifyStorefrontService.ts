@@ -486,8 +486,29 @@ class ShopifyStorefrontService {
   }
 
   /**
+   * Get metaobject by ID using Admin API
+   */
+  async getMetaobject(metaobjectId: string): Promise<any> {
+    const query = `
+      query getMetaobject($id: ID!) {
+        metaobject(id: $id) {
+          id
+          type
+          displayName
+          fields {
+            key
+            value
+          }
+        }
+      }
+    `;
+
+    return this.queryAdmin<any>(query, { id: metaobjectId });
+  }
+
+  /**
    * Get product metafields using Admin API
-   * Fetches all metafields (will be filtered in controller if needed)
+   * Fetches all metafields and resolves metaobject references
    */
   async getProductMetafields(productId: string): Promise<any> {
     // Format ID to Shopify GID format if needed
@@ -513,7 +534,43 @@ class ShopifyStorefrontService {
       }
     `;
 
-    return this.queryAdmin<any>(query, { id: formattedId });
+    const response = await this.queryAdmin<any>(query, { id: formattedId });
+
+    // Resolve metaobject references
+    if (response?.data?.product?.metafields?.edges) {
+      const metafields = response.data.product.metafields.edges;
+
+      for (const edge of metafields) {
+        const metafield = edge.node;
+
+        // Check if this is a metaobject reference type
+        if (metafield.type?.includes('metaobject_reference') && metafield.value) {
+          try {
+            const parsedValue = JSON.parse(metafield.value);
+            const metaobjectIds = Array.isArray(parsedValue) ? parsedValue : [parsedValue];
+
+            // Fetch metaobjects in parallel
+            const metaobjectPromises = metaobjectIds.map((id: string) =>
+              this.getMetaobject(id).catch((err) => {
+                console.error(`Failed to fetch metaobject ${id}:`, err.message);
+                return null;
+              })
+            );
+
+            const metaobjects = await Promise.all(metaobjectPromises);
+
+            // Store resolved metaobjects in the edge for the controller to use
+            edge.node.resolvedMetaobjects = metaobjects
+              .filter((mo) => mo?.data?.metaobject)
+              .map((mo) => mo.data.metaobject);
+          } catch (e) {
+            // Failed to parse or fetch metaobjects, skip
+          }
+        }
+      }
+    }
+
+    return response;
   }
 
   /**

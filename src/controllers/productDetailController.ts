@@ -148,18 +148,44 @@ export class ProductDetailController extends Controller {
    * Transform Shopify metafields to API format
    * Includes custom and shopify metafields (namespaces: "custom", "shopify")
    * Shopify namespace contains category metafields like color-pattern, material, etc.
+   * Resolves metaobject references to display values
    */
   private transformMetafields(metafieldEdges: any[]): ProductMetafield[] {
     return metafieldEdges
       .map((edge) => edge.node)
       .filter((metafield) => metafield.namespace === 'custom' || metafield.namespace === 'shopify')
-      .map((metafield) => ({
-        namespace: metafield.namespace,
-        key: metafield.key,
-        value: metafield.value,
-        type: metafield.type,
-        description: metafield.description,
-      }));
+      .map((metafield) => {
+        // Check if this is a metaobject reference type
+        const isMetaobjectReference = metafield.type?.includes('metaobject_reference');
+
+        let displayKey = metafield.key;
+        let displayValue = metafield.value;
+
+        // If it's a metaobject reference and we have resolved metaobjects, use them
+        if (isMetaobjectReference && metafield.resolvedMetaobjects && metafield.resolvedMetaobjects.length > 0) {
+          // Convert key from kebab-case to Title Case (e.g., "color-pattern" -> "Color Pattern")
+          displayKey = metafield.key
+            .split('-')
+            .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ');
+
+          // Extract display names from resolved metaobjects
+          const displayNames = metafield.resolvedMetaobjects
+            .map((mo: any) => mo.displayName)
+            .filter((name: string) => name)
+            .join(', ');
+
+          displayValue = displayNames || metafield.value;
+        }
+
+        return {
+          namespace: metafield.namespace,
+          key: displayKey,
+          value: displayValue,
+          type: metafield.type,
+          description: metafield.description,
+        };
+      });
   }
 
   /**
