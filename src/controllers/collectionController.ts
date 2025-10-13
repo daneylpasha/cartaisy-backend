@@ -334,44 +334,45 @@ export class CollectionController extends Controller {
               return false;
             }
 
-            // Check if any variant has the matching option
+            // Use EXACT same logic as facet computation for consistency
             const hasMatch = product.variants.some((variant) => {
               if (!variant.selectedOptions || variant.selectedOptions.length === 0) {
                 if (index === 0) console.log('Variant has no selectedOptions:', variant.id);
                 return false;
               }
 
-              const optionMatch = variant.selectedOptions.some(
-                (option) => {
-                  // Normalize names: "Color" and "Colour" should match
-                  const normalizedOptionName = option.name.toLowerCase().replace(/u/g, '');
-                  const normalizedFilterName = name.toLowerCase().replace(/u/g, '');
-                  const nameMatch = normalizedOptionName === normalizedFilterName ||
-                                   option.name.toLowerCase() === name.toLowerCase();
-
-                  // Normalize values: trim and lowercase
-                  const normalizedOptionValue = (option.value || '').trim().toLowerCase();
-                  const normalizedFilterValue = (value || '').trim().toLowerCase();
-                  const valueMatch = normalizedOptionValue === normalizedFilterValue;
-
-                  if (index === 0) {
-                    console.log(`Checking option: ${option.name}=${option.value} against ${name}=${value}`);
-                    console.log(`  Name match: ${nameMatch}, Value match: ${valueMatch}`);
-                    console.log(`  Normalized: "${normalizedOptionName}"="${normalizedFilterName}", "${normalizedOptionValue}"="${normalizedFilterValue}"`);
-                  }
-
-                  return nameMatch && valueMatch;
+              // Find the option matching the filter name (case-insensitive for Color/Colour)
+              const colorOption = variant.selectedOptions.find(
+                (opt) => {
+                  const optNameLower = opt.name.toLowerCase();
+                  const filterNameLower = name.toLowerCase();
+                  return optNameLower === filterNameLower ||
+                         optNameLower === 'color' && filterNameLower === 'colour' ||
+                         optNameLower === 'colour' && filterNameLower === 'color';
                 }
               );
 
-              return optionMatch;
+              if (!colorOption) {
+                return false;
+              }
+
+              // Compare values: case-insensitive and trimmed
+              const optionValue = (colorOption.value || '').trim().toLowerCase();
+              const filterValue = (value || '').trim().toLowerCase();
+              const valueMatch = optionValue === filterValue;
+
+              if (index < 3) {
+                console.log(`  Variant ${variant.id}: ${colorOption.name}="${colorOption.value}" vs filter "${name}"="${value}" → ${valueMatch ? 'MATCH' : 'NO MATCH'}`);
+              }
+
+              return valueMatch;
             });
 
             return hasMatch;
           });
 
-          if (index < 3) {
-            console.log(`Product ${product.id} (${product.title}): ${matches ? 'MATCH' : 'NO MATCH'}`);
+          if (index < 5) {
+            console.log(`Product ${index + 1} (${product.title}): ${matches ? '✓ MATCH' : '✗ NO MATCH'}`);
           }
 
           return matches;
