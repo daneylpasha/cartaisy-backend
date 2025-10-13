@@ -1,4 +1,4 @@
-import { Get, Post, Put, Delete, Route, Tags, Response, Path, Body } from 'tsoa';
+import { Get, Post, Put, Delete, Route, Tags, Response, Path, Body, Security, Request } from 'tsoa';
 import { Controller } from '@tsoa/runtime';
 import shopifyStorefront from '../services/shopifyStorefrontService';
 import {
@@ -328,6 +328,74 @@ export class CartController extends Controller {
       if (error instanceof Error && error.message === 'Cart not found') {
         this.setStatus(404);
       } else if (!this.getStatus || this.getStatus() === 200) {
+        this.setStatus(500);
+      }
+
+      throw error;
+    }
+  }
+
+  /**
+   * Associate cart with logged-in customer
+   * Call this when user logs in to merge guest cart with their account
+   * @param cartId - Shopify cart ID
+   * @param request - Request object with user info
+   */
+  @Post('{cartId}/associate')
+  @Security('jwt')
+  @Response(400, 'Bad Request')
+  @Response(404, 'Cart not found')
+  @Response(500, 'Internal Server Error')
+  public async associateWithCustomer(
+    @Path() cartId: string,
+    @Request() request: any
+  ): Promise<CartResponse> {
+    try {
+      if (!shopifyStorefront.isConfigured()) {
+        this.setStatus(500);
+        throw new Error('Shopify not configured');
+      }
+
+      // Get customer access token from request user
+      // Note: You'll need to store Shopify customer access token when user logs in
+      const customerAccessToken = request.user?.shopifyAccessToken;
+
+      if (!customerAccessToken) {
+        this.setStatus(400);
+        throw new Error('Customer access token not found. User needs to authenticate with Shopify.');
+      }
+
+      const shopifyResponse = await shopifyStorefront.associateCartWithCustomer(
+        cartId,
+        customerAccessToken
+      );
+
+      if (shopifyResponse?.data?.cartBuyerIdentityUpdate?.userErrors?.length > 0) {
+        const error = shopifyResponse.data.cartBuyerIdentityUpdate.userErrors[0];
+        if (error.message.includes('not found') || error.message.includes('invalid')) {
+          this.setStatus(404);
+        } else {
+          this.setStatus(400);
+        }
+        throw new Error(error.message || 'Failed to associate cart with customer');
+      }
+
+      const cart = shopifyResponse?.data?.cartBuyerIdentityUpdate?.cart;
+      if (!cart) {
+        this.setStatus(500);
+        throw new Error('Failed to associate cart with customer');
+      }
+
+      const cartData = this.transformCart(cart);
+
+      return {
+        success: true,
+        data: cartData,
+      };
+    } catch (error) {
+      console.error('Error associating cart with customer:', error instanceof Error ? error.message : 'Unknown error');
+
+      if (!this.getStatus || this.getStatus() === 200) {
         this.setStatus(500);
       }
 

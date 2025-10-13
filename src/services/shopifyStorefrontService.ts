@@ -893,6 +893,84 @@ class ShopifyStorefrontService {
   }
 
   /**
+   * Associate cart with customer (when user logs in)
+   * @param cartId Cart ID
+   * @param customerAccessToken Shopify customer access token
+   */
+  async associateCartWithCustomer(cartId: string, customerAccessToken: string): Promise<any> {
+    const query = `
+      mutation cartBuyerIdentityUpdate($cartId: ID!, $buyerIdentity: CartBuyerIdentityInput!) {
+        cartBuyerIdentityUpdate(cartId: $cartId, buyerIdentity: $buyerIdentity) {
+          cart {
+            id
+            buyerIdentity {
+              email
+              phone
+              customer {
+                id
+                email
+                firstName
+                lastName
+              }
+            }
+            lines(first: 100) {
+              edges {
+                node {
+                  id
+                  quantity
+                  merchandise {
+                    ... on ProductVariant {
+                      id
+                      title
+                      priceV2 {
+                        amount
+                        currencyCode
+                      }
+                      compareAtPriceV2 {
+                        amount
+                        currencyCode
+                      }
+                      quantityAvailable
+                      image {
+                        url
+                      }
+                      product {
+                        id
+                        title
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            estimatedCost {
+              totalAmount {
+                amount
+                currencyCode
+              }
+              subtotalAmount {
+                amount
+                currencyCode
+              }
+            }
+          }
+          userErrors {
+            field
+            message
+          }
+        }
+      }
+    `;
+
+    return this.query<any>(query, {
+      cartId,
+      buyerIdentity: {
+        customerAccessToken,
+      },
+    });
+  }
+
+  /**
    * Check if service is properly configured
    */
   isConfigured(): boolean {

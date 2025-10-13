@@ -1938,6 +1938,52 @@
 					}
 				]
 			}
+		},
+		"/cart/{cartId}/associate": {
+			"post": {
+				"operationId": "AssociateWithCustomer",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CartResponse"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "Bad Request"
+					},
+					"404": {
+						"description": "Cart not found"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Associate cart with logged-in customer\nCall this when user logs in to merge guest cart with their account",
+				"tags": [
+					"Cart"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [
+					{
+						"description": "- Shopify cart ID",
+						"in": "path",
+						"name": "cartId",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				]
+			}
 		}
 	},
 	"servers": [

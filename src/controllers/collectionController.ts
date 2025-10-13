@@ -60,19 +60,31 @@ export class CollectionController extends Controller {
             this.setStatus(400);
             throw new Error('Filters must be an array');
           }
+          console.log('Parsed filters:', JSON.stringify(parsedFilters, null, 2));
         } catch (error) {
           this.setStatus(400);
           throw new Error('Invalid filters format. Must be valid JSON array.');
         }
       }
 
+      // Remove variantOption filters from Shopify request (handle client-side)
+      // Shopify Storefront API may not support variantOption filtering
+      const shopifyFilters = parsedFilters.filter(f => !f.variantOption);
+
       const shopifyResponse = await shopifyStorefront.getCollectionProducts(collectionId, {
         limit: effectiveLimit,
         cursor,
         sortKey: effectiveSortKey,
         reverse: reverse || false,
-        filters: parsedFilters,
+        filters: shopifyFilters.length > 0 ? shopifyFilters : [],
       });
+
+      // Check for Shopify GraphQL errors
+      if (shopifyResponse?.errors) {
+        console.error('Shopify GraphQL errors:', JSON.stringify(shopifyResponse.errors, null, 2));
+        this.setStatus(500);
+        throw new Error(`Shopify API error: ${shopifyResponse.errors[0]?.message || 'Unknown error'}`);
+      }
 
       if (!shopifyResponse?.data?.collection) {
         this.setStatus(404);
@@ -91,6 +103,13 @@ export class CollectionController extends Controller {
       // Apply custom discount sorting if requested
       if (isDiscountSort) {
         products = this.sortByDiscount(products);
+      }
+
+      // Apply client-side color filtering if Shopify doesn't support it
+      // Filter by variantOption (color) on backend if present
+      const colorFilters = parsedFilters.filter(f => f.variantOption);
+      if (colorFilters.length > 0) {
+        products = this.filterByVariantOptions(products, colorFilters);
       }
 
       // Compute facets from the products
@@ -277,5 +296,34 @@ export class CollectionController extends Controller {
       })
       .sort((a, b) => b.discountPercent - a.discountPercent) // Sort by discount descending
       .map((item) => item.product); // Extract products
+  }
+
+  /**
+   * Filter products by variant options (e.g., color, size)
+   * This is a client-side filter since Shopify Storefront API doesn't support it
+   */
+  private filterByVariantOptions(
+    products: CollectionProduct[],
+    variantFilters: ProductFilter[]
+  ): CollectionProduct[] {
+    return products.filter((product) => {
+      // Check if product has at least one variant matching any of the filters
+      return variantFilters.some((filter) => {
+        if (!filter.variantOption) return false;
+
+        const { name, value } = filter.variantOption;
+
+        // Check if any variant has the matching option
+        return product.variants.some((variant) => {
+          if (!variant.selectedOptions) return false;
+
+          return variant.selectedOptions.some(
+            (option) =>
+              option.name.toLowerCase() === name.toLowerCase() &&
+              option.value.toLowerCase() === value.toLowerCase()
+          );
+        });
+      });
+    });
   }
 }
