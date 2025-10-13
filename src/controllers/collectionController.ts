@@ -311,33 +311,80 @@ export class CollectionController extends Controller {
     variantFilters: ProductFilter[]
   ): CollectionProduct[] {
     try {
-      return products.filter((product) => {
+      console.log('=== Starting variant filtering ===');
+      console.log('Total products to filter:', products.length);
+      console.log('Variant filters:', JSON.stringify(variantFilters, null, 2));
+
+      // Debug: Check first product's variant structure
+      if (products.length > 0 && products[0].variants && products[0].variants.length > 0) {
+        console.log('Sample variant structure:', JSON.stringify(products[0].variants[0], null, 2));
+      }
+
+      const filtered = products.filter((product, index) => {
         try {
           // Check if product has at least one variant matching any of the filters
-          return variantFilters.some((filter) => {
+          const matches = variantFilters.some((filter) => {
             if (!filter.variantOption) return false;
 
             const { name, value } = filter.variantOption;
 
             // Check if product has variants
-            if (!product.variants || product.variants.length === 0) return false;
+            if (!product.variants || product.variants.length === 0) {
+              if (index === 0) console.log('Product has no variants:', product.id);
+              return false;
+            }
 
             // Check if any variant has the matching option
-            return product.variants.some((variant) => {
-              if (!variant.selectedOptions || variant.selectedOptions.length === 0) return false;
+            const hasMatch = product.variants.some((variant) => {
+              if (!variant.selectedOptions || variant.selectedOptions.length === 0) {
+                if (index === 0) console.log('Variant has no selectedOptions:', variant.id);
+                return false;
+              }
 
-              return variant.selectedOptions.some(
-                (option) =>
-                  option.name.toLowerCase() === name.toLowerCase() &&
-                  option.value.toLowerCase() === value.toLowerCase()
+              const optionMatch = variant.selectedOptions.some(
+                (option) => {
+                  // Normalize names: "Color" and "Colour" should match
+                  const normalizedOptionName = option.name.toLowerCase().replace(/u/g, '');
+                  const normalizedFilterName = name.toLowerCase().replace(/u/g, '');
+                  const nameMatch = normalizedOptionName === normalizedFilterName ||
+                                   option.name.toLowerCase() === name.toLowerCase();
+
+                  // Normalize values: trim and lowercase
+                  const normalizedOptionValue = (option.value || '').trim().toLowerCase();
+                  const normalizedFilterValue = (value || '').trim().toLowerCase();
+                  const valueMatch = normalizedOptionValue === normalizedFilterValue;
+
+                  if (index === 0) {
+                    console.log(`Checking option: ${option.name}=${option.value} against ${name}=${value}`);
+                    console.log(`  Name match: ${nameMatch}, Value match: ${valueMatch}`);
+                    console.log(`  Normalized: "${normalizedOptionName}"="${normalizedFilterName}", "${normalizedOptionValue}"="${normalizedFilterValue}"`);
+                  }
+
+                  return nameMatch && valueMatch;
+                }
               );
+
+              return optionMatch;
             });
+
+            return hasMatch;
           });
+
+          if (index < 3) {
+            console.log(`Product ${product.id} (${product.title}): ${matches ? 'MATCH' : 'NO MATCH'}`);
+          }
+
+          return matches;
         } catch (error) {
           console.error('Error filtering product:', product.id, error);
           return false;
         }
       });
+
+      console.log('Filtered products count:', filtered.length);
+      console.log('=== End variant filtering ===');
+
+      return filtered;
     } catch (error) {
       console.error('Error in filterByVariantOptions:', error);
       return products; // Return all products if filtering fails
