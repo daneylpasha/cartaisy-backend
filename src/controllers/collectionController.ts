@@ -108,8 +108,12 @@ export class CollectionController extends Controller {
       // Apply client-side color filtering if Shopify doesn't support it
       // Filter by variantOption (color) on backend if present
       const colorFilters = parsedFilters.filter(f => f.variantOption);
+      console.log('Color filters found:', colorFilters.length);
       if (colorFilters.length > 0) {
+        console.log('Filtering products by variant options:', JSON.stringify(colorFilters, null, 2));
+        console.log('Products before filtering:', products.length);
         products = this.filterByVariantOptions(products, colorFilters);
+        console.log('Products after filtering:', products.length);
       }
 
       // Compute facets from the products
@@ -306,24 +310,37 @@ export class CollectionController extends Controller {
     products: CollectionProduct[],
     variantFilters: ProductFilter[]
   ): CollectionProduct[] {
-    return products.filter((product) => {
-      // Check if product has at least one variant matching any of the filters
-      return variantFilters.some((filter) => {
-        if (!filter.variantOption) return false;
+    try {
+      return products.filter((product) => {
+        try {
+          // Check if product has at least one variant matching any of the filters
+          return variantFilters.some((filter) => {
+            if (!filter.variantOption) return false;
 
-        const { name, value } = filter.variantOption;
+            const { name, value } = filter.variantOption;
 
-        // Check if any variant has the matching option
-        return product.variants.some((variant) => {
-          if (!variant.selectedOptions) return false;
+            // Check if product has variants
+            if (!product.variants || product.variants.length === 0) return false;
 
-          return variant.selectedOptions.some(
-            (option) =>
-              option.name.toLowerCase() === name.toLowerCase() &&
-              option.value.toLowerCase() === value.toLowerCase()
-          );
-        });
+            // Check if any variant has the matching option
+            return product.variants.some((variant) => {
+              if (!variant.selectedOptions || variant.selectedOptions.length === 0) return false;
+
+              return variant.selectedOptions.some(
+                (option) =>
+                  option.name.toLowerCase() === name.toLowerCase() &&
+                  option.value.toLowerCase() === value.toLowerCase()
+              );
+            });
+          });
+        } catch (error) {
+          console.error('Error filtering product:', product.id, error);
+          return false;
+        }
       });
-    });
+    } catch (error) {
+      console.error('Error in filterByVariantOptions:', error);
+      return products; // Return all products if filtering fails
+    }
   }
 }
