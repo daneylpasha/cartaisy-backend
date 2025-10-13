@@ -146,12 +146,13 @@ export class ProductDetailController extends Controller {
 
   /**
    * Transform Shopify metafields to API format
-   * Only includes custom metafields (namespace: "custom")
+   * Includes custom and shopify metafields (namespaces: "custom", "shopify")
+   * Shopify namespace contains category metafields like color-pattern, material, etc.
    */
   private transformMetafields(metafieldEdges: any[]): ProductMetafield[] {
     return metafieldEdges
       .map((edge) => edge.node)
-      .filter((metafield) => metafield.namespace === 'custom')
+      .filter((metafield) => metafield.namespace === 'custom' || metafield.namespace === 'shopify')
       .map((metafield) => ({
         namespace: metafield.namespace,
         key: metafield.key,
