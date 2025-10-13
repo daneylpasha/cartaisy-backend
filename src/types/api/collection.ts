@@ -30,7 +30,8 @@ export type ProductCollectionSortKey =
   | 'MANUAL'
   | 'PRICE'
   | 'RELEVANCE'
-  | 'TITLE';
+  | 'TITLE'
+  | 'DISCOUNT'; // Custom sort by discount percentage (backend-only)
 
 /**
  * Product item in collection response
@@ -59,7 +60,39 @@ export interface CollectionProduct {
     price: number;
     availableForSale: boolean;
     quantityAvailable: number;
+    selectedOptions?: Array<{
+      name: string;
+      value: string;
+    }>;
   }>;
+}
+
+/**
+ * Facet option with count
+ */
+export interface FacetOption {
+  value: string;
+  count: number;
+  label?: string;
+}
+
+/**
+ * Price range facet
+ */
+export interface PriceRangeFacet {
+  min: number;
+  max: number;
+}
+
+/**
+ * Collection facets for filtering
+ */
+export interface CollectionFacets {
+  categories: FacetOption[];
+  vendors: FacetOption[];
+  priceRange: PriceRangeFacet;
+  colors?: FacetOption[];
+  tags?: FacetOption[];
 }
 
 /**
@@ -70,6 +103,7 @@ export interface CollectionProductsData {
   collectionTitle: string;
   collectionDescription: string;
   products: CollectionProduct[];
+  facets: CollectionFacets;
   pageInfo: {
     hasNextPage: boolean;
     hasPreviousPage: boolean;

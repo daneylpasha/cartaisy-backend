@@ -186,19 +186,20 @@ class ShopifyStorefrontService {
       limit?: number;
       cursor?: string;
       sortKey?: string;
+      reverse?: boolean;
       filters?: any[];
     } = {}
   ): Promise<any> {
-    const { limit = 20, cursor, sortKey = 'COLLECTION_DEFAULT', filters = [] } = options;
+    const { limit = 20, cursor, sortKey = 'COLLECTION_DEFAULT', reverse = false, filters = [] } = options;
 
     const query = `
-      query getCollectionProducts($id: ID!, $limit: Int!, $cursor: String, $sortKey: ProductCollectionSortKeys, $filters: [ProductFilter!]) {
+      query getCollectionProducts($id: ID!, $limit: Int!, $cursor: String, $sortKey: ProductCollectionSortKeys, $reverse: Boolean, $filters: [ProductFilter!]) {
         collection(id: $id) {
           id
           title
           description
           handle
-          products(first: $limit, after: $cursor, sortKey: $sortKey, filters: $filters) {
+          products(first: $limit, after: $cursor, sortKey: $sortKey, reverse: $reverse, filters: $filters) {
             edges {
               node {
                 id
@@ -245,6 +246,10 @@ class ShopifyStorefrontService {
                       }
                       availableForSale
                       quantityAvailable
+                      selectedOptions {
+                        name
+                        value
+                      }
                     }
                   }
                 }
@@ -273,6 +278,7 @@ class ShopifyStorefrontService {
       limit,
       cursor: cursor || null,
       sortKey,
+      reverse,
       filters: filters.length > 0 ? filters : null,
     });
   }
@@ -551,7 +557,7 @@ class ShopifyStorefrontService {
 
             // Fetch metaobjects in parallel
             const metaobjectPromises = metaobjectIds.map((id: string) =>
-              this.getMetaobject(id).catch((err) => {
+              this.getMetaobject(id).catch((err: Error): null => {
                 console.error(`Failed to fetch metaobject ${id}:`, err.message);
                 return null;
               })

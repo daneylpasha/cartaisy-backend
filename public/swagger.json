@@ -949,6 +949,24 @@
 					"variants": {
 						"items": {
 							"properties": {
+								"selectedOptions": {
+									"items": {
+										"properties": {
+											"value": {
+												"type": "string"
+											},
+											"name": {
+												"type": "string"
+											}
+										},
+										"required": [
+											"value",
+											"name"
+										],
+										"type": "object"
+									},
+									"type": "array"
+								},
 								"quantityAvailable": {
 									"type": "number",
 									"format": "double"
@@ -999,6 +1017,85 @@
 				"type": "object",
 				"additionalProperties": false
 			},
+			"FacetOption": {
+				"description": "Facet option with count",
+				"properties": {
+					"value": {
+						"type": "string"
+					},
+					"count": {
+						"type": "number",
+						"format": "double"
+					},
+					"label": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"value",
+					"count"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"PriceRangeFacet": {
+				"description": "Price range facet",
+				"properties": {
+					"min": {
+						"type": "number",
+						"format": "double"
+					},
+					"max": {
+						"type": "number",
+						"format": "double"
+					}
+				},
+				"required": [
+					"min",
+					"max"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"CollectionFacets": {
+				"description": "Collection facets for filtering",
+				"properties": {
+					"categories": {
+						"items": {
+							"$ref": "#/components/schemas/FacetOption"
+						},
+						"type": "array"
+					},
+					"vendors": {
+						"items": {
+							"$ref": "#/components/schemas/FacetOption"
+						},
+						"type": "array"
+					},
+					"priceRange": {
+						"$ref": "#/components/schemas/PriceRangeFacet"
+					},
+					"colors": {
+						"items": {
+							"$ref": "#/components/schemas/FacetOption"
+						},
+						"type": "array"
+					},
+					"tags": {
+						"items": {
+							"$ref": "#/components/schemas/FacetOption"
+						},
+						"type": "array"
+					}
+				},
+				"required": [
+					"categories",
+					"vendors",
+					"priceRange"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
 			"CollectionProductsData": {
 				"description": "Collection products list response",
 				"properties": {
@@ -1016,6 +1113,9 @@
 							"$ref": "#/components/schemas/CollectionProduct"
 						},
 						"type": "array"
+					},
+					"facets": {
+						"$ref": "#/components/schemas/CollectionFacets"
 					},
 					"pageInfo": {
 						"properties": {
@@ -1052,6 +1152,7 @@
 					"collectionTitle",
 					"collectionDescription",
 					"products",
+					"facets",
 					"pageInfo",
 					"totalCount"
 				],
@@ -1085,7 +1186,8 @@
 					"MANUAL",
 					"PRICE",
 					"RELEVANCE",
-					"TITLE"
+					"TITLE",
+					"DISCOUNT"
 				],
 				"description": "Sort options for collection products"
 			},
@@ -1534,6 +1636,15 @@
 						"required": false,
 						"schema": {
 							"$ref": "#/components/schemas/ProductCollectionSortKey"
+						}
+					},
+					{
+						"description": "- Reverse the sort order (for high to low)",
+						"in": "query",
+						"name": "reverse",
+						"required": false,
+						"schema": {
+							"type": "boolean"
 						}
 					},
 					{

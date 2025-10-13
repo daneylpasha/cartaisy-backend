@@ -6,6 +6,8 @@ import {
   CollectionProduct,
   ProductCollectionSortKey,
   ProductFilter,
+  CollectionFacets,
+  FacetOption,
 } from '../types/api/collection';
 
 /**
@@ -21,6 +23,7 @@ export class CollectionController extends Controller {
    * @param limit - Number of products per page (default: 20)
    * @param cursor - Pagination cursor for fetching next page
    * @param sortKey - Sort order for products
+   * @param reverse - Reverse the sort order (for high to low)
    * @param filters - JSON string of ProductFilter array for filtering products
    */
   @Get('{collectionId}/products')
@@ -32,6 +35,7 @@ export class CollectionController extends Controller {
     @Query() limit?: number,
     @Query() cursor?: string,
     @Query() sortKey?: ProductCollectionSortKey,
+    @Query() reverse?: boolean,
     @Query() filters?: string
   ): Promise<CollectionProductsResponse> {
     try {
@@ -42,7 +46,10 @@ export class CollectionController extends Controller {
 
       // Set defaults for optional parameters
       const effectiveLimit = limit || 20;
-      const effectiveSortKey = sortKey || 'COLLECTION_DEFAULT';
+
+      // Handle custom DISCOUNT sort key
+      const isDiscountSort = sortKey === 'DISCOUNT';
+      const effectiveSortKey = isDiscountSort ? 'COLLECTION_DEFAULT' : (sortKey || 'COLLECTION_DEFAULT');
 
       // Parse filters from JSON string if provided
       let parsedFilters: ProductFilter[] = [];
@@ -63,6 +70,7 @@ export class CollectionController extends Controller {
         limit: effectiveLimit,
         cursor,
         sortKey: effectiveSortKey,
+        reverse: reverse || false,
         filters: parsedFilters,
       });
 
@@ -72,13 +80,21 @@ export class CollectionController extends Controller {
       }
 
       const collection = shopifyResponse.data.collection;
-      const products = this.transformProducts(collection.products?.edges || []);
+      let products = this.transformProducts(collection.products?.edges || []);
       const pageInfo = collection.products?.pageInfo || {
         hasNextPage: false,
         hasPreviousPage: false,
         endCursor: null,
         startCursor: null,
       };
+
+      // Apply custom discount sorting if requested
+      if (isDiscountSort) {
+        products = this.sortByDiscount(products);
+      }
+
+      // Compute facets from the products
+      const facets = this.computeFacets(products);
 
       return {
         success: true,
@@ -87,6 +103,7 @@ export class CollectionController extends Controller {
           collectionTitle: collection.title,
           collectionDescription: collection.description || '',
           products,
+          facets,
           pageInfo,
           totalCount: products.length,
         },
@@ -126,6 +143,7 @@ export class CollectionController extends Controller {
         price: parseFloat(variantEdge.node.price?.amount || '0'),
         availableForSale: variantEdge.node.availableForSale,
         quantityAvailable: variantEdge.node.quantityAvailable || 0,
+        selectedOptions: variantEdge.node.selectedOptions || [],
       }));
 
       return {
@@ -148,5 +166,116 @@ export class CollectionController extends Controller {
         variants,
       };
     });
+  }
+
+  /**
+   * Compute facets (filters) from products for dynamic filtering
+   * Industry best practice: Facets reflect what's available in current results
+   */
+  private computeFacets(products: CollectionProduct[]): CollectionFacets {
+    // If no products, return empty facets
+    if (products.length === 0) {
+      return {
+        categories: [],
+        vendors: [],
+        priceRange: { min: 0, max: 0 },
+        colors: [],
+        tags: [],
+      };
+    }
+
+    // Aggregate categories (productType) with counts
+    const categoryMap = new Map<string, number>();
+    products.forEach((product) => {
+      if (product.productType) {
+        categoryMap.set(product.productType, (categoryMap.get(product.productType) || 0) + 1);
+      }
+    });
+
+    const categories: FacetOption[] = Array.from(categoryMap.entries())
+      .map(([value, count]) => ({ value, count }))
+      .sort((a, b) => b.count - a.count); // Sort by count descending
+
+    // Aggregate vendors with counts
+    const vendorMap = new Map<string, number>();
+    products.forEach((product) => {
+      if (product.vendor) {
+        vendorMap.set(product.vendor, (vendorMap.get(product.vendor) || 0) + 1);
+      }
+    });
+
+    const vendors: FacetOption[] = Array.from(vendorMap.entries())
+      .map(([value, count]) => ({ value, count }))
+      .sort((a, b) => b.count - a.count);
+
+    // Compute price range
+    const prices = products.map((p) => p.minPrice).filter((p) => p > 0);
+    const priceRange = {
+      min: prices.length > 0 ? Math.min(...prices) : 0,
+      max: prices.length > 0 ? Math.max(...prices) : 0,
+    };
+
+    // Aggregate colors from variant options
+    const colorMap = new Map<string, number>();
+    products.forEach((product) => {
+      if (product.variants && product.variants.length > 0) {
+        product.variants.forEach((variant) => {
+          if (variant.selectedOptions) {
+            const colorOption = variant.selectedOptions.find(
+              (opt) => opt.name.toLowerCase() === 'color' || opt.name.toLowerCase() === 'colour'
+            );
+            if (colorOption && colorOption.value) {
+              colorMap.set(colorOption.value, (colorMap.get(colorOption.value) || 0) + 1);
+            }
+          }
+        });
+      }
+    });
+
+    const colors: FacetOption[] = Array.from(colorMap.entries())
+      .map(([value, count]) => ({ value, count }))
+      .sort((a, b) => b.count - a.count);
+
+    // Aggregate tags with counts (optional, can be heavy)
+    const tagMap = new Map<string, number>();
+    products.forEach((product) => {
+      if (product.tags && product.tags.length > 0) {
+        product.tags.forEach((tag) => {
+          tagMap.set(tag, (tagMap.get(tag) || 0) + 1);
+        });
+      }
+    });
+
+    const tags: FacetOption[] = Array.from(tagMap.entries())
+      .map(([value, count]) => ({ value, count }))
+      .filter((tag) => tag.count >= 2) // Only show tags that appear in 2+ products
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 20); // Limit to top 20 tags
+
+    return {
+      categories,
+      vendors,
+      priceRange,
+      colors,
+      tags,
+    };
+  }
+
+  /**
+   * Sort products by discount percentage (highest first)
+   * Discount % = ((compareAtPrice - minPrice) / compareAtPrice) * 100
+   */
+  private sortByDiscount(products: CollectionProduct[]): CollectionProduct[] {
+    return products
+      .map((product) => {
+        // Calculate discount percentage
+        let discountPercent = 0;
+        if (product.compareAtPrice && product.compareAtPrice > product.minPrice) {
+          discountPercent = ((product.compareAtPrice - product.minPrice) / product.compareAtPrice) * 100;
+        }
+        return { product, discountPercent };
+      })
+      .sort((a, b) => b.discountPercent - a.discountPercent) // Sort by discount descending
+      .map((item) => item.product); // Extract products
   }
 }

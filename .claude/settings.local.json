@@ -11,7 +11,8 @@
       "Bash(export:*)",
       "Bash(git commit:*)",
       "Read(//var/folders/3r/416mzc652td6jp_6vhm2zjl00000gn/T/TemporaryItems/NSIRD_screencaptureui_bhk3Sr/**)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(npm run tsoa:*)"
     ],
     "deny": [],
     "ask": []
