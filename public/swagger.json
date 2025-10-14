@@ -1374,6 +1374,68 @@
 				],
 				"type": "object",
 				"additionalProperties": false
+			},
+			"IAddress": {
+				"properties": {
+					"label": {
+						"type": "string"
+					},
+					"type": {
+						"type": "string",
+						"enum": [
+							"billing",
+							"shipping",
+							"both"
+						]
+					},
+					"firstName": {
+						"type": "string"
+					},
+					"lastName": {
+						"type": "string"
+					},
+					"company": {
+						"type": "string"
+					},
+					"address1": {
+						"type": "string"
+					},
+					"address2": {
+						"type": "string"
+					},
+					"city": {
+						"type": "string"
+					},
+					"province": {
+						"type": "string"
+					},
+					"country": {
+						"type": "string"
+					},
+					"countryCode": {
+						"type": "string"
+					},
+					"zip": {
+						"type": "string"
+					},
+					"phone": {
+						"type": "string"
+					},
+					"deliveryInstructions": {
+						"type": "string"
+					},
+					"isDefault": {
+						"type": "boolean"
+					}
+				},
+				"required": [
+					"address1",
+					"province",
+					"country",
+					"zip"
+				],
+				"type": "object",
+				"additionalProperties": false
 			}
 		},
 		"securitySchemes": {}
@@ -1983,6 +2045,517 @@
 						}
 					}
 				]
+			}
+		},
+		"/addresses": {
+			"get": {
+				"operationId": "GetAddresses",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"data": {
+											"properties": {
+												"count": {
+													"type": "number",
+													"format": "double"
+												},
+												"addresses": {
+													"items": {
+														"$ref": "#/components/schemas/IAddress"
+													},
+													"type": "array"
+												}
+											},
+											"required": [
+												"count",
+												"addresses"
+											],
+											"type": "object"
+										},
+										"success": {
+											"type": "boolean"
+										}
+									},
+									"required": [
+										"data",
+										"success"
+									],
+									"type": "object"
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "Unauthorized"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Get all addresses for the authenticated user",
+				"tags": [
+					"Addresses"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": []
+			},
+			"post": {
+				"operationId": "AddAddress",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"message": {
+											"type": "string"
+										},
+										"data": {
+											"properties": {
+												"index": {
+													"type": "number",
+													"format": "double"
+												},
+												"address": {
+													"$ref": "#/components/schemas/IAddress"
+												}
+											},
+											"required": [
+												"index",
+												"address"
+											],
+											"type": "object"
+										},
+										"success": {
+											"type": "boolean"
+										}
+									},
+									"required": [
+										"message",
+										"data",
+										"success"
+									],
+									"type": "object"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "Bad Request"
+					},
+					"401": {
+						"description": "Unauthorized"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Add a new address for the authenticated user",
+				"tags": [
+					"Addresses"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [],
+				"requestBody": {
+					"description": "- Address details",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"properties": {
+									"isDefault": {
+										"type": "boolean"
+									},
+									"deliveryInstructions": {
+										"type": "string"
+									},
+									"phone": {
+										"type": "string"
+									},
+									"zip": {
+										"type": "string"
+									},
+									"countryCode": {
+										"type": "string"
+									},
+									"country": {
+										"type": "string"
+									},
+									"province": {
+										"type": "string"
+									},
+									"city": {
+										"type": "string"
+									},
+									"address2": {
+										"type": "string"
+									},
+									"address1": {
+										"type": "string"
+									},
+									"company": {
+										"type": "string"
+									},
+									"lastName": {
+										"type": "string"
+									},
+									"firstName": {
+										"type": "string"
+									},
+									"type": {
+										"type": "string",
+										"enum": [
+											"billing",
+											"shipping",
+											"both"
+										]
+									},
+									"label": {
+										"type": "string"
+									}
+								},
+								"required": [
+									"zip",
+									"country",
+									"province",
+									"address1"
+								],
+								"type": "object",
+								"description": "- Address details"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/addresses/{index}": {
+			"put": {
+				"operationId": "UpdateAddress",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"message": {
+											"type": "string"
+										},
+										"data": {
+											"properties": {
+												"index": {
+													"type": "number",
+													"format": "double"
+												},
+												"address": {
+													"$ref": "#/components/schemas/IAddress"
+												}
+											},
+											"required": [
+												"index",
+												"address"
+											],
+											"type": "object"
+										},
+										"success": {
+											"type": "boolean"
+										}
+									},
+									"required": [
+										"message",
+										"data",
+										"success"
+									],
+									"type": "object"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "Bad Request"
+					},
+					"401": {
+						"description": "Unauthorized"
+					},
+					"404": {
+						"description": "Address not found"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Update an existing address by index",
+				"tags": [
+					"Addresses"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [
+					{
+						"description": "- Index of the address in the addresses array",
+						"in": "path",
+						"name": "index",
+						"required": true,
+						"schema": {
+							"format": "double",
+							"type": "number"
+						}
+					}
+				],
+				"requestBody": {
+					"description": "- Updated address details",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"properties": {
+									"deliveryInstructions": {
+										"type": "string"
+									},
+									"phone": {
+										"type": "string"
+									},
+									"zip": {
+										"type": "string"
+									},
+									"countryCode": {
+										"type": "string"
+									},
+									"country": {
+										"type": "string"
+									},
+									"province": {
+										"type": "string"
+									},
+									"city": {
+										"type": "string"
+									},
+									"address2": {
+										"type": "string"
+									},
+									"address1": {
+										"type": "string"
+									},
+									"company": {
+										"type": "string"
+									},
+									"lastName": {
+										"type": "string"
+									},
+									"firstName": {
+										"type": "string"
+									},
+									"type": {
+										"type": "string",
+										"enum": [
+											"billing",
+											"shipping",
+											"both"
+										]
+									},
+									"label": {
+										"type": "string"
+									}
+								},
+								"type": "object",
+								"description": "- Updated address details"
+							}
+						}
+					}
+				}
+			},
+			"delete": {
+				"operationId": "DeleteAddress",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"message": {
+											"type": "string"
+										},
+										"success": {
+											"type": "boolean"
+										}
+									},
+									"required": [
+										"message",
+										"success"
+									],
+									"type": "object"
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "Unauthorized"
+					},
+					"404": {
+						"description": "Address not found"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Delete an address by index",
+				"tags": [
+					"Addresses"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [
+					{
+						"description": "- Index of the address in the addresses array",
+						"in": "path",
+						"name": "index",
+						"required": true,
+						"schema": {
+							"format": "double",
+							"type": "number"
+						}
+					}
+				]
+			}
+		},
+		"/addresses/{index}/default": {
+			"put": {
+				"operationId": "SetDefaultAddress",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"message": {
+											"type": "string"
+										},
+										"success": {
+											"type": "boolean"
+										}
+									},
+									"required": [
+										"message",
+										"success"
+									],
+									"type": "object"
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "Unauthorized"
+					},
+					"404": {
+						"description": "Address not found"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Set an address as default by index",
+				"tags": [
+					"Addresses"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [
+					{
+						"description": "- Index of the address in the addresses array",
+						"in": "path",
+						"name": "index",
+						"required": true,
+						"schema": {
+							"format": "double",
+							"type": "number"
+						}
+					}
+				]
+			}
+		},
+		"/addresses/default": {
+			"get": {
+				"operationId": "GetDefaultAddress",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"data": {
+											"properties": {
+												"index": {
+													"type": "number",
+													"format": "double"
+												},
+												"address": {
+													"$ref": "#/components/schemas/IAddress"
+												}
+											},
+											"required": [
+												"index",
+												"address"
+											],
+											"type": "object"
+										},
+										"success": {
+											"type": "boolean"
+										}
+									},
+									"required": [
+										"data",
+										"success"
+									],
+									"type": "object"
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "Unauthorized"
+					},
+					"404": {
+						"description": "No default address found"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Get the default address for the authenticated user",
+				"tags": [
+					"Addresses"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": []
 			}
 		}
 	},

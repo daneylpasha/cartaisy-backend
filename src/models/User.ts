@@ -23,20 +23,23 @@ import {
 
 const AddressSchema = new Schema(
   {
+    label: {
+      type: String,
+      trim: true,
+      maxlength: [100, 'Address label cannot exceed 100 characters'],
+    },
     type: {
       type: String,
-      enum: ['billing', 'shipping'],
-      required: [true, 'Address type is required'],
+      enum: ['billing', 'shipping', 'both'],
+      default: 'both',
     },
     firstName: {
       type: String,
-      required: [true, 'First name is required'],
       trim: true,
       maxlength: [50, 'First name cannot exceed 50 characters'],
     },
     lastName: {
       type: String,
-      required: [true, 'Last name is required'],
       trim: true,
       maxlength: [50, 'Last name cannot exceed 50 characters'],
     },
@@ -47,24 +50,23 @@ const AddressSchema = new Schema(
     },
     address1: {
       type: String,
-      required: [true, 'Address line 1 is required'],
+      required: [true, 'Street address is required'],
       trim: true,
-      maxlength: [200, 'Address line 1 cannot exceed 200 characters'],
+      maxlength: [200, 'Street address cannot exceed 200 characters'],
     },
     address2: {
       type: String,
       trim: true,
-      maxlength: [200, 'Address line 2 cannot exceed 200 characters'],
+      maxlength: [200, 'Apartment/Suite cannot exceed 200 characters'],
     },
     city: {
       type: String,
-      required: [true, 'City is required'],
       trim: true,
       maxlength: [100, 'City cannot exceed 100 characters'],
     },
     province: {
       type: String,
-      required: [true, 'Province/State is required'],
+      required: [true, 'State/Province is required'],
       trim: true,
       maxlength: [100, 'Province cannot exceed 100 characters'],
     },
@@ -74,16 +76,27 @@ const AddressSchema = new Schema(
       trim: true,
       maxlength: [100, 'Country cannot exceed 100 characters'],
     },
+    countryCode: {
+      type: String,
+      trim: true,
+      uppercase: true,
+      maxlength: [3, 'Country code cannot exceed 3 characters'],
+    },
     zip: {
       type: String,
-      required: [true, 'ZIP/Postal code is required'],
+      required: [true, 'Postcode is required'],
       trim: true,
-      maxlength: [20, 'ZIP code cannot exceed 20 characters'],
+      maxlength: [20, 'Postcode cannot exceed 20 characters'],
     },
     phone: {
       type: String,
       trim: true,
       maxlength: [20, 'Phone number cannot exceed 20 characters'],
+    },
+    deliveryInstructions: {
+      type: String,
+      trim: true,
+      maxlength: [300, 'Delivery instructions cannot exceed 300 characters'],
     },
     isDefault: {
       type: Boolean,

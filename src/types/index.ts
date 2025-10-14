@@ -44,17 +44,20 @@ export interface ValidationError {
 // =============================================================================
 
 export interface IAddress {
-  type: 'billing' | 'shipping';
-  firstName: string;
-  lastName: string;
+  label?: string; // Address name like "Home", "Lily 2, London", etc.
+  type?: 'billing' | 'shipping' | 'both'; // Made optional, defaults to 'both'
+  firstName?: string; // Optional - can derive from user profile
+  lastName?: string; // Optional - can derive from user profile
   company?: string;
-  address1: string;
-  address2?: string;
-  city: string;
-  province: string;
-  country: string;
-  zip: string;
+  address1: string; // Street address
+  address2?: string; // Apartment/Suite
+  city?: string; // Optional for some countries
+  province: string; // State/Province
+  country: string; // Country name
+  countryCode?: string; // ISO country code like "GB", "US"
+  zip: string; // Postcode
   phone?: string;
+  deliveryInstructions?: string; // Max 300 characters
   isDefault?: boolean;
 }
 
