@@ -4,6 +4,11 @@ import {
   ShopifyProductsQueryResponse,
   ShopifyCollectionsQueryResponse,
 } from '../types/shopify/storefront';
+import {
+  ShopifyPredictiveSearchResponse,
+  ShopifySearchProductsResponse,
+  SearchSortKey,
+} from '../types/api/search';
 
 /**
  * Shopify Storefront API Service
@@ -967,6 +972,157 @@ class ShopifyStorefrontService {
       buyerIdentity: {
         customerAccessToken,
       },
+    });
+  }
+
+  /**
+   * Predictive Search - for autocomplete/suggestions
+   * @param query - Search query string
+   * @param limit - Number of results per type (default: 10)
+   * @returns Shopify predictive search response with products and collections
+   */
+  async predictiveSearch(query: string, limit: number = 10): Promise<ShopifyPredictiveSearchResponse> {
+    const graphqlQuery = `
+      query PredictiveSearch($query: String!, $limit: Int!) {
+        predictiveSearch(
+          query: $query
+          limit: $limit
+          limitScope: EACH
+          types: [PRODUCT, COLLECTION]
+        ) {
+          products {
+            id
+            title
+            handle
+            vendor
+            productType
+            tags
+            featuredImage {
+              url
+              altText
+            }
+            priceRange {
+              minVariantPrice {
+                amount
+                currencyCode
+              }
+            }
+            compareAtPriceRange {
+              minVariantPrice {
+                amount
+                currencyCode
+              }
+            }
+          }
+          collections {
+            id
+            title
+            handle
+            image {
+              url
+              altText
+            }
+          }
+        }
+      }
+    `;
+
+    return this.query<ShopifyPredictiveSearchResponse>(graphqlQuery, { query, limit });
+  }
+
+  /**
+   * Full Product Search - for search results page
+   * Per Shopify docs: https://shopify.dev/docs/api/storefront/latest/queries/products
+   * @param query - Search query string (supports Shopify search syntax)
+   * @param options - Pagination and sorting options
+   * @returns Paginated product search results
+   */
+  async searchProducts(
+    query: string,
+    options: {
+      limit?: number;
+      cursor?: string;
+      sortKey?: SearchSortKey;
+      reverse?: boolean;
+    } = {}
+  ): Promise<ShopifySearchProductsResponse> {
+    const { limit = 20, cursor, sortKey = 'RELEVANCE', reverse = false } = options;
+
+    const graphqlQuery = `
+      query SearchProducts($query: String!, $limit: Int!, $cursor: String, $sortKey: ProductSortKeys!, $reverse: Boolean!) {
+        products(first: $limit, after: $cursor, query: $query, sortKey: $sortKey, reverse: $reverse) {
+          edges {
+            node {
+              id
+              title
+              description
+              handle
+              vendor
+              productType
+              tags
+              availableForSale
+              totalInventory
+              priceRange {
+                minVariantPrice {
+                  amount
+                  currencyCode
+                }
+                maxVariantPrice {
+                  amount
+                  currencyCode
+                }
+              }
+              compareAtPriceRange {
+                minVariantPrice {
+                  amount
+                  currencyCode
+                }
+              }
+              images(first: 5) {
+                edges {
+                  node {
+                    url
+                    altText
+                  }
+                }
+              }
+              variants(first: 10) {
+                edges {
+                  node {
+                    id
+                    title
+                    price {
+                      amount
+                      currencyCode
+                    }
+                    availableForSale
+                    quantityAvailable
+                    selectedOptions {
+                      name
+                      value
+                    }
+                  }
+                }
+              }
+            }
+            cursor
+          }
+          pageInfo {
+            hasNextPage
+            hasPreviousPage
+            endCursor
+            startCursor
+          }
+        }
+      }
+    `;
+
+    return this.query<ShopifySearchProductsResponse>(graphqlQuery, {
+      query,
+      limit,
+      cursor,
+      sortKey,
+      reverse,
     });
   }
 

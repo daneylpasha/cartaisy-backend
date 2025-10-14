@@ -1,362 +1,354 @@
-import mongoose, { Document, Schema } from 'mongoose';
+import mongoose, { Schema, Document } from 'mongoose';
+import { SearchSortKey } from '../types/api/search';
+
+/**
+ * Search History Model
+ * Tracks user search queries for analytics and personalization
+ *
+ * Per Shopify best practices:
+ * - Store search queries for autocomplete suggestions
+ * - Track results count to identify failed searches
+ * - Monitor user engagement (clicks) for relevance tuning
+ * - Expire old searches after 90 days (GDPR compliance)
+ *
+ * Reference: https://shopify.dev/docs/api/storefront/latest/queries/predictiveSearch
+ */
 
 export interface ISearchFilters {
-  category?: string;
-  priceMin?: number;
-  priceMax?: number;
-  brand?: string;
-  tags?: string[];
-  inStock?: boolean;
-  rating?: number;
-  sortBy?: string;
+  sortKey?: SearchSortKey;
+  reverse?: boolean;
+  minPrice?: number;
+  maxPrice?: number;
+  vendor?: string;
+  productType?: string;
 }
 
-export interface ISearchResults {
-  totalResults: number;
-  resultsShown: number;
-  hasResults: boolean;
-  topResultId?: mongoose.Types.ObjectId;
-  clickedResults: mongoose.Types.ObjectId[];
-}
-
-export interface ISearchHistory extends Document {
-  // User identification (optional for privacy)
-  user?: mongoose.Types.ObjectId;
-  anonymousId?: string;
-  sessionId: string;
-  
-  // Search details
-  query: string;
-  normalizedQuery: string; // Lowercased, trimmed query for analysis
-  queryType: 'text' | 'voice' | 'barcode' | 'image';
-  
-  // Search context
-  searchedAt: Date;
-  source: string; // 'search_bar', 'autocomplete', 'voice_search', 'category_filter'
-  
-  // Filters applied
-  filters: ISearchFilters;
-  
-  // Results
-  results: ISearchResults;
-  
-  // User behavior
-  selectedResultPosition?: number; // Which result was clicked (1-based)
-  timeSpentOnResults?: number; // Seconds spent viewing results
-  refinedSearch: boolean; // Did user refine the search?
-  followUpQueries: mongoose.Types.ObjectId[]; // Related search IDs
-  
-  // Location and device (for personalization)
-  location?: {
-    country?: string;
-    timezone?: string;
-  };
-  device?: {
-    platform: string;
-    isMobile: boolean;
-  };
-  
-  // Analytics flags
-  isSuccessful: boolean; // Did user find what they were looking for?
-  conversionValue?: number; // Value of purchases made from this search
-  
-  // Privacy settings
-  isAnonymized: boolean;
-  
-  // Timestamps
+export interface ISearchHistory {
+  userId?: mongoose.Types.ObjectId; // Optional - supports guest searches
+  query: string; // The search query text
+  resultsCount: number; // Number of results returned
+  hasResults: boolean; // Quick flag for zero-result searches
+  selectedProduct?: string; // Product ID if user clicked a result
+  filters?: ISearchFilters; // Applied filters
+  sessionId?: string; // For tracking guest user sessions
+  userAgent?: string; // Device/browser information
   createdAt: Date;
+  updatedAt: Date;
 }
 
-const SearchFiltersSchema = new Schema({
-  category: String,
-  priceMin: { type: Number, min: 0 },
-  priceMax: { type: Number, min: 0 },
-  brand: String,
-  tags: [String],
-  inStock: Boolean,
-  rating: { type: Number, min: 1, max: 5 },
-  sortBy: { 
-    type: String, 
-    enum: ['relevance', 'price_low', 'price_high', 'newest', 'rating', 'popular'] 
+export interface ISearchHistoryDocument extends ISearchHistory, Document {}
+
+const SearchFiltersSchema = new Schema(
+  {
+    sortKey: {
+      type: String,
+      enum: ['RELEVANCE', 'PRICE', 'BEST_SELLING', 'CREATED_AT', 'TITLE', 'PRODUCT_TYPE', 'VENDOR'],
+    },
+    reverse: {
+      type: Boolean,
+      default: false,
+    },
+    minPrice: {
+      type: Number,
+      min: 0,
+    },
+    maxPrice: {
+      type: Number,
+      min: 0,
+    },
+    vendor: {
+      type: String,
+      trim: true,
+    },
+    productType: {
+      type: String,
+      trim: true,
+    },
+  },
+  { _id: false }
+);
+
+const SearchHistorySchema = new Schema<ISearchHistory>(
+  {
+    userId: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+      index: true,
+      sparse: true, // Allow null for guest searches
+    },
+    query: {
+      type: String,
+      required: [true, 'Search query is required'],
+      trim: true,
+      lowercase: true, // Normalize for better analytics
+      maxlength: [200, 'Search query cannot exceed 200 characters'],
+      index: true,
+    },
+    resultsCount: {
+      type: Number,
+      required: true,
+      min: 0,
+      default: 0,
+    },
+    hasResults: {
+      type: Boolean,
+      required: true,
+      default: false,
+      index: true, // Index for finding failed searches
+    },
+    selectedProduct: {
+      type: String,
+      trim: true,
+      index: true, // Track popular products
+    },
+    filters: {
+      type: SearchFiltersSchema,
+    },
+    sessionId: {
+      type: String,
+      trim: true,
+      index: true, // For guest user tracking
+    },
+    userAgent: {
+      type: String,
+      trim: true,
+      maxlength: [500, 'User agent cannot exceed 500 characters'],
+    },
+  },
+  {
+    timestamps: true,
+    collection: 'search_history',
   }
-}, { _id: false });
+);
 
-const SearchResultsSchema = new Schema({
-  totalResults: { type: Number, required: true, min: 0 },
-  resultsShown: { type: Number, required: true, min: 0 },
-  hasResults: { type: Boolean, required: true },
-  topResultId: { type: Schema.Types.ObjectId, ref: 'Product' },
-  clickedResults: [{ type: Schema.Types.ObjectId, ref: 'Product' }]
-}, { _id: false });
+// =============================================================================
+// INDEXES
+// =============================================================================
 
-const SearchHistorySchema = new Schema({
-  // User identification
-  user: { 
-    type: Schema.Types.ObjectId, 
-    ref: 'User',
-    sparse: true,
-    index: true
-  },
-  anonymousId: { 
-    type: String,
-    sparse: true,
-    index: true
-  },
-  sessionId: { 
-    type: String, 
-    required: true,
-    index: true
-  },
-  
-  // Search details
-  query: { 
-    type: String, 
-    required: true,
-    trim: true,
-    maxlength: 200
-  },
-  normalizedQuery: { 
-    type: String, 
-    required: true,
-    lowercase: true,
-    index: true
-  },
-  queryType: { 
-    type: String, 
-    enum: ['text', 'voice', 'barcode', 'image'], 
-    default: 'text',
-    index: true
-  },
-  
-  // Context
-  searchedAt: { 
-    type: Date, 
-    default: Date.now,
-    index: true
-  },
-  source: { 
-    type: String, 
-    enum: ['search_bar', 'autocomplete', 'voice_search', 'category_filter', 'suggestion'],
-    default: 'search_bar',
-    index: true
-  },
-  
-  // Filters and results
-  filters: SearchFiltersSchema,
-  results: SearchResultsSchema,
-  
-  // User behavior
-  selectedResultPosition: { 
-    type: Number, 
-    min: 1 
-  },
-  timeSpentOnResults: { 
-    type: Number, 
-    min: 0 
-  },
-  refinedSearch: { 
-    type: Boolean, 
-    default: false 
-  },
-  followUpQueries: [{ type: Schema.Types.ObjectId, ref: 'SearchHistory' }],
-  
-  // Context data
-  location: {
-    country: String,
-    timezone: String
-  },
-  device: {
-    platform: { type: String, enum: ['mobile', 'desktop', 'tablet'] },
-    isMobile: { type: Boolean, default: false }
-  },
-  
-  // Analytics
-  isSuccessful: { 
-    type: Boolean, 
-    default: false,
-    index: true
-  },
-  conversionValue: { 
-    type: Number, 
-    min: 0 
-  },
-  
-  // Privacy
-  isAnonymized: { 
-    type: Boolean, 
-    default: false 
-  }
-}, {
-  timestamps: { createdAt: true, updatedAt: false }
-});
+// Compound indexes for common queries
+SearchHistorySchema.index({ query: 1, createdAt: -1 });
+SearchHistorySchema.index({ userId: 1, createdAt: -1 });
+SearchHistorySchema.index({ hasResults: 1, createdAt: -1 });
+SearchHistorySchema.index({ query: 1, hasResults: 1 });
 
-// Indexes for analytics and search suggestions
-SearchHistorySchema.index({ normalizedQuery: 1, searchedAt: -1 });
+// TTL index - auto-delete records older than 90 days (GDPR compliance)
+SearchHistorySchema.index({ createdAt: 1 }, { expireAfterSeconds: 7776000 }); // 90 days
+
+// Text index for search suggestions
 SearchHistorySchema.index({ query: 'text' });
-SearchHistorySchema.index({ searchedAt: -1 });
-SearchHistorySchema.index({ user: 1, searchedAt: -1 });
-SearchHistorySchema.index({ queryType: 1, source: 1 });
-SearchHistorySchema.index({ 'results.hasResults': 1, searchedAt: -1 });
 
-// Compound index for personalization
-SearchHistorySchema.index({ 
-  user: 1, 
-  normalizedQuery: 1, 
-  searchedAt: -1 
-});
+// =============================================================================
+// STATIC METHODS
+// =============================================================================
 
-// TTL index to automatically delete old searches (180 days for privacy)
-SearchHistorySchema.index({ createdAt: 1 }, { expireAfterSeconds: 180 * 24 * 60 * 60 });
+/**
+ * Get popular searches (most searched terms)
+ * @param limit - Number of results to return
+ * @param days - Number of days to look back (default: 30)
+ */
+SearchHistorySchema.statics.getPopularSearches = async function (
+  limit: number = 10,
+  days: number = 30
+): Promise<Array<{ query: string; searchCount: number; avgResultsCount: number }>> {
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - days);
 
-// Static methods for analytics
-SearchHistorySchema.statics.getPopularSearches = function(limit: number = 10, days: number = 30) {
-  const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-  
-  return this.aggregate([
+  const results = await this.aggregate([
     {
       $match: {
-        searchedAt: { $gte: startDate },
-        'results.hasResults': true,
-        normalizedQuery: { $ne: '' }
-      }
+        createdAt: { $gte: cutoffDate },
+        hasResults: true, // Only successful searches
+      },
     },
     {
       $group: {
-        _id: '$normalizedQuery',
-        count: { $sum: 1 },
-        successfulSearches: { $sum: { $cond: ['$isSuccessful', 1, 0] } },
-        averageResults: { $avg: '$results.totalResults' },
-        totalConversionValue: { $sum: '$conversionValue' }
-      }
+        _id: '$query',
+        searchCount: { $sum: 1 },
+        avgResultsCount: { $avg: '$resultsCount' },
+      },
     },
     {
-      $addFields: {
-        successRate: { $divide: ['$successfulSearches', '$count'] },
-        avgConversionValue: { $divide: ['$totalConversionValue', '$count'] }
-      }
+      $sort: { searchCount: -1 },
     },
     {
-      $sort: { count: -1 }
+      $limit: limit,
     },
     {
-      $limit: limit
-    }
+      $project: {
+        _id: 0,
+        query: '$_id',
+        searchCount: 1,
+        avgResultsCount: { $round: ['$avgResultsCount', 0] },
+      },
+    },
   ]);
+
+  return results;
 };
 
-SearchHistorySchema.statics.getFailedSearches = function(limit: number = 10, days: number = 7) {
-  const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-  
-  return this.aggregate([
+/**
+ * Get failed searches (zero results)
+ * @param limit - Number of results to return
+ * @param days - Number of days to look back (default: 7)
+ */
+SearchHistorySchema.statics.getFailedSearches = async function (
+  limit: number = 20,
+  days: number = 7
+): Promise<Array<{ query: string; searchCount: number }>> {
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - days);
+
+  const results = await this.aggregate([
     {
       $match: {
-        searchedAt: { $gte: startDate },
-        $or: [
-          { 'results.hasResults': false },
-          { 'results.totalResults': 0 }
-        ]
-      }
+        createdAt: { $gte: cutoffDate },
+        hasResults: false,
+      },
     },
     {
       $group: {
-        _id: '$normalizedQuery',
-        count: { $sum: 1 },
-        lastSearched: { $max: '$searchedAt' }
-      }
+        _id: '$query',
+        searchCount: { $sum: 1 },
+      },
     },
     {
-      $sort: { count: -1 }
+      $sort: { searchCount: -1 },
     },
     {
-      $limit: limit
-    }
+      $limit: limit,
+    },
+    {
+      $project: {
+        _id: 0,
+        query: '$_id',
+        searchCount: 1,
+      },
+    },
   ]);
+
+  return results;
 };
 
-SearchHistorySchema.statics.getSearchSuggestions = async function(
-  partialQuery: string, 
+/**
+ * Get user's recent search history
+ * @param userId - User ID
+ * @param limit - Number of results to return
+ */
+SearchHistorySchema.statics.getUserRecentSearches = async function (
+  userId: string,
   limit: number = 10
-): Promise<string[]> {
-  const normalized = partialQuery.toLowerCase().trim();
-  
-  const suggestions = await this.aggregate([
+): Promise<
+  Array<{
+    query: string;
+    resultsCount: number;
+    searchedAt: Date;
+  }>
+> {
+  const results = await this.aggregate([
     {
       $match: {
-        normalizedQuery: new RegExp(`^${normalized}`),
-        'results.hasResults': true,
-        searchedAt: { $gte: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000) } // Last 90 days
-      }
+        userId: new mongoose.Types.ObjectId(userId),
+      },
+    },
+    {
+      $sort: { createdAt: -1 },
+    },
+    {
+      $limit: limit * 2, // Get more to allow for deduplication
     },
     {
       $group: {
-        _id: '$normalizedQuery',
-        count: { $sum: 1 },
-        successRate: { $avg: { $cond: ['$isSuccessful', 1, 0] } },
-        lastSearched: { $max: '$searchedAt' }
-      }
+        _id: '$query',
+        lastSearched: { $first: '$createdAt' },
+        resultsCount: { $first: '$resultsCount' },
+      },
     },
     {
-      $addFields: {
-        score: {
-          $multiply: [
-            '$count',
-            { $add: [1, '$successRate'] }, // Boost successful searches
-            { $divide: [1, { $add: [1, { $divide: [{ $subtract: [new Date(), '$lastSearched'] }, 86400000] }] }] } // Recency boost
-          ]
-        }
-      }
+      $sort: { lastSearched: -1 },
     },
     {
-      $sort: { score: -1 }
+      $limit: limit,
     },
     {
-      $limit: limit
+      $project: {
+        _id: 0,
+        query: '$_id',
+        resultsCount: 1,
+        searchedAt: '$lastSearched',
+      },
     },
-    {
-      $project: { _id: 1 }
-    }
   ]);
-  
-  return suggestions.map(s => s._id);
+
+  return results;
 };
 
-SearchHistorySchema.statics.getUserSearchHistory = function(
-  userId: string, 
-  limit: number = 20
-) {
-  return this.find({ user: userId })
-    .sort({ searchedAt: -1 })
-    .limit(limit)
-    .select('query searchedAt results.hasResults results.totalResults isSuccessful');
+/**
+ * Get search suggestions based on partial query
+ * @param partialQuery - Partial search query
+ * @param limit - Number of suggestions to return
+ */
+SearchHistorySchema.statics.getSearchSuggestions = async function (
+  partialQuery: string,
+  limit: number = 5
+): Promise<Array<{ query: string; popularity: number }>> {
+  const results = await this.aggregate([
+    {
+      $match: {
+        query: { $regex: `^${partialQuery.toLowerCase()}`, $options: 'i' },
+        hasResults: true,
+        createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }, // Last 30 days
+      },
+    },
+    {
+      $group: {
+        _id: '$query',
+        popularity: { $sum: 1 },
+      },
+    },
+    {
+      $sort: { popularity: -1 },
+    },
+    {
+      $limit: limit,
+    },
+    {
+      $project: {
+        _id: 0,
+        query: '$_id',
+        popularity: 1,
+      },
+    },
+  ]);
+
+  return results;
 };
 
-// Pre-save hook to normalize query
-SearchHistorySchema.pre('save', function(next) {
-  if (this.isModified('query') || this.isNew) {
-    this.normalizedQuery = this.query.toLowerCase().trim();
-  }
-  
-  // Auto-detect successful searches based on behavior
-  if (this.selectedResultPosition && this.timeSpentOnResults && this.timeSpentOnResults > 10) {
-    this.isSuccessful = true;
-  }
-  
-  next();
-});
+// =============================================================================
+// MODEL EXPORT
+// =============================================================================
 
-// Method to create search suggestion
-SearchHistorySchema.methods.createSuggestion = function(): string {
-  const words = this.normalizedQuery.split(' ');
-  
-  // Return the query if it's likely to be a good suggestion
-  if (this.results.hasResults && 
-      this.results.totalResults > 0 && 
-      this.results.totalResults < 1000 && // Not too broad
-      words.length <= 4) { // Not too complex
-    return this.query;
-  }
-  
-  return '';
-};
+export interface ISearchHistoryModel extends mongoose.Model<ISearchHistoryDocument> {
+  getPopularSearches(
+    limit?: number,
+    days?: number
+  ): Promise<Array<{ query: string; searchCount: number; avgResultsCount: number }>>;
+  getFailedSearches(
+    limit?: number,
+    days?: number
+  ): Promise<Array<{ query: string; searchCount: number }>>;
+  getUserRecentSearches(
+    userId: string,
+    limit?: number
+  ): Promise<Array<{ query: string; resultsCount: number; searchedAt: Date }>>;
+  getSearchSuggestions(
+    partialQuery: string,
+    limit?: number
+  ): Promise<Array<{ query: string; popularity: number }>>;
+}
 
-export default mongoose.model<ISearchHistory>('SearchHistory', SearchHistorySchema);
+const SearchHistory = mongoose.model<ISearchHistoryDocument, ISearchHistoryModel>(
+  'SearchHistory',
+  SearchHistorySchema
+);
+
+export default SearchHistory;
