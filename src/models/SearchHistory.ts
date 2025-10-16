@@ -26,9 +26,12 @@ export interface ISearchFilters {
 export interface ISearchHistory {
   userId?: mongoose.Types.ObjectId; // Optional - supports guest searches
   query: string; // The search query text
+  searchType?: 'text' | 'product' | 'collection'; // Type of search performed
   resultsCount: number; // Number of results returned
   hasResults: boolean; // Quick flag for zero-result searches
   selectedProduct?: string; // Product ID if user clicked a result
+  selectedProductId?: string; // Direct product search/click
+  selectedCollectionId?: string; // Direct collection search/click
   filters?: ISearchFilters; // Applied filters
   sessionId?: string; // For tracking guest user sessions
   userAgent?: string; // Device/browser information
@@ -84,6 +87,12 @@ const SearchHistorySchema = new Schema<ISearchHistory>(
       maxlength: [200, 'Search query cannot exceed 200 characters'],
       index: true,
     },
+    searchType: {
+      type: String,
+      enum: ['text', 'product', 'collection'],
+      default: 'text',
+      index: true,
+    },
     resultsCount: {
       type: Number,
       required: true,
@@ -100,6 +109,16 @@ const SearchHistorySchema = new Schema<ISearchHistory>(
       type: String,
       trim: true,
       index: true, // Track popular products
+    },
+    selectedProductId: {
+      type: String,
+      trim: true,
+      index: true, // For direct product searches
+    },
+    selectedCollectionId: {
+      type: String,
+      trim: true,
+      index: true, // For direct collection searches
     },
     filters: {
       type: SearchFiltersSchema,
@@ -130,6 +149,8 @@ SearchHistorySchema.index({ query: 1, createdAt: -1 });
 SearchHistorySchema.index({ userId: 1, createdAt: -1 });
 SearchHistorySchema.index({ hasResults: 1, createdAt: -1 });
 SearchHistorySchema.index({ query: 1, hasResults: 1 });
+SearchHistorySchema.index({ userId: 1, searchType: 1, createdAt: -1 }); // For enriched searches
+SearchHistorySchema.index({ searchType: 1, createdAt: -1 }); // For trending by type
 
 // TTL index - auto-delete records older than 90 days (GDPR compliance)
 SearchHistorySchema.index({ createdAt: 1 }, { expireAfterSeconds: 7776000 }); // 90 days
@@ -283,6 +304,204 @@ SearchHistorySchema.statics.getUserRecentSearches = async function (
 };
 
 /**
+ * Get user's recent searches with entity information (for enriched display)
+ * @param userId - User ID
+ * @param limit - Number of results to return (default: 5)
+ */
+SearchHistorySchema.statics.getUserEnrichedSearches = async function (
+  userId: string,
+  limit: number = 5
+): Promise<
+  Array<{
+    query: string;
+    searchedAt: Date;
+    searchType: 'text' | 'product' | 'collection';
+    selectedProductId?: string;
+    selectedCollectionId?: string;
+  }>
+> {
+  const results = await this.aggregate([
+    {
+      $match: {
+        userId: new mongoose.Types.ObjectId(userId),
+        searchType: { $in: ['product', 'collection'] }, // Only product/collection searches
+      },
+    },
+    {
+      $sort: { createdAt: -1 },
+    },
+    {
+      $limit: limit * 2, // Get more to allow for deduplication
+    },
+    {
+      $group: {
+        _id: {
+          searchType: '$searchType',
+          entityId: {
+            $cond: [
+              { $eq: ['$searchType', 'product'] },
+              '$selectedProductId',
+              '$selectedCollectionId'
+            ]
+          }
+        },
+        lastSearched: { $first: '$createdAt' },
+        query: { $first: '$query' },
+        searchType: { $first: '$searchType' },
+        selectedProductId: { $first: '$selectedProductId' },
+        selectedCollectionId: { $first: '$selectedCollectionId' },
+      },
+    },
+    {
+      $sort: { lastSearched: -1 },
+    },
+    {
+      $limit: limit,
+    },
+    {
+      $project: {
+        _id: 0,
+        query: 1,
+        searchedAt: '$lastSearched',
+        searchType: 1,
+        selectedProductId: 1,
+        selectedCollectionId: 1,
+      },
+    },
+  ]);
+
+  return results;
+};
+
+/**
+ * Get trending searches with entity information (for enriched display)
+ * @param limit - Number of results to return (default: 5)
+ * @param days - Days to look back (default: 7)
+ */
+SearchHistorySchema.statics.getTrendingEnrichedSearches = async function (
+  limit: number = 5,
+  days: number = 7
+): Promise<
+  Array<{
+    query: string;
+    searchType: 'text' | 'product' | 'collection';
+    recentCount: number;
+    growthRate: number;
+    selectedProductId?: string;
+    selectedCollectionId?: string;
+  }>
+> {
+  const recentCutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  const previousCutoff = new Date(Date.now() - 2 * days * 24 * 60 * 60 * 1000);
+
+  const results = await this.aggregate([
+    {
+      $match: {
+        createdAt: { $gte: recentCutoff },
+        searchType: { $in: ['product', 'collection'] }, // Only product/collection searches
+      },
+    },
+    {
+      $group: {
+        _id: {
+          searchType: '$searchType',
+          entityId: {
+            $cond: [
+              { $eq: ['$searchType', 'product'] },
+              '$selectedProductId',
+              '$selectedCollectionId'
+            ]
+          }
+        },
+        recentCount: { $sum: 1 },
+        query: { $first: '$query' },
+        searchType: { $first: '$searchType' },
+        selectedProductId: { $first: '$selectedProductId' },
+        selectedCollectionId: { $first: '$selectedCollectionId' },
+      },
+    },
+    {
+      $lookup: {
+        from: 'search_history',
+        let: {
+          searchType: '$searchType',
+          entityId: '$_id.entityId'
+        },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $eq: ['$searchType', '$$searchType'] },
+                  { $gte: ['$createdAt', previousCutoff] },
+                  { $lt: ['$createdAt', recentCutoff] },
+                  {
+                    $eq: [
+                      {
+                        $cond: [
+                          { $eq: ['$searchType', 'product'] },
+                          '$selectedProductId',
+                          '$selectedCollectionId'
+                        ]
+                      },
+                      '$$entityId'
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          { $count: 'count' }
+        ],
+        as: 'previousPeriod'
+      }
+    },
+    {
+      $addFields: {
+        previousCount: { $ifNull: [{ $arrayElemAt: ['$previousPeriod.count', 0] }, 0] },
+        growthRate: {
+          $cond: {
+            if: { $gt: [{ $arrayElemAt: ['$previousPeriod.count', 0] }, 0] },
+            then: {
+              $divide: [
+                { $subtract: ['$recentCount', { $arrayElemAt: ['$previousPeriod.count', 0] }] },
+                { $arrayElemAt: ['$previousPeriod.count', 0] }
+              ]
+            },
+            else: 1
+          }
+        }
+      }
+    },
+    {
+      $match: {
+        recentCount: { $gte: 2 }, // Minimum threshold
+        growthRate: { $gte: 0.2 } // At least 20% growth
+      }
+    },
+    {
+      $sort: { growthRate: -1, recentCount: -1 }
+    },
+    {
+      $limit: limit
+    },
+    {
+      $project: {
+        _id: 0,
+        query: 1,
+        searchType: 1,
+        recentCount: 1,
+        growthRate: 1,
+        selectedProductId: 1,
+        selectedCollectionId: 1,
+      }
+    }
+  ]);
+
+  return results;
+};
+
+/**
  * Get search suggestions based on partial query
  * @param partialQuery - Partial search query
  * @param limit - Number of suggestions to return
@@ -340,6 +559,27 @@ export interface ISearchHistoryModel extends mongoose.Model<ISearchHistoryDocume
     userId: string,
     limit?: number
   ): Promise<Array<{ query: string; resultsCount: number; searchedAt: Date }>>;
+  getUserEnrichedSearches(
+    userId: string,
+    limit?: number
+  ): Promise<Array<{
+    query: string;
+    searchedAt: Date;
+    searchType: 'text' | 'product' | 'collection';
+    selectedProductId?: string;
+    selectedCollectionId?: string;
+  }>>;
+  getTrendingEnrichedSearches(
+    limit?: number,
+    days?: number
+  ): Promise<Array<{
+    query: string;
+    searchType: 'text' | 'product' | 'collection';
+    recentCount: number;
+    growthRate: number;
+    selectedProductId?: string;
+    selectedCollectionId?: string;
+  }>>;
   getSearchSuggestions(
     partialQuery: string,
     limit?: number

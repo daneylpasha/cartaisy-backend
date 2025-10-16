@@ -715,8 +715,8 @@
 				"type": "object",
 				"additionalProperties": false
 			},
-			"RecentSearch": {
-				"description": "Recent search entry",
+			"EnrichedSearchItem": {
+				"description": "Enriched search item - can be either a product or collection with complete Shopify data",
 				"properties": {
 					"query": {
 						"type": "string"
@@ -725,34 +725,42 @@
 						"type": "string",
 						"format": "date-time"
 					},
-					"resultsCount": {
-						"type": "number",
-						"format": "double"
+					"type": {
+						"type": "string",
+						"enum": [
+							"product",
+							"collection"
+						]
 					},
-					"hasResults": {
-						"type": "boolean"
+					"product": {
+						"$ref": "#/components/schemas/EnrichedProduct"
+					},
+					"collection": {
+						"$ref": "#/components/schemas/CollectionWithProducts"
 					}
 				},
 				"required": [
 					"query",
 					"searchedAt",
-					"resultsCount",
-					"hasResults"
+					"type"
 				],
 				"type": "object",
 				"additionalProperties": false
 			},
-			"TrendingSearch": {
-				"description": "Trending search query with growth metrics",
+			"EnrichedTrendingSearch": {
+				"description": "Enriched trending search - similar to EnrichedSearchItem but with trending metrics",
 				"properties": {
 					"query": {
 						"type": "string"
 					},
-					"recentCount": {
-						"type": "number",
-						"format": "double"
+					"type": {
+						"type": "string",
+						"enum": [
+							"product",
+							"collection"
+						]
 					},
-					"previousCount": {
+					"recentCount": {
 						"type": "number",
 						"format": "double"
 					},
@@ -760,17 +768,18 @@
 						"type": "number",
 						"format": "double"
 					},
-					"successRate": {
-						"type": "number",
-						"format": "double"
+					"product": {
+						"$ref": "#/components/schemas/EnrichedProduct"
+					},
+					"collection": {
+						"$ref": "#/components/schemas/CollectionWithProducts"
 					}
 				},
 				"required": [
 					"query",
+					"type",
 					"recentCount",
-					"previousCount",
-					"growthRate",
-					"successRate"
+					"growthRate"
 				],
 				"type": "object",
 				"additionalProperties": false
@@ -838,13 +847,13 @@
 							},
 							"trendingSearches": {
 								"items": {
-									"$ref": "#/components/schemas/TrendingSearch"
+									"$ref": "#/components/schemas/EnrichedTrendingSearch"
 								},
 								"type": "array"
 							},
 							"recentSearches": {
 								"items": {
-									"$ref": "#/components/schemas/RecentSearch"
+									"$ref": "#/components/schemas/EnrichedSearchItem"
 								},
 								"type": "array"
 							}
@@ -2658,14 +2667,14 @@
 						}
 					}
 				},
-				"description": "Get Search Context Data\nReturns personalized search context including user's recent searches, trending searches, and trending products.\nAuthentication is optional - recent searches only included for authenticated users.",
+				"description": "Get Search Context Data\nReturns personalized search context with enriched product/collection data for recent and trending searches.\nAuthentication is optional - recent searches only included for authenticated users.",
 				"tags": [
 					"Search"
 				],
 				"security": [],
 				"parameters": [
 					{
-						"description": "- Number of items to return (default: 10)",
+						"description": "- Number of items to return per category (default: 5, max 5)",
 						"in": "query",
 						"name": "limit",
 						"required": false,

@@ -355,7 +355,7 @@ export interface TrendingSearch {
 }
 
 /**
- * Recent search entry
+ * Recent search entry (basic)
  */
 export interface RecentSearch {
   query: string;
@@ -365,14 +365,37 @@ export interface RecentSearch {
 }
 
 /**
+ * Enriched search item - can be either a product or collection with complete Shopify data
+ */
+export interface EnrichedSearchItem {
+  query: string;
+  searchedAt: Date;
+  type: 'product' | 'collection';
+  product?: EnrichedProduct; // Present if type is 'product'
+  collection?: CollectionWithProducts; // Present if type is 'collection'
+}
+
+/**
+ * Enriched trending search - similar to EnrichedSearchItem but with trending metrics
+ */
+export interface EnrichedTrendingSearch {
+  query: string;
+  type: 'product' | 'collection';
+  recentCount: number;
+  growthRate: number;
+  product?: EnrichedProduct; // Present if type is 'product'
+  collection?: CollectionWithProducts; // Present if type is 'collection'
+}
+
+/**
  * Response for GET /customer/search/context
  * Returns personalized search context including recent searches, trending searches, and trending products
  */
 export interface SearchContextResponse {
   success: boolean;
   data: {
-    recentSearches: RecentSearch[]; // User-specific, empty if not authenticated
-    trendingSearches: TrendingSearch[]; // Global trending
+    recentSearches: EnrichedSearchItem[]; // User-specific with product/collection data (max 5)
+    trendingSearches: EnrichedTrendingSearch[]; // Global trending with product/collection data (max 5)
     trendingProducts: EnrichedProduct[]; // Trending products with full data
     metadata: {
       isAuthenticated: boolean;

@@ -143,11 +143,11 @@ export class SearchController extends Controller {
 
   /**
    * Get Search Context Data
-   * Returns personalized search context including user's recent searches, trending searches, and trending products.
+   * Returns personalized search context with enriched product/collection data for recent and trending searches.
    * Authentication is optional - recent searches only included for authenticated users.
    *
    * @param request - Express request with optional user auth
-   * @param limit - Number of items to return (default: 10)
+   * @param limit - Number of items to return per category (default: 5, max 5)
    * @param timeframe - Timeframe in days for trending calculation (default: 7)
    */
   @Get('context')
@@ -158,131 +158,128 @@ export class SearchController extends Controller {
     @Query() timeframe?: number
   ): Promise<SearchContextResponse> {
     try {
-      const limitNum = limit || 10;
+      const limitNum = Math.min(limit || 5, 5); // Max 5 for performance
       const timeframeNum = timeframe || 7;
       const userId = request.user?.id;
 
-      // Build array of promises to fetch all data in parallel
+      // Fetch enriched searches from database (products/collections only)
       const promises: Promise<any>[] = [
-        // Trending searches (global)
-        SearchHistory.aggregate([
-          {
-            $match: {
-              searchedAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
-              'results.hasResults': true
-            }
-          },
-          {
-            $group: {
-              _id: '$normalizedQuery',
-              recentCount: { $sum: 1 },
-              successRate: { $avg: { $cond: ['$isSuccessful', 1, 0] } }
-            }
-          },
-          {
-            $lookup: {
-              from: 'searchhistories',
-              let: { query: '$_id' },
-              pipeline: [
-                {
-                  $match: {
-                    $expr: { $eq: ['$normalizedQuery', '$$query'] },
-                    searchedAt: {
-                      $gte: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
-                      $lt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
-                    }
-                  }
-                },
-                { $count: 'count' }
-              ],
-              as: 'previousWeek'
-            }
-          },
-          {
-            $addFields: {
-              previousCount: { $ifNull: [{ $arrayElemAt: ['$previousWeek.count', 0] }, 0] },
-              growthRate: {
-                $cond: {
-                  if: { $gt: [{ $arrayElemAt: ['$previousWeek.count', 0] }, 0] },
-                  then: {
-                    $divide: [
-                      { $subtract: ['$recentCount', { $arrayElemAt: ['$previousWeek.count', 0] }] },
-                      { $arrayElemAt: ['$previousWeek.count', 0] }
-                    ]
-                  },
-                  else: 1
-                }
-              }
-            }
-          },
-          {
-            $match: {
-              recentCount: { $gte: 3 },
-              growthRate: { $gte: 0.2 }
-            }
-          },
-          {
-            $sort: { growthRate: -1, recentCount: -1 }
-          },
-          {
-            $limit: limitNum
-          },
-          {
-            $project: {
-              query: '$_id',
-              recentCount: 1,
-              previousCount: 1,
-              growthRate: 1,
-              successRate: 1,
-              _id: 0
-            }
-          }
-        ]),
-        // Trending products
-        ProductView.getTrendingProducts(limitNum, timeframeNum)
+        SearchHistory.getTrendingEnrichedSearches(limitNum, timeframeNum), // Trending searches
+        ProductView.getTrendingProducts(10, timeframeNum) // Bonus trending products
       ];
 
       // Add recent searches if user is authenticated
       if (userId) {
-        promises.push(SearchHistory.getUserSearchHistory(userId, limitNum));
+        promises.push(SearchHistory.getUserEnrichedSearches(userId, limitNum));
       } else {
-        promises.push(Promise.resolve([])); // Empty array for guests
+        promises.push(Promise.resolve([])); // Empty for guests
       }
 
-      const [trendingSearches, trendingProductsData, recentSearches] = await Promise.all(promises);
+      const [trendingSearchesRaw, trendingProductsData, recentSearchesRaw] = await Promise.all(promises);
 
-      // Extract just the product documents (already populated from aggregation)
+      // Helper function to enrich a single search item
+      const enrichSearchItem = async (item: any): Promise<any | null> => {
+        try {
+          if (item.searchType === 'product' && item.selectedProductId) {
+            // Fetch product from Shopify
+            const productResponse = await ShopifyStorefrontService.getProductById(item.selectedProductId);
+
+            if (productResponse?.data?.product) {
+              // Transform and enrich product
+              const transformedProduct = transformShopifyProductEdges([{ node: productResponse.data.product }])[0];
+              const enrichedProducts = await productEnrichment.enrichProducts([transformedProduct]);
+
+              return {
+                query: item.query,
+                searchedAt: item.searchedAt,
+                type: 'product' as const,
+                product: enrichedProducts[0]
+              };
+            }
+          } else if (item.searchType === 'collection' && item.selectedCollectionId) {
+            // Fetch collection from Shopify
+            const collectionResponse = await ShopifyStorefrontService.getCollectionById(item.selectedCollectionId, 20);
+
+            if (collectionResponse?.data?.collection) {
+              // Transform and enrich collection
+              const transformedCollection = transformShopifyCollection(collectionResponse.data.collection);
+              const enrichedProducts = await productEnrichment.enrichProducts(
+                transformedCollection.products || []
+              );
+
+              return {
+                query: item.query,
+                searchedAt: item.searchedAt,
+                type: 'collection' as const,
+                collection: {
+                  ...transformedCollection,
+                  products: enrichedProducts
+                }
+              };
+            }
+          }
+
+          return null;
+        } catch (error) {
+          console.error(`Error enriching search item (${item.searchType}):`, error);
+          return null;
+        }
+      };
+
+      // Enrich recent searches with complete Shopify data
+      const recentSearchesPromises = recentSearchesRaw.map(enrichSearchItem);
+      const recentSearchesResults = await Promise.all(recentSearchesPromises);
+      const recentSearches = recentSearchesResults.filter(item => item !== null);
+
+      // Enrich trending searches with complete Shopify data + metrics
+      const trendingSearchesPromises = trendingSearchesRaw.map(async (item: any): Promise<any | null> => {
+        try {
+          const enrichedItem = await enrichSearchItem(item);
+
+          if (enrichedItem) {
+            return {
+              ...enrichedItem,
+              recentCount: item.recentCount,
+              growthRate: item.growthRate
+            };
+          }
+
+          return null;
+        } catch (error) {
+          console.error('Error enriching trending search:', error);
+          return null;
+        }
+      });
+
+      const trendingSearchesResults = await Promise.all(trendingSearchesPromises);
+      const trendingSearches = trendingSearchesResults.filter(item => item !== null);
+
+      // Process trending products (bonus data)
       let trendingProducts = trendingProductsData.map((item: any) => item.product);
       let usedProductFallback = false;
 
-      // Fallback: Fetch products from Shopify if no trending products
       if (trendingProducts.length === 0) {
         try {
-          const shopifyProductsResponse = await ShopifyStorefrontService.getProducts(limitNum);
+          const shopifyProductsResponse = await ShopifyStorefrontService.getProducts(10);
 
           if (shopifyProductsResponse?.data?.products?.edges) {
-            // Transform Shopify products to our format
             const transformedProducts = transformShopifyProductEdges(shopifyProductsResponse.data.products.edges);
-
-            // Enrich products with ratings (match homescreen format)
             trendingProducts = await productEnrichment.enrichProducts(transformedProducts);
             usedProductFallback = true;
           }
         } catch (error) {
           console.error('Error fetching Shopify products as fallback:', error);
-          // Keep trendingProducts as empty array if Shopify fetch fails
         }
       } else {
-        // Enrich products with ratings (match homescreen format)
         trendingProducts = await productEnrichment.enrichProducts(trendingProducts);
       }
 
       return {
         success: true,
         data: {
-          recentSearches: recentSearches, // User-specific, empty if not authenticated
-          trendingSearches: trendingSearches, // Global trending
-          trendingProducts, // Return products in same format as other endpoints
+          recentSearches, // Enriched with product/collection data
+          trendingSearches, // Enriched with product/collection data + metrics
+          trendingProducts, // Bonus trending products
           metadata: {
             isAuthenticated: !!userId,
             recentSearchesCount: recentSearches.length,
