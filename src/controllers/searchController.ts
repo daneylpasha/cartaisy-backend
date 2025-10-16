@@ -721,7 +721,7 @@ export const getInitialSearchScreen = async (req: Request, res: Response): Promi
     // Extract just the product documents (already populated from aggregation)
     let trendingProducts = trendingProductsData.map((item: any) => item.product);
 
-    // Fallback: If no trending products, get featured/popular products
+    // Fallback Level 1: If no trending products, get featured/popular products
     if (trendingProducts.length === 0) {
       trendingProducts = await Product.find({
         status: 'active',
@@ -741,13 +741,19 @@ export const getInitialSearchScreen = async (req: Request, res: Response): Promi
         .lean();
     }
 
-    // Fallback: If no trending collections, get some default collections
-    let finalCollections = trendingCollections;
-    if (finalCollections.length === 0) {
-      // Return placeholder collection data that frontend can use
-      // In production, you could fetch featured collections from Shopify here
-      finalCollections = [];
+    // Fallback Level 2: If still no products, get ANY active products
+    if (trendingProducts.length === 0) {
+      trendingProducts = await Product.find({ status: 'active' })
+        .sort({ createdAt: -1 }) // Most recent first
+        .limit(limitNum)
+        .populate('category', 'name slug')
+        .select('-seo -inventoryTracking.history -analytics.conversionEvents')
+        .lean();
     }
+
+    // Fallback: Collections remain empty for now
+    // You can add Shopify collection fetching here if needed
+    let finalCollections = trendingCollections;
 
     res.json({
       success: true,
@@ -874,7 +880,7 @@ export const getSearchContext = async (req: Request, res: Response): Promise<voi
     // Extract just the product documents (already populated from aggregation)
     let trendingProducts = trendingProductsData.map((item: any) => item.product);
 
-    // Fallback: If no trending products, get featured/popular products
+    // Fallback Level 1: If no trending products, get featured/popular products
     if (trendingProducts.length === 0) {
       trendingProducts = await Product.find({
         status: 'active',
@@ -888,6 +894,16 @@ export const getSearchContext = async (req: Request, res: Response): Promise<voi
           'analytics.viewCount': -1,
           'reviews.averageRating': -1
         })
+        .limit(limitNum)
+        .populate('category', 'name slug')
+        .select('-seo -inventoryTracking.history -analytics.conversionEvents')
+        .lean();
+    }
+
+    // Fallback Level 2: If still no products, get ANY active products
+    if (trendingProducts.length === 0) {
+      trendingProducts = await Product.find({ status: 'active' })
+        .sort({ createdAt: -1 }) // Most recent first
         .limit(limitNum)
         .populate('category', 'name slug')
         .select('-seo -inventoryTracking.history -analytics.conversionEvents')
