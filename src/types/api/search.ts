@@ -283,3 +283,107 @@ export interface ShopifySearchProductsResponse {
     extensions?: Record<string, unknown>;
   }>;
 }
+
+// =============================================================================
+// INITIAL SEARCH SCREEN & CONTEXT TYPES
+// =============================================================================
+
+/**
+ * Product with enriched rating data (matches homescreen format)
+ */
+export interface EnrichedProduct {
+  productId: string;
+  title: string;
+  description: string;
+  images: string[];
+  price: number;
+  compareAtPrice: number;
+  currency: string;
+  inStock: boolean;
+  availableQuantity: number;
+  totalQuantity: number;
+  handle: string;
+  vendor: string;
+  tags: string[];
+  rating: number; // Enriched from reviews
+  reviewsCount: number; // Enriched from reviews
+}
+
+/**
+ * Collection with products (matches homescreen categoryCollectionGrid format)
+ */
+export interface CollectionWithProducts {
+  id: string;
+  title: string;
+  description?: string;
+  handle: string;
+  image?: string;
+  products: EnrichedProduct[];
+}
+
+/**
+ * Response for GET /customer/search/initial-screen
+ * Returns trending products and collections for the search screen
+ */
+export interface InitialSearchScreenResponse {
+  success: boolean;
+  data: {
+    trendingProducts: EnrichedProduct[];
+    trendingCollections: CollectionWithProducts[];
+    metadata: {
+      timeframe: number; // Days
+      productsCount: number;
+      collectionsCount: number;
+      lastUpdated: string; // ISO timestamp
+      isFallback: {
+        products: boolean; // True if using Shopify fallback instead of analytics
+        collections: boolean; // True if using Shopify fallback instead of analytics
+      };
+    };
+  };
+}
+
+/**
+ * Trending search query with growth metrics
+ */
+export interface TrendingSearch {
+  query: string;
+  recentCount: number;
+  previousCount: number;
+  growthRate: number;
+  successRate: number;
+}
+
+/**
+ * Recent search entry
+ */
+export interface RecentSearch {
+  query: string;
+  searchedAt: Date;
+  resultsCount: number;
+  hasResults: boolean;
+}
+
+/**
+ * Response for GET /customer/search/context
+ * Returns personalized search context including recent searches, trending searches, and trending products
+ */
+export interface SearchContextResponse {
+  success: boolean;
+  data: {
+    recentSearches: RecentSearch[]; // User-specific, empty if not authenticated
+    trendingSearches: TrendingSearch[]; // Global trending
+    trendingProducts: EnrichedProduct[]; // Trending products with full data
+    metadata: {
+      isAuthenticated: boolean;
+      recentSearchesCount: number;
+      trendingSearchesCount: number;
+      productsCount: number;
+      timeframe: number; // Days
+      lastUpdated: string; // ISO timestamp
+      isFallback: {
+        products: boolean; // True if using Shopify fallback instead of analytics
+      };
+    };
+  };
+}
