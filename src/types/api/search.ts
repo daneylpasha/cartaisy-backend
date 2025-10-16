@@ -395,7 +395,7 @@ export interface SearchContextResponse {
   success: boolean;
   data: {
     recentSearches: EnrichedSearchItem[]; // User-specific with product/collection data (max 5)
-    trendingSearches: EnrichedTrendingSearch[]; // Global trending with product/collection data (max 5)
+    trendingSearches: EnrichedTrendingSearch[]; // Global trending with product/collection data (max 5, mix of products & collections)
     trendingProducts: EnrichedProduct[]; // Trending products with full data
     metadata: {
       isAuthenticated: boolean;
@@ -406,6 +406,7 @@ export interface SearchContextResponse {
       lastUpdated: string; // ISO timestamp
       isFallback: {
         products: boolean; // True if using Shopify fallback instead of analytics
+        trendingSearches: boolean; // True if using Shopify fallback for trending searches
       };
     };
   };

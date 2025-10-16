@@ -796,11 +796,15 @@
 								"properties": {
 									"isFallback": {
 										"properties": {
+											"trendingSearches": {
+												"type": "boolean"
+											},
 											"products": {
 												"type": "boolean"
 											}
 										},
 										"required": [
+											"trendingSearches",
 											"products"
 										],
 										"type": "object"
@@ -3252,6 +3256,87 @@
 									"collectionId"
 								],
 								"type": "object"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/customer/search/log": {
+			"post": {
+				"operationId": "LogSearch",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"searchId": {
+											"type": "string"
+										},
+										"message": {
+											"type": "string"
+										},
+										"success": {
+											"type": "boolean"
+										}
+									},
+									"required": [
+										"searchId",
+										"message",
+										"success"
+									],
+									"type": "object"
+								}
+							}
+						}
+					}
+				},
+				"description": "Log Search\nExplicitly log a search from the mobile app to populate recent searches.\nCall this when user performs a search and views results.",
+				"tags": [
+					"Search"
+				],
+				"security": [],
+				"parameters": [],
+				"requestBody": {
+					"description": "- Search details",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"properties": {
+									"sessionId": {
+										"type": "string"
+									},
+									"resultsCount": {
+										"type": "number",
+										"format": "double"
+									},
+									"selectedCollectionId": {
+										"type": "string"
+									},
+									"selectedProductId": {
+										"type": "string"
+									},
+									"searchType": {
+										"type": "string",
+										"enum": [
+											"text",
+											"product",
+											"collection"
+										]
+									},
+									"query": {
+										"type": "string"
+									}
+								},
+								"required": [
+									"searchType",
+									"query"
+								],
+								"type": "object",
+								"description": "- Search details"
 							}
 						}
 					}
