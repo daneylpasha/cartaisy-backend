@@ -43,22 +43,9 @@ import {
   getOrderAnalytics
 } from '../controllers/orderController';
 
-// Search controllers
-import {
-  search,
-  getSearchSuggestions,
-  getPopularSearches,
-  getTrendingSearches,
-  getFailedSearches,
-  trackSearchClick,
-  getUserSearchHistory,
-  clearUserSearchHistory,
-  getSearchAnalytics,
-  getTrendingCollections,
-  trackCollectionView,
-  getInitialSearchScreen,
-  getSearchContext
-} from '../controllers/searchController';
+// NOTE: Search routes are now handled by TSOA auto-generated routes
+// See src/controllers/searchController.ts (TSOA controller)
+// and src/generated/routes.ts (auto-generated)
 
 // Analytics controllers
 import {
@@ -394,116 +381,22 @@ router.get('/orders/analytics', requireAuth, getOrderAnalytics);
 // =============================================================================
 // SEARCH ROUTES
 // =============================================================================
-
-/**
- * @route GET /api/v1/customer/search
- * @desc Search products with advanced filtering
- * @access Public
- * @query {string} q - Search query (required)
- * @query {string} page - Page number (default: 1)
- * @query {string} limit - Items per page (default: 20)
- * @query {string} category - Category ID filter
- * @query {string} priceMin - Minimum price filter
- * @query {string} priceMax - Maximum price filter
- * @query {string} brand - Brand name filter
- * @query {string} rating - Minimum rating filter
- * @query {string} inStock - Filter by stock availability (true/false)
- * @query {string} sortBy - Sort order (relevance, price_low, price_high, rating, popular, newest)
- */
-router.get('/search', optionalAuth, search);
-
-/**
- * @route GET /api/v1/customer/search/suggestions
- * @desc Get search suggestions
- * @access Public
- * @query {string} q - Partial search query (required, min 2 chars)
- * @query {string} limit - Number of suggestions (default: 10)
- */
-router.get('/search/suggestions', getSearchSuggestions);
-
-/**
- * @route GET /api/v1/customer/search/popular
- * @desc Get popular searches
- * @access Public
- * @query {string} limit - Number of searches (default: 10)
- * @query {string} days - Time period in days (default: 30)
- */
-router.get('/search/popular', getPopularSearches);
-
-/**
- * @route GET /api/v1/customer/search/trending
- * @desc Get trending searches
- * @access Public
- * @query {string} limit - Number of searches (default: 10)
- */
-router.get('/search/trending', getTrendingSearches);
-
-/**
- * @route POST /api/v1/customer/search/track-click
- * @desc Track search result click
- * @access Public
- * @body {string} searchId - Search record ID (required)
- * @body {string} productId - Clicked product ID (required)
- * @body {number} position - Click position in results (optional)
- */
-router.post('/search/track-click', trackSearchClick);
-
-/**
- * @route GET /api/v1/customer/search/history
- * @desc Get user's search history
- * @access Private
- * @query {string} limit - Number of searches (default: 20)
- */
-router.get('/search/history', requireAuth, getUserSearchHistory);
-
-/**
- * @route DELETE /api/v1/customer/search/history
- * @desc Clear user's search history
- * @access Private
- */
-router.delete('/search/history', requireAuth, clearUserSearchHistory);
-
-/**
- * @route GET /api/v1/customer/search/trending-collections
- * @desc Get trending collections
- * @access Public
- * @query {string} limit - Number of collections (default: 10)
- * @query {string} timeframe - Timeframe in days (default: 7)
- */
-router.get('/search/trending-collections', getTrendingCollections);
-
-/**
- * @route POST /api/v1/customer/search/track-collection-view
- * @desc Track collection view for analytics
- * @access Public
- * @body {string} collectionId - Collection ID (required)
- * @body {string} collectionHandle - Collection handle (optional)
- * @body {string} collectionTitle - Collection title (optional)
- * @body {number} viewDuration - View duration in seconds (optional)
- * @body {number} scrollDepth - Scroll depth percentage (optional)
- * @body {object} interactions - User interactions (optional)
- * @body {string} viewContext - View context (search, navigation, etc.)
- * @body {string} searchQuery - Search query if from search (optional)
- */
-router.post('/search/track-collection-view', optionalAuth, trackCollectionView);
-
-/**
- * @route GET /api/v1/customer/search/initial-screen
- * @desc Get initial search screen data (trending products + collections)
- * @access Public
- * @query {string} limit - Number of items per category (default: 10)
- * @query {string} timeframe - Timeframe in days (default: 7)
- */
-router.get('/search/initial-screen', getInitialSearchScreen);
-
-/**
- * @route GET /api/v1/customer/search/context
- * @desc Get search context data (user history + trending searches + trending products)
- * @access Public (optionalAuth for user history)
- * @query {string} limit - Number of items per category (default: 10)
- * @query {string} timeframe - Timeframe in days (default: 7)
- */
-router.get('/search/context', optionalAuth, getSearchContext);
+// NOTE: All search routes are now handled by TSOA auto-generated routes
+// See src/controllers/searchController.ts (TSOA @Route('customer/search'))
+// Routes available via TSOA:
+//   - GET  /api/v1/customer/search/initial-screen
+//   - GET  /api/v1/customer/search/context
+//   - GET  /api/v1/customer/search
+//   - GET  /api/v1/customer/search/suggestions
+//   - GET  /api/v1/customer/search/popular
+//   - GET  /api/v1/customer/search/trending
+//   - GET  /api/v1/customer/search/failed
+//   - POST /api/v1/customer/search/track-click
+//   - GET  /api/v1/customer/search/history (requires auth)
+//   - POST /api/v1/customer/search/history/clear (requires auth)
+//   - GET  /api/v1/customer/search/analytics
+//   - GET  /api/v1/customer/search/collections/trending
+//   - POST /api/v1/customer/search/collections/track-view
 
 // =============================================================================
 // SHARED/PUBLIC ROUTES
@@ -562,20 +455,17 @@ router.get('/admin/analytics/inventory', requireAdmin, getInventoryAnalytics);
 
 /**
  * @route GET /api/v1/customer/admin/analytics/search
- * @desc Get search analytics
+ * @desc Get search analytics (now via TSOA at /api/v1/customer/search/analytics)
  * @access Admin
- * @query {string} timeframe - Timeframe in days (default: 30)
  */
-router.get('/admin/analytics/search', requireAdmin, getSearchAnalytics);
+// Deprecated: Use TSOA route at /api/v1/customer/search/analytics
 
 /**
  * @route GET /api/v1/customer/admin/search/failed
- * @desc Get failed searches for optimization
+ * @desc Get failed searches (now via TSOA at /api/v1/customer/search/failed)
  * @access Admin
- * @query {string} limit - Number of searches (default: 10)
- * @query {string} days - Time period in days (default: 7)
  */
-router.get('/admin/search/failed', requireAdmin, getFailedSearches);
+// Deprecated: Use TSOA route at /api/v1/customer/search/failed
 
 /**
  * @route GET /api/v1/customer/admin/reviews/:productId/analytics

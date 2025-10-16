@@ -522,6 +522,349 @@
 				"type": "object",
 				"additionalProperties": false
 			},
+			"EnrichedProduct": {
+				"description": "Product with enriched rating data (matches homescreen format)",
+				"properties": {
+					"productId": {
+						"type": "string"
+					},
+					"title": {
+						"type": "string"
+					},
+					"description": {
+						"type": "string"
+					},
+					"images": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array"
+					},
+					"price": {
+						"type": "number",
+						"format": "double"
+					},
+					"compareAtPrice": {
+						"type": "number",
+						"format": "double"
+					},
+					"currency": {
+						"type": "string"
+					},
+					"inStock": {
+						"type": "boolean"
+					},
+					"availableQuantity": {
+						"type": "number",
+						"format": "double"
+					},
+					"totalQuantity": {
+						"type": "number",
+						"format": "double"
+					},
+					"handle": {
+						"type": "string"
+					},
+					"vendor": {
+						"type": "string"
+					},
+					"tags": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array"
+					},
+					"rating": {
+						"type": "number",
+						"format": "double"
+					},
+					"reviewsCount": {
+						"type": "number",
+						"format": "double"
+					}
+				},
+				"required": [
+					"productId",
+					"title",
+					"description",
+					"images",
+					"price",
+					"compareAtPrice",
+					"currency",
+					"inStock",
+					"availableQuantity",
+					"totalQuantity",
+					"handle",
+					"vendor",
+					"tags",
+					"rating",
+					"reviewsCount"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"CollectionWithProducts": {
+				"description": "Collection with products (matches homescreen categoryCollectionGrid format)",
+				"properties": {
+					"id": {
+						"type": "string"
+					},
+					"title": {
+						"type": "string"
+					},
+					"description": {
+						"type": "string"
+					},
+					"handle": {
+						"type": "string"
+					},
+					"image": {
+						"type": "string"
+					},
+					"products": {
+						"items": {
+							"$ref": "#/components/schemas/EnrichedProduct"
+						},
+						"type": "array"
+					}
+				},
+				"required": [
+					"id",
+					"title",
+					"handle",
+					"products"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"InitialSearchScreenResponse": {
+				"description": "Response for GET /customer/search/initial-screen\nReturns trending products and collections for the search screen",
+				"properties": {
+					"success": {
+						"type": "boolean"
+					},
+					"data": {
+						"properties": {
+							"metadata": {
+								"properties": {
+									"isFallback": {
+										"properties": {
+											"collections": {
+												"type": "boolean"
+											},
+											"products": {
+												"type": "boolean"
+											}
+										},
+										"required": [
+											"collections",
+											"products"
+										],
+										"type": "object"
+									},
+									"lastUpdated": {
+										"type": "string"
+									},
+									"collectionsCount": {
+										"type": "number",
+										"format": "double"
+									},
+									"productsCount": {
+										"type": "number",
+										"format": "double"
+									},
+									"timeframe": {
+										"type": "number",
+										"format": "double"
+									}
+								},
+								"required": [
+									"isFallback",
+									"lastUpdated",
+									"collectionsCount",
+									"productsCount",
+									"timeframe"
+								],
+								"type": "object"
+							},
+							"trendingCollections": {
+								"items": {
+									"$ref": "#/components/schemas/CollectionWithProducts"
+								},
+								"type": "array"
+							},
+							"trendingProducts": {
+								"items": {
+									"$ref": "#/components/schemas/EnrichedProduct"
+								},
+								"type": "array"
+							}
+						},
+						"required": [
+							"metadata",
+							"trendingCollections",
+							"trendingProducts"
+						],
+						"type": "object"
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"RecentSearch": {
+				"description": "Recent search entry",
+				"properties": {
+					"query": {
+						"type": "string"
+					},
+					"searchedAt": {
+						"type": "string",
+						"format": "date-time"
+					},
+					"resultsCount": {
+						"type": "number",
+						"format": "double"
+					},
+					"hasResults": {
+						"type": "boolean"
+					}
+				},
+				"required": [
+					"query",
+					"searchedAt",
+					"resultsCount",
+					"hasResults"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"TrendingSearch": {
+				"description": "Trending search query with growth metrics",
+				"properties": {
+					"query": {
+						"type": "string"
+					},
+					"recentCount": {
+						"type": "number",
+						"format": "double"
+					},
+					"previousCount": {
+						"type": "number",
+						"format": "double"
+					},
+					"growthRate": {
+						"type": "number",
+						"format": "double"
+					},
+					"successRate": {
+						"type": "number",
+						"format": "double"
+					}
+				},
+				"required": [
+					"query",
+					"recentCount",
+					"previousCount",
+					"growthRate",
+					"successRate"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"SearchContextResponse": {
+				"description": "Response for GET /customer/search/context\nReturns personalized search context including recent searches, trending searches, and trending products",
+				"properties": {
+					"success": {
+						"type": "boolean"
+					},
+					"data": {
+						"properties": {
+							"metadata": {
+								"properties": {
+									"isFallback": {
+										"properties": {
+											"products": {
+												"type": "boolean"
+											}
+										},
+										"required": [
+											"products"
+										],
+										"type": "object"
+									},
+									"lastUpdated": {
+										"type": "string"
+									},
+									"timeframe": {
+										"type": "number",
+										"format": "double"
+									},
+									"productsCount": {
+										"type": "number",
+										"format": "double"
+									},
+									"trendingSearchesCount": {
+										"type": "number",
+										"format": "double"
+									},
+									"recentSearchesCount": {
+										"type": "number",
+										"format": "double"
+									},
+									"isAuthenticated": {
+										"type": "boolean"
+									}
+								},
+								"required": [
+									"isFallback",
+									"lastUpdated",
+									"timeframe",
+									"productsCount",
+									"trendingSearchesCount",
+									"recentSearchesCount",
+									"isAuthenticated"
+								],
+								"type": "object"
+							},
+							"trendingProducts": {
+								"items": {
+									"$ref": "#/components/schemas/EnrichedProduct"
+								},
+								"type": "array"
+							},
+							"trendingSearches": {
+								"items": {
+									"$ref": "#/components/schemas/TrendingSearch"
+								},
+								"type": "array"
+							},
+							"recentSearches": {
+								"items": {
+									"$ref": "#/components/schemas/RecentSearch"
+								},
+								"type": "array"
+							}
+						},
+						"required": [
+							"metadata",
+							"trendingProducts",
+							"trendingSearches",
+							"recentSearches"
+						],
+						"type": "object"
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
 			"ProductOption": {
 				"description": "Product variant option (color, size, etc.)",
 				"properties": {
@@ -2254,6 +2597,656 @@
 					}
 				],
 				"parameters": []
+			}
+		},
+		"/customer/search/initial-screen": {
+			"get": {
+				"operationId": "GetInitialSearchScreen",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/InitialSearchScreenResponse"
+								}
+							}
+						}
+					}
+				},
+				"description": "Get Initial Search Screen Data\nReturns trending products and collections for the search screen with complete data including images, ratings, and enriched product information.\nProducts and collections match the homescreen data format for UI component reuse.",
+				"tags": [
+					"Search"
+				],
+				"security": [],
+				"parameters": [
+					{
+						"description": "- Number of items to return (default: 10)",
+						"in": "query",
+						"name": "limit",
+						"required": false,
+						"schema": {
+							"format": "double",
+							"type": "number"
+						}
+					},
+					{
+						"description": "- Timeframe in days for trending calculation (default: 7)",
+						"in": "query",
+						"name": "timeframe",
+						"required": false,
+						"schema": {
+							"format": "double",
+							"type": "number"
+						}
+					}
+				]
+			}
+		},
+		"/customer/search/context": {
+			"get": {
+				"operationId": "GetSearchContext",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SearchContextResponse"
+								}
+							}
+						}
+					}
+				},
+				"description": "Get Search Context Data\nReturns personalized search context including user's recent searches, trending searches, and trending products.\nAuthentication is optional - recent searches only included for authenticated users.",
+				"tags": [
+					"Search"
+				],
+				"security": [],
+				"parameters": [
+					{
+						"description": "- Number of items to return (default: 10)",
+						"in": "query",
+						"name": "limit",
+						"required": false,
+						"schema": {
+							"format": "double",
+							"type": "number"
+						}
+					},
+					{
+						"description": "- Timeframe in days for trending calculation (default: 7)",
+						"in": "query",
+						"name": "timeframe",
+						"required": false,
+						"schema": {
+							"format": "double",
+							"type": "number"
+						}
+					}
+				]
+			}
+		},
+		"/customer/search": {
+			"get": {
+				"operationId": "Search",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {}
+							}
+						}
+					}
+				},
+				"description": "Main Product Search\nComprehensive search with filters, pagination, and sorting",
+				"tags": [
+					"Search"
+				],
+				"security": [],
+				"parameters": [
+					{
+						"description": "- Search query",
+						"in": "query",
+						"name": "q",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"description": "- Page number (default: 1)",
+						"in": "query",
+						"name": "page",
+						"required": false,
+						"schema": {
+							"format": "double",
+							"type": "number"
+						}
+					},
+					{
+						"description": "- Results per page (default: 20)",
+						"in": "query",
+						"name": "limit",
+						"required": false,
+						"schema": {
+							"format": "double",
+							"type": "number"
+						}
+					},
+					{
+						"description": "- Category filter (ObjectId)",
+						"in": "query",
+						"name": "category",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"description": "- Minimum price filter",
+						"in": "query",
+						"name": "priceMin",
+						"required": false,
+						"schema": {
+							"format": "double",
+							"type": "number"
+						}
+					},
+					{
+						"description": "- Maximum price filter",
+						"in": "query",
+						"name": "priceMax",
+						"required": false,
+						"schema": {
+							"format": "double",
+							"type": "number"
+						}
+					},
+					{
+						"description": "- Brand/vendor filter",
+						"in": "query",
+						"name": "brand",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"description": "- Minimum rating filter",
+						"in": "query",
+						"name": "rating",
+						"required": false,
+						"schema": {
+							"format": "double",
+							"type": "number"
+						}
+					},
+					{
+						"description": "- Only in-stock products",
+						"in": "query",
+						"name": "inStock",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"description": "- Sort order (relevance, price_low, price_high, rating, popular, newest)",
+						"in": "query",
+						"name": "sortBy",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
+					}
+				]
+			}
+		},
+		"/customer/search/suggestions": {
+			"get": {
+				"operationId": "GetSearchSuggestions",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {}
+							}
+						}
+					}
+				},
+				"description": "Get Search Suggestions\nFast autocomplete suggestions from search history and products",
+				"tags": [
+					"Search"
+				],
+				"security": [],
+				"parameters": [
+					{
+						"description": "- Search query (minimum 2 characters)",
+						"in": "query",
+						"name": "q",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"description": "- Number of suggestions (default: 10)",
+						"in": "query",
+						"name": "limit",
+						"required": false,
+						"schema": {
+							"format": "double",
+							"type": "number"
+						}
+					}
+				]
+			}
+		},
+		"/customer/search/popular": {
+			"get": {
+				"operationId": "GetPopularSearches",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {}
+							}
+						}
+					}
+				},
+				"description": "Get Popular Searches\nReturns most frequently searched terms",
+				"tags": [
+					"Search"
+				],
+				"security": [],
+				"parameters": [
+					{
+						"description": "- Number of results (default: 10)",
+						"in": "query",
+						"name": "limit",
+						"required": false,
+						"schema": {
+							"format": "double",
+							"type": "number"
+						}
+					},
+					{
+						"description": "- Days to look back (default: 30)",
+						"in": "query",
+						"name": "days",
+						"required": false,
+						"schema": {
+							"format": "double",
+							"type": "number"
+						}
+					}
+				]
+			}
+		},
+		"/customer/search/trending": {
+			"get": {
+				"operationId": "GetTrendingSearches",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {}
+							}
+						}
+					}
+				},
+				"description": "Get Trending Searches\nReturns searches with highest growth rate",
+				"tags": [
+					"Search"
+				],
+				"security": [],
+				"parameters": [
+					{
+						"description": "- Number of results (default: 10)",
+						"in": "query",
+						"name": "limit",
+						"required": false,
+						"schema": {
+							"format": "double",
+							"type": "number"
+						}
+					}
+				]
+			}
+		},
+		"/customer/search/failed": {
+			"get": {
+				"operationId": "GetFailedSearches",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {}
+							}
+						}
+					}
+				},
+				"description": "Get Failed Searches\nReturns searches that returned no results (admin analytics)",
+				"tags": [
+					"Search"
+				],
+				"security": [],
+				"parameters": [
+					{
+						"description": "- Number of results (default: 10)",
+						"in": "query",
+						"name": "limit",
+						"required": false,
+						"schema": {
+							"format": "double",
+							"type": "number"
+						}
+					},
+					{
+						"description": "- Days to look back (default: 7)",
+						"in": "query",
+						"name": "days",
+						"required": false,
+						"schema": {
+							"format": "double",
+							"type": "number"
+						}
+					}
+				]
+			}
+		},
+		"/customer/search/track-click": {
+			"post": {
+				"operationId": "TrackSearchClick",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"message": {
+											"type": "string"
+										},
+										"success": {
+											"type": "boolean"
+										}
+									},
+									"required": [
+										"message",
+										"success"
+									],
+									"type": "object"
+								}
+							}
+						}
+					}
+				},
+				"description": "Track Search Click\nTrack when user clicks on a search result",
+				"tags": [
+					"Search"
+				],
+				"security": [],
+				"parameters": [],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"properties": {
+									"position": {
+										"type": "number",
+										"format": "double"
+									},
+									"productId": {
+										"type": "string"
+									},
+									"searchId": {
+										"type": "string"
+									}
+								},
+								"required": [
+									"productId",
+									"searchId"
+								],
+								"type": "object"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/customer/search/history": {
+			"get": {
+				"operationId": "GetUserSearchHistory",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {}
+							}
+						}
+					}
+				},
+				"description": "Get User Search History\nReturns authenticated user's recent search history",
+				"tags": [
+					"Search"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [
+					{
+						"description": "- Number of results (default: 20)",
+						"in": "query",
+						"name": "limit",
+						"required": false,
+						"schema": {
+							"format": "double",
+							"type": "number"
+						}
+					}
+				]
+			}
+		},
+		"/customer/search/history/clear": {
+			"post": {
+				"operationId": "ClearUserSearchHistory",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"message": {
+											"type": "string"
+										},
+										"success": {
+											"type": "boolean"
+										}
+									},
+									"required": [
+										"message",
+										"success"
+									],
+									"type": "object"
+								}
+							}
+						}
+					}
+				},
+				"description": "Clear User Search History\nDeletes authenticated user's search history",
+				"tags": [
+					"Search"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": []
+			}
+		},
+		"/customer/search/analytics": {
+			"get": {
+				"operationId": "GetSearchAnalytics",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {}
+							}
+						}
+					}
+				},
+				"description": "Get Search Analytics\nComprehensive search analytics including volume, trends, device stats",
+				"tags": [
+					"Search"
+				],
+				"security": [],
+				"parameters": [
+					{
+						"description": "- Days to analyze (default: 30)",
+						"in": "query",
+						"name": "timeframe",
+						"required": false,
+						"schema": {
+							"format": "double",
+							"type": "number"
+						}
+					}
+				]
+			}
+		},
+		"/customer/search/collections/trending": {
+			"get": {
+				"operationId": "GetTrendingCollections",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {}
+							}
+						}
+					}
+				},
+				"description": "Get Trending Collections\nReturns most viewed collections in given timeframe",
+				"tags": [
+					"Search"
+				],
+				"security": [],
+				"parameters": [
+					{
+						"description": "- Number of results (default: 10)",
+						"in": "query",
+						"name": "limit",
+						"required": false,
+						"schema": {
+							"format": "double",
+							"type": "number"
+						}
+					},
+					{
+						"description": "- Days to look back (default: 7)",
+						"in": "query",
+						"name": "timeframe",
+						"required": false,
+						"schema": {
+							"format": "double",
+							"type": "number"
+						}
+					}
+				]
+			}
+		},
+		"/customer/search/collections/track-view": {
+			"post": {
+				"operationId": "TrackCollectionView",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"message": {
+											"type": "string"
+										},
+										"success": {
+											"type": "boolean"
+										}
+									},
+									"required": [
+										"message",
+										"success"
+									],
+									"type": "object"
+								}
+							}
+						}
+					}
+				},
+				"description": "Track Collection View\nTrack when user views a collection page",
+				"tags": [
+					"Search"
+				],
+				"security": [],
+				"parameters": [],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"properties": {
+									"deviceInfo": {},
+									"sessionId": {
+										"type": "string"
+									},
+									"searchQuery": {
+										"type": "string"
+									},
+									"viewContext": {
+										"type": "string"
+									},
+									"interactions": {},
+									"scrollDepth": {
+										"type": "number",
+										"format": "double"
+									},
+									"viewDuration": {
+										"type": "number",
+										"format": "double"
+									},
+									"collectionTitle": {
+										"type": "string"
+									},
+									"collectionHandle": {
+										"type": "string"
+									},
+									"collectionId": {
+										"type": "string"
+									}
+								},
+								"required": [
+									"collectionId"
+								],
+								"type": "object"
+							}
+						}
+					}
+				}
 			}
 		},
 		"/products/{productId}": {
