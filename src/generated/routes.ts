@@ -184,25 +184,27 @@ const models: TsoaRoute.Models = {
         "additionalProperties": false,
     },
     // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
-    "RecentSearch": {
+    "EnrichedSearchItem": {
         "dataType": "refObject",
         "properties": {
             "query": {"dataType":"string","required":true},
             "searchedAt": {"dataType":"datetime","required":true},
-            "resultsCount": {"dataType":"double","required":true},
-            "hasResults": {"dataType":"boolean","required":true},
+            "type": {"dataType":"union","subSchemas":[{"dataType":"enum","enums":["product"]},{"dataType":"enum","enums":["collection"]}],"required":true},
+            "product": {"ref":"EnrichedProduct"},
+            "collection": {"ref":"CollectionWithProducts"},
         },
         "additionalProperties": false,
     },
     // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
-    "TrendingSearch": {
+    "EnrichedTrendingSearch": {
         "dataType": "refObject",
         "properties": {
             "query": {"dataType":"string","required":true},
+            "type": {"dataType":"union","subSchemas":[{"dataType":"enum","enums":["product"]},{"dataType":"enum","enums":["collection"]}],"required":true},
             "recentCount": {"dataType":"double","required":true},
-            "previousCount": {"dataType":"double","required":true},
             "growthRate": {"dataType":"double","required":true},
-            "successRate": {"dataType":"double","required":true},
+            "product": {"ref":"EnrichedProduct"},
+            "collection": {"ref":"CollectionWithProducts"},
         },
         "additionalProperties": false,
     },
@@ -211,7 +213,7 @@ const models: TsoaRoute.Models = {
         "dataType": "refObject",
         "properties": {
             "success": {"dataType":"boolean","required":true},
-            "data": {"dataType":"nestedObjectLiteral","nestedProperties":{"metadata":{"dataType":"nestedObjectLiteral","nestedProperties":{"isFallback":{"dataType":"nestedObjectLiteral","nestedProperties":{"products":{"dataType":"boolean","required":true}},"required":true},"lastUpdated":{"dataType":"string","required":true},"timeframe":{"dataType":"double","required":true},"productsCount":{"dataType":"double","required":true},"trendingSearchesCount":{"dataType":"double","required":true},"recentSearchesCount":{"dataType":"double","required":true},"isAuthenticated":{"dataType":"boolean","required":true}},"required":true},"trendingProducts":{"dataType":"array","array":{"dataType":"refObject","ref":"EnrichedProduct"},"required":true},"trendingSearches":{"dataType":"array","array":{"dataType":"refObject","ref":"TrendingSearch"},"required":true},"recentSearches":{"dataType":"array","array":{"dataType":"refObject","ref":"RecentSearch"},"required":true}},"required":true},
+            "data": {"dataType":"nestedObjectLiteral","nestedProperties":{"metadata":{"dataType":"nestedObjectLiteral","nestedProperties":{"isFallback":{"dataType":"nestedObjectLiteral","nestedProperties":{"products":{"dataType":"boolean","required":true}},"required":true},"lastUpdated":{"dataType":"string","required":true},"timeframe":{"dataType":"double","required":true},"productsCount":{"dataType":"double","required":true},"trendingSearchesCount":{"dataType":"double","required":true},"recentSearchesCount":{"dataType":"double","required":true},"isAuthenticated":{"dataType":"boolean","required":true}},"required":true},"trendingProducts":{"dataType":"array","array":{"dataType":"refObject","ref":"EnrichedProduct"},"required":true},"trendingSearches":{"dataType":"array","array":{"dataType":"refObject","ref":"EnrichedTrendingSearch"},"required":true},"recentSearches":{"dataType":"array","array":{"dataType":"refObject","ref":"EnrichedSearchItem"},"required":true}},"required":true},
         },
         "additionalProperties": false,
     },
