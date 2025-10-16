@@ -329,9 +329,16 @@ CollectionViewSchema.statics.getTrendingCollections = function(
     },
     {
       $project: {
-        collectionId: '$_id',
-        collectionHandle: 1,
-        collectionTitle: 1,
+        // Return in Collection interface format
+        id: {
+          $arrayElemAt: [
+            { $split: ['$_id', '/'] },
+            -1
+          ]
+        }, // Extract numeric ID from Shopify GID
+        title: '$collectionTitle',
+        handle: '$collectionHandle',
+        // Analytics fields (bonus data)
         views: 1,
         uniqueViewCount: 1,
         avgDuration: 1,
@@ -417,9 +424,16 @@ CollectionViewSchema.statics.getCollectionsWithGrowth = function(
     },
     {
       $project: {
-        collectionId: '$_id',
-        collectionHandle: 1,
-        collectionTitle: 1,
+        // Return in Collection interface format
+        id: {
+          $arrayElemAt: [
+            { $split: ['$_id', '/'] },
+            -1
+          ]
+        }, // Extract numeric ID from Shopify GID
+        title: '$collectionTitle',
+        handle: '$collectionHandle',
+        // Analytics fields
         currentPeriodViews: 1,
         previousPeriodViews: 1,
         growthRate: 1,

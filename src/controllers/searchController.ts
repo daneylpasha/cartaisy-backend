@@ -713,28 +713,56 @@ export const getInitialSearchScreen = async (req: Request, res: Response): Promi
     const timeframeNum = parseInt(timeframe as string);
 
     // Fetch all data in parallel for better performance
-    const [trendingProducts, trendingCollections] = await Promise.all([
+    const [trendingProductsData, trendingCollections] = await Promise.all([
       ProductView.getTrendingProducts(limitNum, timeframeNum),
       CollectionView.getTrendingCollections(limitNum, timeframeNum)
     ]);
 
+    // Extract just the product documents (already populated from aggregation)
+    let trendingProducts = trendingProductsData.map((item: any) => item.product);
+
+    // Fallback: If no trending products, get featured/popular products
+    if (trendingProducts.length === 0) {
+      trendingProducts = await Product.find({
+        status: 'active',
+        $or: [
+          { 'mobileDisplay.isFeatured': true },
+          { 'analytics.viewCount': { $gt: 0 } }
+        ]
+      })
+        .sort({
+          'mobileDisplay.priority': -1,
+          'analytics.viewCount': -1,
+          'reviews.averageRating': -1
+        })
+        .limit(limitNum)
+        .populate('category', 'name slug')
+        .select('-seo -inventoryTracking.history -analytics.conversionEvents')
+        .lean();
+    }
+
+    // Fallback: If no trending collections, get some default collections
+    let finalCollections = trendingCollections;
+    if (finalCollections.length === 0) {
+      // Return placeholder collection data that frontend can use
+      // In production, you could fetch featured collections from Shopify here
+      finalCollections = [];
+    }
+
     res.json({
       success: true,
       data: {
-        trendingProducts: trendingProducts.map((item: any) => ({
-          productId: item._id,
-          product: item.product,
-          views: item.views,
-          uniqueViewCount: item.uniqueViewCount,
-          engagementScore: item.engagementScore,
-          avgDuration: item.avgDuration
-        })),
-        trendingCollections: trendingCollections,
+        trendingProducts,
+        trendingCollections: finalCollections,
         metadata: {
           timeframe: timeframeNum,
           productsCount: trendingProducts.length,
-          collectionsCount: trendingCollections.length,
-          lastUpdated: new Date().toISOString()
+          collectionsCount: finalCollections.length,
+          lastUpdated: new Date().toISOString(),
+          isFallback: {
+            products: trendingProductsData.length === 0,
+            collections: trendingCollections.length === 0
+          }
         }
       }
     });
@@ -841,28 +869,47 @@ export const getSearchContext = async (req: Request, res: Response): Promise<voi
       promises.push(Promise.resolve([])); // Empty array for guests
     }
 
-    const [trendingSearches, trendingProducts, recentSearches] = await Promise.all(promises);
+    const [trendingSearches, trendingProductsData, recentSearches] = await Promise.all(promises);
+
+    // Extract just the product documents (already populated from aggregation)
+    let trendingProducts = trendingProductsData.map((item: any) => item.product);
+
+    // Fallback: If no trending products, get featured/popular products
+    if (trendingProducts.length === 0) {
+      trendingProducts = await Product.find({
+        status: 'active',
+        $or: [
+          { 'mobileDisplay.isFeatured': true },
+          { 'analytics.viewCount': { $gt: 0 } }
+        ]
+      })
+        .sort({
+          'mobileDisplay.priority': -1,
+          'analytics.viewCount': -1,
+          'reviews.averageRating': -1
+        })
+        .limit(limitNum)
+        .populate('category', 'name slug')
+        .select('-seo -inventoryTracking.history -analytics.conversionEvents')
+        .lean();
+    }
 
     res.json({
       success: true,
       data: {
         recentSearches: recentSearches, // User-specific, empty if not authenticated
         trendingSearches: trendingSearches, // Global trending
-        trendingProducts: trendingProducts.map((item: any) => ({
-          productId: item._id,
-          product: item.product,
-          views: item.views,
-          uniqueViewCount: item.uniqueViewCount,
-          engagementScore: item.engagementScore,
-          avgDuration: item.avgDuration
-        })),
+        trendingProducts, // Return products in same format as other endpoints
         metadata: {
           isAuthenticated: !!userId,
           recentSearchesCount: recentSearches.length,
           trendingSearchesCount: trendingSearches.length,
           productsCount: trendingProducts.length,
           timeframe: timeframeNum,
-          lastUpdated: new Date().toISOString()
+          lastUpdated: new Date().toISOString(),
+          isFallback: {
+            products: trendingProductsData.length === 0
+          }
         }
       }
     });
