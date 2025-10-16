@@ -732,6 +732,12 @@
 							"collection"
 						]
 					},
+					"productId": {
+						"type": "string"
+					},
+					"collectionId": {
+						"type": "string"
+					},
 					"product": {
 						"$ref": "#/components/schemas/EnrichedProduct"
 					},
@@ -767,6 +773,12 @@
 					"growthRate": {
 						"type": "number",
 						"format": "double"
+					},
+					"productId": {
+						"type": "string"
+					},
+					"collectionId": {
+						"type": "string"
 					},
 					"product": {
 						"$ref": "#/components/schemas/EnrichedProduct"

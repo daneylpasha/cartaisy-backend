@@ -193,6 +193,7 @@ export class SearchController extends Controller {
                 query: item.query,
                 searchedAt: item.searchedAt,
                 type: 'product' as const,
+                productId: item.selectedProductId,
                 product: enrichedProducts[0]
               };
             }
@@ -211,6 +212,7 @@ export class SearchController extends Controller {
                 query: item.query,
                 searchedAt: item.searchedAt,
                 type: 'collection' as const,
+                collectionId: item.selectedCollectionId,
                 collection: {
                   ...transformedCollection,
                   products: enrichedProducts
@@ -279,6 +281,7 @@ export class SearchController extends Controller {
                 type: 'product' as const,
                 recentCount: 5 - index, // Mock count: 5, 4, 3
                 growthRate: 0.5 + (index * 0.1), // Mock growth: 0.5, 0.6, 0.7
+                productId: product.productId,
                 product
               });
             });
@@ -319,6 +322,7 @@ export class SearchController extends Controller {
                 type: 'collection' as const,
                 recentCount: 4 - index, // Mock count: 4, 3
                 growthRate: 0.4 + (index * 0.1), // Mock growth: 0.4, 0.5
+                collectionId: collection.id,
                 collection
               });
             });

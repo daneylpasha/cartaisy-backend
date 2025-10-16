@@ -371,6 +371,8 @@ export interface EnrichedSearchItem {
   query: string;
   searchedAt: Date;
   type: 'product' | 'collection';
+  productId?: string; // Present if type is 'product' (for easy navigation)
+  collectionId?: string; // Present if type is 'collection' (for easy navigation)
   product?: EnrichedProduct; // Present if type is 'product'
   collection?: CollectionWithProducts; // Present if type is 'collection'
 }
@@ -383,6 +385,8 @@ export interface EnrichedTrendingSearch {
   type: 'product' | 'collection';
   recentCount: number;
   growthRate: number;
+  productId?: string; // Present if type is 'product' (for easy navigation)
+  collectionId?: string; // Present if type is 'collection' (for easy navigation)
   product?: EnrichedProduct; // Present if type is 'product'
   collection?: CollectionWithProducts; // Present if type is 'collection'
 }
