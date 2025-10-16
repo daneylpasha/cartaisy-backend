@@ -736,7 +736,6 @@ export const getInitialSearchScreen = async (req: Request, res: Response): Promi
           'reviews.averageRating': -1
         })
         .limit(limitNum)
-        .populate('category', 'name slug')
         .select('-seo -inventoryTracking.history -analytics.conversionEvents')
         .lean();
     }
@@ -746,7 +745,6 @@ export const getInitialSearchScreen = async (req: Request, res: Response): Promi
       trendingProducts = await Product.find({ status: 'active' })
         .sort({ createdAt: -1 }) // Most recent first
         .limit(limitNum)
-        .populate('category', 'name slug')
         .select('-seo -inventoryTracking.history -analytics.conversionEvents')
         .lean();
     }
@@ -895,7 +893,6 @@ export const getSearchContext = async (req: Request, res: Response): Promise<voi
           'reviews.averageRating': -1
         })
         .limit(limitNum)
-        .populate('category', 'name slug')
         .select('-seo -inventoryTracking.history -analytics.conversionEvents')
         .lean();
     }
@@ -905,7 +902,6 @@ export const getSearchContext = async (req: Request, res: Response): Promise<voi
       trendingProducts = await Product.find({ status: 'active' })
         .sort({ createdAt: -1 }) // Most recent first
         .limit(limitNum)
-        .populate('category', 'name slug')
         .select('-seo -inventoryTracking.history -analytics.conversionEvents')
         .lean();
     }
