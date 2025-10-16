@@ -53,7 +53,11 @@ import {
   trackSearchClick,
   getUserSearchHistory,
   clearUserSearchHistory,
-  getSearchAnalytics
+  getSearchAnalytics,
+  getTrendingCollections,
+  trackCollectionView,
+  getInitialSearchScreen,
+  getSearchContext
 } from '../controllers/searchController';
 
 // Analytics controllers
@@ -458,6 +462,48 @@ router.get('/search/history', requireAuth, getUserSearchHistory);
  * @access Private
  */
 router.delete('/search/history', requireAuth, clearUserSearchHistory);
+
+/**
+ * @route GET /api/v1/customer/search/trending-collections
+ * @desc Get trending collections
+ * @access Public
+ * @query {string} limit - Number of collections (default: 10)
+ * @query {string} timeframe - Timeframe in days (default: 7)
+ */
+router.get('/search/trending-collections', getTrendingCollections);
+
+/**
+ * @route POST /api/v1/customer/search/track-collection-view
+ * @desc Track collection view for analytics
+ * @access Public
+ * @body {string} collectionId - Collection ID (required)
+ * @body {string} collectionHandle - Collection handle (optional)
+ * @body {string} collectionTitle - Collection title (optional)
+ * @body {number} viewDuration - View duration in seconds (optional)
+ * @body {number} scrollDepth - Scroll depth percentage (optional)
+ * @body {object} interactions - User interactions (optional)
+ * @body {string} viewContext - View context (search, navigation, etc.)
+ * @body {string} searchQuery - Search query if from search (optional)
+ */
+router.post('/search/track-collection-view', optionalAuth, trackCollectionView);
+
+/**
+ * @route GET /api/v1/customer/search/initial-screen
+ * @desc Get initial search screen data (trending products + collections)
+ * @access Public
+ * @query {string} limit - Number of items per category (default: 10)
+ * @query {string} timeframe - Timeframe in days (default: 7)
+ */
+router.get('/search/initial-screen', getInitialSearchScreen);
+
+/**
+ * @route GET /api/v1/customer/search/context
+ * @desc Get search context data (user history + trending searches + trending products)
+ * @access Public (optionalAuth for user history)
+ * @query {string} limit - Number of items per category (default: 10)
+ * @query {string} timeframe - Timeframe in days (default: 7)
+ */
+router.get('/search/context', optionalAuth, getSearchContext);
 
 // =============================================================================
 // SHARED/PUBLIC ROUTES

@@ -4,6 +4,7 @@ import SearchHistory from '../models/SearchHistory';
 import Product from '../models/Product';
 import ProductView from '../models/ProductView';
 import ProductCategory from '../models/ProductCategory';
+import CollectionView from '../models/CollectionView';
 
 export const search = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -585,8 +586,8 @@ export const getSearchAnalytics = async (req: Request, res: Response): Promise<v
         sourceStats,
         summary: {
           totalSearches: searchVolume.reduce((sum, day) => sum + day.totalSearches, 0),
-          overallSuccessRate: searchVolume.length > 0 
-            ? searchVolume.reduce((sum, day) => sum + day.successRate, 0) / searchVolume.length 
+          overallSuccessRate: searchVolume.length > 0
+            ? searchVolume.reduce((sum, day) => sum + day.successRate, 0) / searchVolume.length
             : 0,
           uniqueQueries: searchVolume.reduce((sum, day) => sum + day.uniqueQueryCount, 0)
         }
@@ -597,6 +598,279 @@ export const getSearchAnalytics = async (req: Request, res: Response): Promise<v
     res.status(500).json({
       success: false,
       message: 'Failed to get search analytics'
+    });
+  }
+};
+
+// ==================== COLLECTION ENDPOINTS ====================
+
+export const getTrendingCollections = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { limit = 10, timeframe = 7 } = req.query;
+    const limitNum = parseInt(limit as string);
+    const timeframeNum = parseInt(timeframe as string);
+
+    const trendingCollections = await CollectionView.getTrendingCollections(limitNum, timeframeNum);
+
+    res.json({
+      success: true,
+      data: {
+        collections: trendingCollections,
+        timeframe: timeframeNum,
+        count: trendingCollections.length
+      }
+    });
+  } catch (error) {
+    console.error('Error getting trending collections:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get trending collections'
+    });
+  }
+};
+
+export const trackCollectionView = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const {
+      collectionId,
+      collectionHandle,
+      collectionTitle,
+      viewDuration,
+      scrollDepth,
+      interactions,
+      viewContext,
+      searchQuery,
+      sessionId,
+      deviceInfo
+    } = req.body;
+
+    if (!collectionId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Collection ID is required'
+      });
+    }
+
+    const userId = req.user?.id;
+    const anonymousId = !userId ? (sessionId || req.sessionID || 'anonymous') : undefined;
+
+    await CollectionView.create({
+      user: userId,
+      anonymousId,
+      collectionId,
+      collectionHandle,
+      collectionTitle,
+      viewedAt: new Date(),
+      viewDuration,
+      scrollDepth,
+      session: {
+        sessionId: sessionId || req.sessionID || 'anonymous',
+        isNewSession: false,
+        sessionStartTime: new Date(),
+        referrer: req.headers.referer,
+        source: 'direct'
+      },
+      device: {
+        platform: deviceInfo?.platform || (req.headers['user-agent']?.includes('Mobile') ? 'mobile' : 'desktop'),
+        userAgent: req.headers['user-agent'],
+        os: deviceInfo?.os,
+        browser: deviceInfo?.browser,
+        screenWidth: deviceInfo?.screenWidth,
+        screenHeight: deviceInfo?.screenHeight
+      },
+      interactions: interactions || {
+        productsViewed: 0,
+        productsClicked: 0,
+        filtersApplied: 0,
+        sortingChanged: 0,
+        addedToWishlist: false,
+        addedToCart: false,
+        shared: false
+      },
+      viewContext: viewContext || 'direct',
+      searchQuery
+    });
+
+    res.json({
+      success: true,
+      message: 'Collection view tracked successfully'
+    });
+  } catch (error) {
+    console.error('Error tracking collection view:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to track collection view'
+    });
+  }
+};
+
+// ==================== UNIFIED SEARCH SCREEN ENDPOINTS ====================
+
+export const getInitialSearchScreen = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { limit = 10, timeframe = 7 } = req.query;
+    const limitNum = parseInt(limit as string);
+    const timeframeNum = parseInt(timeframe as string);
+
+    // Fetch all data in parallel for better performance
+    const [trendingProducts, trendingCollections] = await Promise.all([
+      ProductView.getTrendingProducts(limitNum, timeframeNum),
+      CollectionView.getTrendingCollections(limitNum, timeframeNum)
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        trendingProducts: trendingProducts.map((item: any) => ({
+          productId: item._id,
+          product: item.product,
+          views: item.views,
+          uniqueViewCount: item.uniqueViewCount,
+          engagementScore: item.engagementScore,
+          avgDuration: item.avgDuration
+        })),
+        trendingCollections: trendingCollections,
+        metadata: {
+          timeframe: timeframeNum,
+          productsCount: trendingProducts.length,
+          collectionsCount: trendingCollections.length,
+          lastUpdated: new Date().toISOString()
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error getting initial search screen data:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get initial search screen data'
+    });
+  }
+};
+
+export const getSearchContext = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { limit = 10, timeframe = 7 } = req.query;
+    const limitNum = parseInt(limit as string);
+    const timeframeNum = parseInt(timeframe as string);
+    const userId = req.user?.id;
+
+    // Build array of promises to fetch all data in parallel
+    const promises: Promise<any>[] = [
+      // Trending searches (global)
+      SearchHistory.aggregate([
+        {
+          $match: {
+            searchedAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
+            'results.hasResults': true
+          }
+        },
+        {
+          $group: {
+            _id: '$normalizedQuery',
+            recentCount: { $sum: 1 },
+            successRate: { $avg: { $cond: ['$isSuccessful', 1, 0] } }
+          }
+        },
+        {
+          $lookup: {
+            from: 'searchhistories',
+            let: { query: '$_id' },
+            pipeline: [
+              {
+                $match: {
+                  $expr: { $eq: ['$normalizedQuery', '$$query'] },
+                  searchedAt: {
+                    $gte: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
+                    $lt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+                  }
+                }
+              },
+              { $count: 'count' }
+            ],
+            as: 'previousWeek'
+          }
+        },
+        {
+          $addFields: {
+            previousCount: { $ifNull: [{ $arrayElemAt: ['$previousWeek.count', 0] }, 0] },
+            growthRate: {
+              $cond: {
+                if: { $gt: [{ $arrayElemAt: ['$previousWeek.count', 0] }, 0] },
+                then: {
+                  $divide: [
+                    { $subtract: ['$recentCount', { $arrayElemAt: ['$previousWeek.count', 0] }] },
+                    { $arrayElemAt: ['$previousWeek.count', 0] }
+                  ]
+                },
+                else: 1
+              }
+            }
+          }
+        },
+        {
+          $match: {
+            recentCount: { $gte: 3 },
+            growthRate: { $gte: 0.2 }
+          }
+        },
+        {
+          $sort: { growthRate: -1, recentCount: -1 }
+        },
+        {
+          $limit: limitNum
+        },
+        {
+          $project: {
+            query: '$_id',
+            recentCount: 1,
+            previousCount: 1,
+            growthRate: 1,
+            successRate: 1,
+            _id: 0
+          }
+        }
+      ]),
+      // Trending products
+      ProductView.getTrendingProducts(limitNum, timeframeNum)
+    ];
+
+    // Add recent searches if user is authenticated
+    if (userId) {
+      promises.push(SearchHistory.getUserSearchHistory(userId, limitNum));
+    } else {
+      promises.push(Promise.resolve([])); // Empty array for guests
+    }
+
+    const [trendingSearches, trendingProducts, recentSearches] = await Promise.all(promises);
+
+    res.json({
+      success: true,
+      data: {
+        recentSearches: recentSearches, // User-specific, empty if not authenticated
+        trendingSearches: trendingSearches, // Global trending
+        trendingProducts: trendingProducts.map((item: any) => ({
+          productId: item._id,
+          product: item.product,
+          views: item.views,
+          uniqueViewCount: item.uniqueViewCount,
+          engagementScore: item.engagementScore,
+          avgDuration: item.avgDuration
+        })),
+        metadata: {
+          isAuthenticated: !!userId,
+          recentSearchesCount: recentSearches.length,
+          trendingSearchesCount: trendingSearches.length,
+          productsCount: trendingProducts.length,
+          timeframe: timeframeNum,
+          lastUpdated: new Date().toISOString()
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error getting search context data:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get search context data'
     });
   }
 };

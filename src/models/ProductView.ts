@@ -354,4 +354,35 @@ ProductViewSchema.post('save', async function() {
   }
 });
 
-export default mongoose.model<IProductView>('ProductView', ProductViewSchema);
+// =============================================================================
+// MODEL EXPORT WITH STATIC METHODS INTERFACE
+// =============================================================================
+
+export interface IProductViewModel extends mongoose.Model<IProductView> {
+  getProductViews(
+    productId: string,
+    startDate: Date,
+    endDate: Date
+  ): Promise<number>;
+  getUniqueViewers(
+    productId: string,
+    startDate: Date,
+    endDate: Date
+  ): Promise<any[]>;
+  getViewsByPlatform(
+    productId: string,
+    startDate: Date,
+    endDate: Date
+  ): Promise<any[]>;
+  getTrendingProducts(
+    limit?: number,
+    timeframe?: number
+  ): Promise<any[]>;
+}
+
+const ProductView = mongoose.model<IProductView, IProductViewModel>(
+  'ProductView',
+  ProductViewSchema
+);
+
+export default ProductView;
