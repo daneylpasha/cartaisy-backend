@@ -5,6 +5,9 @@ import Product from '../models/Product';
 import ProductView from '../models/ProductView';
 import ProductCategory from '../models/ProductCategory';
 import CollectionView from '../models/CollectionView';
+import ShopifyStorefrontService from '../services/shopifyStorefrontService';
+import productEnrichment from '../services/productEnrichmentService';
+import { transformShopifyCollection, transformShopifyProductEdges } from '../utils/shopifyTransformers';
 
 export const search = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -720,38 +723,76 @@ export const getInitialSearchScreen = async (req: Request, res: Response): Promi
 
     // Extract just the product documents (already populated from aggregation)
     let trendingProducts = trendingProductsData.map((item: any) => item.product);
+    let usedProductFallback = false;
 
-    // Fallback Level 1: If no trending products, get featured/popular products
+    // Fallback: Fetch products from Shopify if no trending products
     if (trendingProducts.length === 0) {
-      trendingProducts = await Product.find({
-        status: 'active',
-        $or: [
-          { 'mobileDisplay.isFeatured': true },
-          { 'analytics.viewCount': { $gt: 0 } }
-        ]
-      })
-        .sort({
-          'mobileDisplay.priority': -1,
-          'analytics.viewCount': -1,
-          'reviews.averageRating': -1
-        })
-        .limit(limitNum)
-        .select('-seo -inventoryTracking.history -analytics.conversionEvents')
-        .lean();
+      try {
+        const shopifyProductsResponse = await ShopifyStorefrontService.getProducts(limitNum);
+
+        if (shopifyProductsResponse?.data?.products?.edges) {
+          // Transform Shopify products to our format
+          const transformedProducts = transformShopifyProductEdges(shopifyProductsResponse.data.products.edges);
+
+          // Enrich products with ratings (match homescreen format)
+          trendingProducts = await productEnrichment.enrichProducts(transformedProducts);
+          usedProductFallback = true;
+        }
+      } catch (error) {
+        console.error('Error fetching Shopify products as fallback:', error);
+        // Keep trendingProducts as empty array if Shopify fetch fails
+      }
+    } else {
+      // Enrich products with ratings (match homescreen format)
+      trendingProducts = await productEnrichment.enrichProducts(trendingProducts);
     }
 
-    // Fallback Level 2: If still no products, get ANY active products
-    if (trendingProducts.length === 0) {
-      trendingProducts = await Product.find({ status: 'active' })
-        .sort({ createdAt: -1 }) // Most recent first
-        .limit(limitNum)
-        .select('-seo -inventoryTracking.history -analytics.conversionEvents')
-        .lean();
-    }
-
-    // Fallback: Collections remain empty for now
-    // You can add Shopify collection fetching here if needed
+    // Fallback: Fetch collections from Shopify if no trending collections
     let finalCollections = trendingCollections;
+
+    if (finalCollections.length === 0) {
+      try {
+        const shopifyCollectionsResponse = await ShopifyStorefrontService.getCollections(limitNum);
+
+        // Fetch full collection data with products (match homescreen format)
+        const enrichedCollections = await Promise.all(
+          shopifyCollectionsResponse.data.collections.edges.map(async (edge: any) => {
+            try {
+              const collectionId = edge.node.id;
+
+              // Fetch full collection with products
+              const fullCollectionResponse = await ShopifyStorefrontService.getCollectionById(collectionId, 20);
+
+              if (!fullCollectionResponse?.data?.collection) {
+                return null;
+              }
+
+              // Transform collection (like homescreen does)
+              const transformedCollection = transformShopifyCollection(fullCollectionResponse.data.collection);
+
+              // Enrich products with ratings (like homescreen does)
+              const enrichedProducts = await productEnrichment.enrichProducts(
+                transformedCollection.products || []
+              );
+
+              return {
+                ...transformedCollection,
+                products: enrichedProducts
+              };
+            } catch (error) {
+              console.error('Error fetching collection details:', error);
+              return null;
+            }
+          })
+        );
+
+        // Filter out failed fetches
+        finalCollections = enrichedCollections.filter(c => c !== null);
+      } catch (error) {
+        console.error('Error fetching Shopify collections as fallback:', error);
+        // Keep finalCollections as empty array if Shopify fetch fails
+      }
+    }
 
     res.json({
       success: true,
@@ -764,7 +805,7 @@ export const getInitialSearchScreen = async (req: Request, res: Response): Promi
           collectionsCount: finalCollections.length,
           lastUpdated: new Date().toISOString(),
           isFallback: {
-            products: trendingProductsData.length === 0,
+            products: usedProductFallback,
             collections: trendingCollections.length === 0
           }
         }
@@ -877,33 +918,28 @@ export const getSearchContext = async (req: Request, res: Response): Promise<voi
 
     // Extract just the product documents (already populated from aggregation)
     let trendingProducts = trendingProductsData.map((item: any) => item.product);
+    let usedProductFallback = false;
 
-    // Fallback Level 1: If no trending products, get featured/popular products
+    // Fallback: Fetch products from Shopify if no trending products
     if (trendingProducts.length === 0) {
-      trendingProducts = await Product.find({
-        status: 'active',
-        $or: [
-          { 'mobileDisplay.isFeatured': true },
-          { 'analytics.viewCount': { $gt: 0 } }
-        ]
-      })
-        .sort({
-          'mobileDisplay.priority': -1,
-          'analytics.viewCount': -1,
-          'reviews.averageRating': -1
-        })
-        .limit(limitNum)
-        .select('-seo -inventoryTracking.history -analytics.conversionEvents')
-        .lean();
-    }
+      try {
+        const shopifyProductsResponse = await ShopifyStorefrontService.getProducts(limitNum);
 
-    // Fallback Level 2: If still no products, get ANY active products
-    if (trendingProducts.length === 0) {
-      trendingProducts = await Product.find({ status: 'active' })
-        .sort({ createdAt: -1 }) // Most recent first
-        .limit(limitNum)
-        .select('-seo -inventoryTracking.history -analytics.conversionEvents')
-        .lean();
+        if (shopifyProductsResponse?.data?.products?.edges) {
+          // Transform Shopify products to our format
+          const transformedProducts = transformShopifyProductEdges(shopifyProductsResponse.data.products.edges);
+
+          // Enrich products with ratings (match homescreen format)
+          trendingProducts = await productEnrichment.enrichProducts(transformedProducts);
+          usedProductFallback = true;
+        }
+      } catch (error) {
+        console.error('Error fetching Shopify products as fallback:', error);
+        // Keep trendingProducts as empty array if Shopify fetch fails
+      }
+    } else {
+      // Enrich products with ratings (match homescreen format)
+      trendingProducts = await productEnrichment.enrichProducts(trendingProducts);
     }
 
     res.json({
@@ -920,7 +956,7 @@ export const getSearchContext = async (req: Request, res: Response): Promise<voi
           timeframe: timeframeNum,
           lastUpdated: new Date().toISOString(),
           isFallback: {
-            products: trendingProductsData.length === 0
+            products: usedProductFallback
           }
         }
       }
