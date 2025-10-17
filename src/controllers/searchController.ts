@@ -385,8 +385,9 @@ export class SearchController extends Controller {
   }
 
   /**
-   * Main Product Search
-   * Comprehensive search with filters, pagination, and sorting
+   * Main Product & Collection Search
+   * Comprehensive search with filters, pagination, and sorting.
+   * Returns both products and collections for better discovery.
    *
    * @param q - Search query
    * @param page - Page number (default: 1)
@@ -426,97 +427,175 @@ export class SearchController extends Controller {
       const skip = (pageNum - 1) * limitNum;
       const searchQuery = q.trim();
 
-      // Build search aggregation pipeline
-      const pipeline: any[] = [
-        {
-          $match: {
-            $text: { $search: searchQuery },
-            status: 'active'
+      // Check if filters are applied
+      const hasFilters = !!(category || priceMin || priceMax || brand || rating || inStock);
+
+      let products: any[] = [];
+      let collections: any[] = [];
+      let total = 0;
+
+      // If no filters: Use Shopify predictive search for both products and collections
+      if (!hasFilters && pageNum === 1) {
+        try {
+          const shopifyResults = await ShopifyStorefrontService.predictiveSearch(searchQuery, limitNum);
+
+          if (shopifyResults?.data?.predictiveSearch) {
+            // Transform and enrich products
+            const shopifyProducts = shopifyResults.data.predictiveSearch.products || [];
+            const transformedProducts = shopifyProducts.map((product: any) => ({
+              productId: product.id,
+              title: product.title,
+              handle: product.handle,
+              vendor: product.vendor,
+              productType: product.productType,
+              tags: product.tags,
+              images: product.featuredImage ? [product.featuredImage.url] : [],
+              price: parseFloat(product.priceRange.minVariantPrice.amount),
+              compareAtPrice: product.compareAtPriceRange?.minVariantPrice
+                ? parseFloat(product.compareAtPriceRange.minVariantPrice.amount)
+                : 0,
+              currency: product.priceRange.minVariantPrice.currencyCode,
+              inStock: true,
+              availableQuantity: 0,
+              totalQuantity: 0,
+              rating: 0,
+              reviewsCount: 0
+            }));
+
+            // Enrich with ratings from MongoDB
+            products = await productEnrichment.enrichProducts(transformedProducts);
+
+            // Transform collections
+            const shopifyCollections = shopifyResults.data.predictiveSearch.collections || [];
+            collections = shopifyCollections.map((collection: any) => ({
+              id: collection.id,
+              title: collection.title,
+              handle: collection.handle,
+              image: collection.image?.url || null,
+              description: null
+            }));
+
+            total = products.length;
           }
-        },
-        {
-          $addFields: {
-            score: { $meta: 'textScore' }
+        } catch (shopifyError) {
+          console.error('Shopify predictive search failed, falling back to MongoDB:', shopifyError);
+          // Fall through to MongoDB search below
+        }
+      }
+
+      // If filters are applied OR Shopify search failed: Use MongoDB for products
+      if (hasFilters || products.length === 0) {
+        // Build search aggregation pipeline
+        const pipeline: any[] = [
+          {
+            $match: {
+              $text: { $search: searchQuery },
+              status: 'active'
+            }
+          },
+          {
+            $addFields: {
+              score: { $meta: 'textScore' }
+            }
+          }
+        ];
+
+        // Add filters
+        const filterStage: any = {};
+
+        if (category) {
+          filterStage.category = new mongoose.Types.ObjectId(category);
+        }
+        if (brand) {
+          filterStage.vendor = new RegExp(brand, 'i');
+        }
+        if (priceMin || priceMax) {
+          filterStage.price = {};
+          if (priceMin) filterStage.price.$gte = priceMin;
+          if (priceMax) filterStage.price.$lte = priceMax;
+        }
+        if (rating) {
+          filterStage['reviews.averageRating'] = { $gte: rating };
+        }
+        if (inStock === 'true') {
+          filterStage['inventoryTracking.totalQuantity'] = { $gt: 0 };
+        }
+
+        if (Object.keys(filterStage).length > 0) {
+          pipeline.push({ $match: filterStage });
+        }
+
+        // Add sorting
+        let sortStage: any = {};
+        switch (sortBy) {
+          case 'price_low':
+            sortStage = { price: 1 };
+            break;
+          case 'price_high':
+            sortStage = { price: -1 };
+            break;
+          case 'rating':
+            sortStage = { 'reviews.averageRating': -1 };
+            break;
+          case 'popular':
+            sortStage = { 'analytics.viewCount': -1 };
+            break;
+          case 'newest':
+            sortStage = { createdAt: -1 };
+            break;
+          case 'relevance':
+          default:
+            sortStage = { score: -1 };
+            break;
+        }
+
+        pipeline.push({ $sort: sortStage });
+
+        // Get total count for pagination
+        const countPipeline = [...pipeline];
+        countPipeline.push({ $count: 'total' });
+        const countResult = await Product.aggregate(countPipeline);
+        total = countResult.length > 0 ? countResult[0].total : 0;
+
+        // Add pagination and lookup
+        pipeline.push({ $skip: skip });
+        pipeline.push({ $limit: limitNum });
+        pipeline.push({
+          $lookup: {
+            from: 'productcategories',
+            localField: 'category',
+            foreignField: '_id',
+            as: 'category'
+          }
+        });
+        pipeline.push({
+          $unwind: {
+            path: '$category',
+            preserveNullAndEmptyArrays: true
+          }
+        });
+
+        products = await Product.aggregate(pipeline);
+
+        // For filtered searches, still try to get collections from Shopify
+        if (!hasFilters && collections.length === 0) {
+          try {
+            const shopifyResults = await ShopifyStorefrontService.predictiveSearch(searchQuery, 5);
+            if (shopifyResults?.data?.predictiveSearch?.collections) {
+              const shopifyCollections = shopifyResults.data.predictiveSearch.collections;
+              collections = shopifyCollections.map((collection: any) => ({
+                id: collection.id,
+                title: collection.title,
+                handle: collection.handle,
+                image: collection.image?.url || null,
+                description: null
+              }));
+            }
+          } catch (collectionError) {
+            console.error('Failed to fetch collections:', collectionError);
           }
         }
-      ];
-
-      // Add filters
-      const filterStage: any = {};
-
-      if (category) {
-        filterStage.category = new mongoose.Types.ObjectId(category);
       }
-      if (brand) {
-        filterStage.vendor = new RegExp(brand, 'i');
-      }
-      if (priceMin || priceMax) {
-        filterStage.price = {};
-        if (priceMin) filterStage.price.$gte = priceMin;
-        if (priceMax) filterStage.price.$lte = priceMax;
-      }
-      if (rating) {
-        filterStage['reviews.averageRating'] = { $gte: rating };
-      }
-      if (inStock === 'true') {
-        filterStage['inventoryTracking.totalQuantity'] = { $gt: 0 };
-      }
-
-      if (Object.keys(filterStage).length > 0) {
-        pipeline.push({ $match: filterStage });
-      }
-
-      // Add sorting
-      let sortStage: any = {};
-      switch (sortBy) {
-        case 'price_low':
-          sortStage = { price: 1 };
-          break;
-        case 'price_high':
-          sortStage = { price: -1 };
-          break;
-        case 'rating':
-          sortStage = { 'reviews.averageRating': -1 };
-          break;
-        case 'popular':
-          sortStage = { 'analytics.viewCount': -1 };
-          break;
-        case 'newest':
-          sortStage = { createdAt: -1 };
-          break;
-        case 'relevance':
-        default:
-          sortStage = { score: -1 };
-          break;
-      }
-
-      pipeline.push({ $sort: sortStage });
-
-      // Get total count for pagination
-      const countPipeline = [...pipeline];
-      countPipeline.push({ $count: 'total' });
-      const countResult = await Product.aggregate(countPipeline);
-      const total = countResult.length > 0 ? countResult[0].total : 0;
-
-      // Add pagination and lookup
-      pipeline.push({ $skip: skip });
-      pipeline.push({ $limit: limitNum });
-      pipeline.push({
-        $lookup: {
-          from: 'productcategories',
-          localField: 'category',
-          foreignField: '_id',
-          as: 'category'
-        }
-      });
-      pipeline.push({
-        $unwind: {
-          path: '$category',
-          preserveNullAndEmptyArrays: true
-        }
-      });
-
-      const products = await Product.aggregate(pipeline);
 
       // Log search history
       const userId = request.user?.id;
@@ -556,6 +635,7 @@ export class SearchController extends Controller {
         success: true,
         data: {
           products,
+          collections, // Collections matching the search query
           query: searchQuery,
           filters: {
             category,
@@ -571,6 +651,11 @@ export class SearchController extends Controller {
             total: Math.ceil(total / limitNum),
             count: products.length,
             totalResults: total
+          },
+          metadata: {
+            productsCount: products.length,
+            collectionsCount: collections.length,
+            hasFilters: hasFilters
           }
         }
       };

@@ -2729,7 +2729,7 @@
 						}
 					}
 				},
-				"description": "Main Product Search\nComprehensive search with filters, pagination, and sorting",
+				"description": "Main Product & Collection Search\nComprehensive search with filters, pagination, and sorting.\nReturns both products and collections for better discovery.",
 				"tags": [
 					"Search"
 				],
