@@ -483,7 +483,44 @@ export class SearchController extends Controller {
         }
       }
 
-      // If filters are applied OR Shopify search failed: Use MongoDB for products
+      // If Shopify predictiveSearch returned 0 products, try Shopify searchProducts as fallback
+      if (products.length === 0 && !hasFilters && pageNum === 1) {
+        try {
+          const shopifySearchResults = await ShopifyStorefrontService.searchProducts(searchQuery, { limit: limitNum });
+
+          if (shopifySearchResults?.data?.products?.edges) {
+            const shopifyProducts = shopifySearchResults.data.products.edges.map((edge: any) => edge.node);
+            const transformedProducts = shopifyProducts.map((product: any) => ({
+              productId: product.id,
+              title: product.title,
+              handle: product.handle,
+              vendor: product.vendor,
+              productType: product.productType,
+              tags: product.tags,
+              description: product.description || '',
+              images: product.images?.edges.map((e: any) => e.node.url) || [],
+              price: parseFloat(product.priceRange.minVariantPrice.amount),
+              compareAtPrice: product.compareAtPriceRange?.minVariantPrice
+                ? parseFloat(product.compareAtPriceRange.minVariantPrice.amount)
+                : 0,
+              currency: product.priceRange.minVariantPrice.currencyCode,
+              inStock: product.availableForSale,
+              availableQuantity: product.totalInventory || 0,
+              totalQuantity: product.totalInventory || 0,
+              rating: 0,
+              reviewsCount: 0
+            }));
+
+            // Enrich with ratings from MongoDB
+            products = await productEnrichment.enrichProducts(transformedProducts);
+            total = products.length;
+          }
+        } catch (shopifySearchError) {
+          console.error('Shopify searchProducts fallback failed:', shopifySearchError);
+        }
+      }
+
+      // If filters are applied OR all Shopify searches failed: Use MongoDB for products
       if (hasFilters || products.length === 0) {
         // Build search aggregation pipeline
         const pipeline: any[] = [
