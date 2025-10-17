@@ -2687,7 +2687,11 @@
 				"tags": [
 					"Search"
 				],
-				"security": [],
+				"security": [
+					{
+						"jwt-optional": []
+					}
+				],
 				"parameters": [
 					{
 						"description": "- Number of items to return per category (default: 5, max 5)",
@@ -3309,7 +3313,11 @@
 				"tags": [
 					"Search"
 				],
-				"security": [],
+				"security": [
+					{
+						"jwt-optional": []
+					}
+				],
 				"parameters": [],
 				"requestBody": {
 					"description": "- Search details",

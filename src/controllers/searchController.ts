@@ -151,6 +151,7 @@ export class SearchController extends Controller {
    * @param timeframe - Timeframe in days for trending calculation (default: 7)
    */
   @Get('context')
+  @Security('jwt-optional')
   @TsoaResponse(500, 'Internal Server Error')
   public async getSearchContext(
     @Request() request: any,
@@ -1199,6 +1200,7 @@ export class SearchController extends Controller {
    * @param body - Search details
    */
   @Post('log')
+  @Security('jwt-optional')
   @TsoaResponse(400, 'Bad Request')
   @TsoaResponse(500, 'Internal Server Error')
   public async logSearch(

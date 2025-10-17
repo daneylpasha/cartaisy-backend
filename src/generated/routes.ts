@@ -966,6 +966,7 @@ export function RegisterRoutes(app: Router) {
                 timeframe: {"in":"query","name":"timeframe","dataType":"double"},
         };
         app.get('/api/v1/customer/search/context',
+            authenticateMiddleware([{"jwt-optional":[]}]),
             ...(fetchMiddlewares<RequestHandler>(SearchController)),
             ...(fetchMiddlewares<RequestHandler>(SearchController.prototype.getSearchContext)),
 
@@ -1345,6 +1346,7 @@ export function RegisterRoutes(app: Router) {
                 body: {"in":"body","name":"body","required":true,"dataType":"nestedObjectLiteral","nestedProperties":{"sessionId":{"dataType":"string"},"resultsCount":{"dataType":"double"},"selectedCollectionId":{"dataType":"string"},"selectedProductId":{"dataType":"string"},"searchType":{"dataType":"union","subSchemas":[{"dataType":"enum","enums":["text"]},{"dataType":"enum","enums":["product"]},{"dataType":"enum","enums":["collection"]}],"required":true},"query":{"dataType":"string","required":true}}},
         };
         app.post('/api/v1/customer/search/log',
+            authenticateMiddleware([{"jwt-optional":[]}]),
             ...(fetchMiddlewares<RequestHandler>(SearchController)),
             ...(fetchMiddlewares<RequestHandler>(SearchController.prototype.logSearch)),
 
