@@ -514,6 +514,25 @@ export class SearchController extends Controller {
             // Enrich with ratings from MongoDB
             products = await productEnrichment.enrichProducts(transformedProducts);
             total = products.length;
+
+            // Also try to get collections from Shopify predictiveSearch
+            if (collections.length === 0) {
+              try {
+                const collectionsResult = await ShopifyStorefrontService.predictiveSearch(searchQuery, 5);
+                if (collectionsResult?.data?.predictiveSearch?.collections) {
+                  const shopifyCollections = collectionsResult.data.predictiveSearch.collections;
+                  collections = shopifyCollections.map((collection: any) => ({
+                    id: collection.id,
+                    title: collection.title,
+                    handle: collection.handle,
+                    image: collection.image?.url || null,
+                    description: null
+                  }));
+                }
+              } catch (collectionError) {
+                console.error('Failed to fetch collections after searchProducts:', collectionError);
+              }
+            }
           }
         } catch (shopifySearchError) {
           console.error('Shopify searchProducts fallback failed:', shopifySearchError);
