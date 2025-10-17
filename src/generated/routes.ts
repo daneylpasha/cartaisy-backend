@@ -190,6 +190,8 @@ const models: TsoaRoute.Models = {
             "query": {"dataType":"string","required":true},
             "searchedAt": {"dataType":"datetime","required":true},
             "type": {"dataType":"union","subSchemas":[{"dataType":"enum","enums":["product"]},{"dataType":"enum","enums":["collection"]}],"required":true},
+            "productId": {"dataType":"string"},
+            "collectionId": {"dataType":"string"},
             "product": {"ref":"EnrichedProduct"},
             "collection": {"ref":"CollectionWithProducts"},
         },
@@ -203,6 +205,8 @@ const models: TsoaRoute.Models = {
             "type": {"dataType":"union","subSchemas":[{"dataType":"enum","enums":["product"]},{"dataType":"enum","enums":["collection"]}],"required":true},
             "recentCount": {"dataType":"double","required":true},
             "growthRate": {"dataType":"double","required":true},
+            "productId": {"dataType":"string"},
+            "collectionId": {"dataType":"string"},
             "product": {"ref":"EnrichedProduct"},
             "collection": {"ref":"CollectionWithProducts"},
         },
@@ -213,7 +217,7 @@ const models: TsoaRoute.Models = {
         "dataType": "refObject",
         "properties": {
             "success": {"dataType":"boolean","required":true},
-            "data": {"dataType":"nestedObjectLiteral","nestedProperties":{"metadata":{"dataType":"nestedObjectLiteral","nestedProperties":{"isFallback":{"dataType":"nestedObjectLiteral","nestedProperties":{"products":{"dataType":"boolean","required":true}},"required":true},"lastUpdated":{"dataType":"string","required":true},"timeframe":{"dataType":"double","required":true},"productsCount":{"dataType":"double","required":true},"trendingSearchesCount":{"dataType":"double","required":true},"recentSearchesCount":{"dataType":"double","required":true},"isAuthenticated":{"dataType":"boolean","required":true}},"required":true},"trendingProducts":{"dataType":"array","array":{"dataType":"refObject","ref":"EnrichedProduct"},"required":true},"trendingSearches":{"dataType":"array","array":{"dataType":"refObject","ref":"EnrichedTrendingSearch"},"required":true},"recentSearches":{"dataType":"array","array":{"dataType":"refObject","ref":"EnrichedSearchItem"},"required":true}},"required":true},
+            "data": {"dataType":"nestedObjectLiteral","nestedProperties":{"metadata":{"dataType":"nestedObjectLiteral","nestedProperties":{"isFallback":{"dataType":"nestedObjectLiteral","nestedProperties":{"trendingSearches":{"dataType":"boolean","required":true},"products":{"dataType":"boolean","required":true}},"required":true},"lastUpdated":{"dataType":"string","required":true},"timeframe":{"dataType":"double","required":true},"productsCount":{"dataType":"double","required":true},"trendingSearchesCount":{"dataType":"double","required":true},"recentSearchesCount":{"dataType":"double","required":true},"isAuthenticated":{"dataType":"boolean","required":true}},"required":true},"trendingProducts":{"dataType":"array","array":{"dataType":"refObject","ref":"EnrichedProduct"},"required":true},"trendingSearches":{"dataType":"array","array":{"dataType":"refObject","ref":"EnrichedTrendingSearch"},"required":true},"recentSearches":{"dataType":"array","array":{"dataType":"refObject","ref":"EnrichedSearchItem"},"required":true}},"required":true},
         },
         "additionalProperties": false,
     },
@@ -1325,6 +1329,37 @@ export function RegisterRoutes(app: Router) {
 
               await templateService.apiHandler({
                 methodName: 'trackCollectionView',
+                controller,
+                response,
+                next,
+                validatedArgs,
+                successStatus: undefined,
+              });
+            } catch (err) {
+                return next(err);
+            }
+        });
+        // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+        const argsSearchController_logSearch: Record<string, TsoaRoute.ParameterSchema> = {
+                request: {"in":"request","name":"request","required":true,"dataType":"object"},
+                body: {"in":"body","name":"body","required":true,"dataType":"nestedObjectLiteral","nestedProperties":{"sessionId":{"dataType":"string"},"resultsCount":{"dataType":"double"},"selectedCollectionId":{"dataType":"string"},"selectedProductId":{"dataType":"string"},"searchType":{"dataType":"union","subSchemas":[{"dataType":"enum","enums":["text"]},{"dataType":"enum","enums":["product"]},{"dataType":"enum","enums":["collection"]}],"required":true},"query":{"dataType":"string","required":true}}},
+        };
+        app.post('/api/v1/customer/search/log',
+            ...(fetchMiddlewares<RequestHandler>(SearchController)),
+            ...(fetchMiddlewares<RequestHandler>(SearchController.prototype.logSearch)),
+
+            async function SearchController_logSearch(request: ExRequest, response: ExResponse, next: any) {
+
+            // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+
+            let validatedArgs: any[] = [];
+            try {
+                validatedArgs = templateService.getValidatedArgs({ args: argsSearchController_logSearch, request, response });
+
+                const controller = new SearchController();
+
+              await templateService.apiHandler({
+                methodName: 'logSearch',
                 controller,
                 response,
                 next,
