@@ -1760,6 +1760,68 @@
 				"type": "object",
 				"additionalProperties": false
 			},
+			"Record_string.any_": {
+				"properties": {},
+				"additionalProperties": {},
+				"type": "object",
+				"description": "Construct a type with a set of properties K of type T"
+			},
+			"DetailedFavoritesResponse": {
+				"description": "Detailed favorites response with full product data and pagination",
+				"properties": {
+					"success": {
+						"type": "boolean"
+					},
+					"data": {
+						"properties": {
+							"pagination": {
+								"properties": {
+									"totalProducts": {
+										"type": "number",
+										"format": "double"
+									},
+									"count": {
+										"type": "number",
+										"format": "double"
+									},
+									"total": {
+										"type": "number",
+										"format": "double"
+									},
+									"current": {
+										"type": "number",
+										"format": "double"
+									}
+								},
+								"required": [
+									"totalProducts",
+									"count",
+									"total",
+									"current"
+								],
+								"type": "object"
+							},
+							"products": {
+								"items": {
+									"$ref": "#/components/schemas/Record_string.any_"
+								},
+								"type": "array"
+							}
+						},
+						"required": [
+							"pagination",
+							"products"
+						],
+						"type": "object"
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
 			"CollectionProduct": {
 				"description": "Product item in collection response",
 				"properties": {
@@ -3545,6 +3607,63 @@
 						"required": true,
 						"schema": {
 							"type": "string"
+						}
+					}
+				]
+			}
+		},
+		"/customer/favorites/detailed": {
+			"get": {
+				"operationId": "GetDetailedFavorites",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DetailedFavoritesResponse"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "Bad Request - Invalid pagination parameters"
+					},
+					"401": {
+						"description": "Unauthorized"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Get user's favorite products with full details and pagination\nReturns complete product data matching the PLP (Product Listing Page) structure",
+				"tags": [
+					"Favorites"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [
+					{
+						"in": "query",
+						"name": "page",
+						"required": false,
+						"schema": {
+							"default": 1,
+							"format": "double",
+							"type": "number"
+						}
+					},
+					{
+						"in": "query",
+						"name": "limit",
+						"required": false,
+						"schema": {
+							"default": 20,
+							"format": "double",
+							"type": "number"
 						}
 					}
 				]

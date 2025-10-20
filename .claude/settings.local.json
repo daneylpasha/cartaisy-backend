@@ -14,7 +14,8 @@
       "Bash(npm install:*)",
       "Bash(npm run tsoa:*)",
       "Bash(npm run)",
-      "Bash(npm run generate:*)"
+      "Bash(npm run generate:*)",
+      "Bash(npm run tsoa:generate)"
     ],
     "deny": [],
     "ask": []

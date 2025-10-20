@@ -1,10 +1,12 @@
-import { Get, Post, Delete, Route, Tags, Response, Body, Security, Request } from 'tsoa';
+import { Get, Post, Delete, Route, Tags, Response, Body, Security, Request, Query } from 'tsoa';
 import { Controller } from '@tsoa/runtime';
 import Favorite from '../models/Favorite';
+import Product from '../models/Product';
 import {
   FavoritesResponse,
   FavoriteRequest,
   FavoriteOperationResponse,
+  DetailedFavoritesResponse,
 } from '../types/api/favorites';
 
 /**
@@ -177,6 +179,139 @@ export class FavoritesController extends Controller {
       return {
         success: false,
         message: 'Failed to remove favorite',
+      };
+    }
+  }
+
+  /**
+   * Get user's favorite products with full details and pagination
+   * Returns complete product data matching the PLP (Product Listing Page) structure
+   */
+  @Get('detailed')
+  @Security('jwt')
+  @Response(401, 'Unauthorized')
+  @Response(400, 'Bad Request - Invalid pagination parameters')
+  @Response(500, 'Internal Server Error')
+  public async getDetailedFavorites(
+    @Request() request: any,
+    @Query() page: number = 1,
+    @Query() limit: number = 20
+  ): Promise<DetailedFavoritesResponse> {
+    try {
+      const userId = request.user?.id || request.user?._id;
+
+      if (!userId) {
+        this.setStatus(401);
+        return {
+          success: false,
+          data: {
+            products: [],
+            pagination: {
+              current: 1,
+              total: 0,
+              count: 0,
+              totalProducts: 0,
+            },
+          },
+        };
+      }
+
+      // Validate and sanitize pagination parameters
+      let pageNum = parseInt(String(page));
+      let limitNum = parseInt(String(limit));
+
+      // Validate page number
+      if (isNaN(pageNum) || pageNum < 1) {
+        pageNum = 1;
+      }
+
+      // Validate limit and enforce maximum
+      if (isNaN(limitNum) || limitNum < 1) {
+        limitNum = 20;
+      }
+      const MAX_LIMIT = 100;
+      if (limitNum > MAX_LIMIT) {
+        limitNum = MAX_LIMIT;
+      }
+
+      const skip = (pageNum - 1) * limitNum;
+
+      // Get total count of favorites for pagination
+      const totalFavorites = await Favorite.countDocuments({ userId });
+
+      // Get paginated favorite product IDs, sorted by most recently added
+      const favorites = await Favorite.find({ userId })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limitNum)
+        .select('productId')
+        .lean();
+
+      const productIds = favorites.map((fav) => fav.productId);
+
+      if (productIds.length === 0) {
+        return {
+          success: true,
+          data: {
+            products: [],
+            pagination: {
+              current: pageNum,
+              total: 0,
+              count: 0,
+              totalProducts: 0,
+            },
+          },
+        };
+      }
+
+      // Fetch products with the same structure as PLP
+      // Note: Products in MongoDB may not be stored with Shopify ID as the primary _id
+      // so we need to match by shopifyProductId field
+      const products = await Product.find({
+        shopifyProductId: { $in: productIds },
+        status: 'active',
+      })
+        .populate('category', 'name slug')
+        .select('-seo -inventoryTracking.history -analytics.conversionEvents')
+        .lean();
+
+      // Sort products to match the order of favorites (most recent first)
+      const productsMap = new Map(
+        products.map((p: any) => [p.shopifyProductId, p])
+      );
+      const sortedProducts = productIds
+        .map((id) => productsMap.get(id))
+        .filter((p) => p !== undefined);
+
+      return {
+        success: true,
+        data: {
+          products: sortedProducts,
+          pagination: {
+            current: pageNum,
+            total: Math.ceil(totalFavorites / limitNum),
+            count: sortedProducts.length,
+            totalProducts: totalFavorites,
+          },
+        },
+      };
+    } catch (error) {
+      console.error(
+        'Error fetching detailed favorites:',
+        error instanceof Error ? error.message : 'Unknown error'
+      );
+      this.setStatus(500);
+      return {
+        success: false,
+        data: {
+          products: [],
+          pagination: {
+            current: 1,
+            total: 0,
+            count: 0,
+            totalProducts: 0,
+          },
+        },
       };
     }
   }
