@@ -237,6 +237,14 @@ const UserSchema = new Schema<IUser>(
       index: true,
     },
 
+    // Stripe Integration
+    stripeCustomerId: {
+      type: String,
+      sparse: true,
+      unique: true,
+      index: true,
+    },
+
     // Core User Information
     name: {
       type: String,

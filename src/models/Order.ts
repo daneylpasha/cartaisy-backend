@@ -405,22 +405,28 @@ const OrderSchema = new Schema<IOrder>({
   },
   
   // Basic Order Information
-  orderNumber: { 
-    type: String, 
+  orderNumber: {
+    type: String,
     required: [true, 'Order number is required'],
     unique: true,
     trim: true,
     index: true,
     maxlength: [50, 'Order number cannot exceed 50 characters']
   },
-  user: { 
-    type: Schema.Types.ObjectId, 
-    ref: 'User', 
+  confirmationNumber: {
+    type: String,
+    trim: true,
+    sparse: true,
+    maxlength: [100, 'Confirmation number cannot exceed 100 characters']
+  },
+  user: {
+    type: Schema.Types.ObjectId,
+    ref: 'User',
     required: [true, 'User is required'],
     index: true
   },
-  email: { 
-    type: String, 
+  email: {
+    type: String,
     required: [true, 'Email is required'],
     lowercase: true,
     trim: true,
@@ -446,43 +452,72 @@ const OrderSchema = new Schema<IOrder>({
   },
   
   // Pricing
-  subtotalPrice: { 
-    type: Number, 
-    required: [true, 'Subtotal price is required'], 
+  subtotalPrice: {
+    type: Number,
+    required: [true, 'Subtotal price is required'],
     min: [0, 'Subtotal must be positive']
   },
-  totalTax: { 
-    type: Number, 
-    required: [true, 'Total tax is required'], 
+  subtotal: {
+    type: Number,
+    min: [0, 'Subtotal must be positive']
+  },
+  shippingCost: {
+    type: Number,
+    min: [0, 'Shipping cost must be positive'],
+    default: 0
+  },
+  discount: {
+    type: Number,
+    min: [0, 'Discount must be positive'],
+    default: 0
+  },
+  totalTax: {
+    type: Number,
+    required: [true, 'Total tax is required'],
     min: [0, 'Tax must be positive']
   },
-  totalPrice: { 
-    type: Number, 
-    required: [true, 'Total price is required'], 
+  tax: {
+    type: Number,
+    min: [0, 'Tax must be positive']
+  },
+  totalPrice: {
+    type: Number,
+    required: [true, 'Total price is required'],
     min: [0, 'Total price must be positive']
   },
-  currency: { 
-    type: String, 
+  currency: {
+    type: String,
     required: [true, 'Currency is required'],
     default: 'USD',
     uppercase: true,
     match: [/^[A-Z]{3}$/, 'Currency must be a valid 3-letter code']
   },
+  paymentMethod: {
+    type: String,
+    enum: ['stripe', 'shopify', 'paypal', 'cash', 'other'],
+    default: 'stripe'
+  },
+  paymentStatus: {
+    type: String,
+    enum: ['pending', 'paid', 'failed', 'refunded'],
+    default: 'pending',
+    index: true
+  },
   
   // Addresses
-  billingAddress: { 
-    type: OrderAddressSchema, 
-    required: [true, 'Billing address is required']
+  billingAddress: {
+    type: OrderAddressSchema,
+    required: false
   },
-  shippingAddress: { 
-    type: OrderAddressSchema, 
+  shippingAddress: {
+    type: OrderAddressSchema,
     required: [true, 'Shipping address is required']
   },
   
   // Shipping
-  shipping: { 
-    type: OrderShippingSchema, 
-    required: [true, 'Shipping information is required']
+  shipping: {
+    type: OrderShippingSchema,
+    required: false
   },
   
   // Status Tracking

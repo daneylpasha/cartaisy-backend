@@ -94,6 +94,7 @@ export interface IMarketing {
 export interface IUser extends Document {
   _id: ObjectId;
   shopifyCustomerId?: string;
+  stripeCustomerId?: string;
   name: string;
   email: string;
   password: string;
