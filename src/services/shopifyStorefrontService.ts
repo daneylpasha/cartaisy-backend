@@ -1127,6 +1127,427 @@ class ShopifyStorefrontService {
   }
 
   /**
+   * Update cart buyer identity and delivery address to get shipping rates
+   * This is the recommended way to get shipping options per Shopify 2025-01 API
+   * @param cartId - Shopify cart ID
+   * @param deliveryAddress - Shipping address to calculate rates for
+   * @returns Cart with available delivery options
+   */
+  async updateCartBuyerIdentity(
+    cartId: string,
+    deliveryAddress: {
+      address1: string;
+      address2?: string;
+      city: string;
+      province: string;
+      country: string;
+      zip: string;
+      firstName?: string;
+      lastName?: string;
+      phone?: string;
+    }
+  ): Promise<any> {
+    const query = `
+      mutation cartBuyerIdentityUpdate($cartId: ID!, $buyerIdentity: CartBuyerIdentityInput!) {
+        cartBuyerIdentityUpdate(cartId: $cartId, buyerIdentity: $buyerIdentity) {
+          cart {
+            id
+            buyerIdentity {
+              email
+              phone
+              countryCode
+              deliveryAddressPreferences {
+                ... on MailingAddress {
+                  address1
+                  address2
+                  city
+                  province
+                  country
+                  zip
+                }
+              }
+            }
+            deliveryGroups(first: 10) {
+              edges {
+                node {
+                  id
+                  deliveryOptions {
+                    handle
+                    title
+                    description
+                    estimatedCost {
+                      amount
+                      currencyCode
+                    }
+                    deliveryMethodType
+                  }
+                  selectedDeliveryOption {
+                    handle
+                    title
+                  }
+                }
+              }
+            }
+            estimatedCost {
+              totalAmount {
+                amount
+                currencyCode
+              }
+              subtotalAmount {
+                amount
+                currencyCode
+              }
+              totalTaxAmount {
+                amount
+                currencyCode
+              }
+              totalDutyAmount {
+                amount
+                currencyCode
+              }
+            }
+          }
+          userErrors {
+            field
+            message
+            code
+          }
+        }
+      }
+    `;
+
+    return this.query<any>(query, {
+      cartId,
+      buyerIdentity: {
+        deliveryAddressPreferences: [
+          {
+            deliveryAddress: {
+              address1: deliveryAddress.address1,
+              address2: deliveryAddress.address2 || null,
+              city: deliveryAddress.city,
+              provinceCode: deliveryAddress.province,
+              countryCode: deliveryAddress.country,
+              zip: deliveryAddress.zip,
+              firstName: deliveryAddress.firstName || null,
+              lastName: deliveryAddress.lastName || null,
+              phone: deliveryAddress.phone || null,
+            },
+          },
+        ],
+      },
+    });
+  }
+
+  /**
+   * Apply discount codes to cart
+   * Shopify supports stackable discount codes as of 2025-01 API
+   * @param cartId - Shopify cart ID
+   * @param discountCodes - Array of discount codes to apply
+   * @returns Cart with applied discounts
+   */
+  async applyDiscountCodes(cartId: string, discountCodes: string[]): Promise<any> {
+    const query = `
+      mutation cartDiscountCodesUpdate($cartId: ID!, $discountCodes: [String!]) {
+        cartDiscountCodesUpdate(cartId: $cartId, discountCodes: $discountCodes) {
+          cart {
+            id
+            discountCodes {
+              code
+              applicable
+            }
+            discountAllocations {
+              discountedAmount {
+                amount
+                currencyCode
+              }
+              ... on CartAutomaticDiscountAllocation {
+                title
+              }
+              ... on CartCodeDiscountAllocation {
+                code
+              }
+            }
+            estimatedCost {
+              totalAmount {
+                amount
+                currencyCode
+              }
+              subtotalAmount {
+                amount
+                currencyCode
+              }
+              totalTaxAmount {
+                amount
+                currencyCode
+              }
+              totalDutyAmount {
+                amount
+                currencyCode
+              }
+            }
+            lines(first: 100) {
+              edges {
+                node {
+                  id
+                  quantity
+                  estimatedCost {
+                    totalAmount {
+                      amount
+                      currencyCode
+                    }
+                  }
+                  discountAllocations {
+                    discountedAmount {
+                      amount
+                      currencyCode
+                    }
+                  }
+                }
+              }
+            }
+          }
+          userErrors {
+            field
+            message
+            code
+          }
+        }
+      }
+    `;
+
+    return this.query<any>(query, { cartId, discountCodes });
+  }
+
+  /**
+   * Create a draft order using Shopify Admin API
+   * Draft orders are recommended for custom checkout flows with external payments
+   * Reference: https://shopify.dev/docs/api/admin-graphql/latest/mutations/draftOrderCreate
+   * @param orderInput - Order details including line items, addresses, and shipping
+   * @returns Created draft order with ID
+   */
+  async createDraftOrder(orderInput: {
+    email: string;
+    lineItems: Array<{
+      variantId: string;
+      quantity: number;
+    }>;
+    shippingAddress: {
+      address1: string;
+      address2?: string;
+      city: string;
+      province: string;
+      country: string;
+      zip: string;
+      firstName?: string;
+      lastName?: string;
+      phone?: string;
+    };
+    billingAddress?: {
+      address1: string;
+      address2?: string;
+      city: string;
+      province: string;
+      country: string;
+      zip: string;
+      firstName?: string;
+      lastName?: string;
+      phone?: string;
+    };
+    shippingLine?: {
+      title: string;
+      price: string | number;
+      shippingRateHandle?: string;
+    };
+    customerId?: string;
+    note?: string;
+    tags?: string[];
+    metafields?: Array<{
+      namespace: string;
+      key: string;
+      value: string;
+      type: string;
+    }>;
+  }): Promise<any> {
+    const query = `
+      mutation draftOrderCreate($input: DraftOrderInput!) {
+        draftOrderCreate(input: $input) {
+          draftOrder {
+            id
+            name
+            status
+            email
+            subtotalPrice
+            totalPrice
+            totalTax
+            totalShippingPrice
+            currencyCode
+            invoiceUrl
+            lineItems(first: 100) {
+              edges {
+                node {
+                  id
+                  title
+                  quantity
+                  originalUnitPrice
+                  discountedUnitPrice
+                  variant {
+                    id
+                    title
+                  }
+                }
+              }
+            }
+            shippingAddress {
+              address1
+              address2
+              city
+              province
+              country
+              zip
+              phone
+            }
+            billingAddress {
+              address1
+              address2
+              city
+              province
+              country
+              zip
+              phone
+            }
+            createdAt
+            updatedAt
+          }
+          userErrors {
+            field
+            message
+          }
+        }
+      }
+    `;
+
+    // Use billing address = shipping address if not provided (common pattern)
+    const billingAddress = orderInput.billingAddress || orderInput.shippingAddress;
+
+    const input: any = {
+      email: orderInput.email,
+      lineItems: orderInput.lineItems.map((item) => ({
+        variantId: item.variantId,
+        quantity: item.quantity,
+      })),
+      shippingAddress: {
+        address1: orderInput.shippingAddress.address1,
+        address2: orderInput.shippingAddress.address2 || '',
+        city: orderInput.shippingAddress.city,
+        provinceCode: orderInput.shippingAddress.province,
+        countryCode: orderInput.shippingAddress.country,
+        zip: orderInput.shippingAddress.zip,
+        firstName: orderInput.shippingAddress.firstName || '',
+        lastName: orderInput.shippingAddress.lastName || '',
+        phone: orderInput.shippingAddress.phone || '',
+      },
+      billingAddress: {
+        address1: billingAddress.address1,
+        address2: billingAddress.address2 || '',
+        city: billingAddress.city,
+        provinceCode: billingAddress.province,
+        countryCode: billingAddress.country,
+        zip: billingAddress.zip,
+        firstName: billingAddress.firstName || '',
+        lastName: billingAddress.lastName || '',
+        phone: billingAddress.phone || '',
+      },
+    };
+
+    // Add shipping line if provided
+    if (orderInput.shippingLine) {
+      input.shippingLine = {
+        title: orderInput.shippingLine.title,
+        price: String(orderInput.shippingLine.price),
+        shippingRateHandle: orderInput.shippingLine.shippingRateHandle || null,
+      };
+    }
+
+    // Add customer ID if provided (links order to existing customer)
+    if (orderInput.customerId) {
+      input.customerId = orderInput.customerId;
+    }
+
+    // Add note if provided
+    if (orderInput.note) {
+      input.note = orderInput.note;
+    }
+
+    // Add tags if provided (useful for filtering/reporting)
+    if (orderInput.tags && orderInput.tags.length > 0) {
+      input.tags = orderInput.tags;
+    }
+
+    // Add metafields if provided (custom data storage)
+    if (orderInput.metafields && orderInput.metafields.length > 0) {
+      input.metafields = orderInput.metafields;
+    }
+
+    return this.queryAdmin<any>(query, { input });
+  }
+
+  /**
+   * Complete a draft order and convert it to an actual order
+   * Important: Set paymentPending=false when payment is already processed externally (Stripe)
+   * Reference: https://shopify.dev/docs/api/admin-graphql/latest/mutations/draftOrderComplete
+   * @param draftOrderId - Shopify draft order ID (format: gid://shopify/DraftOrder/12345)
+   * @param paymentPending - Set to false if payment already processed, true if pending
+   * @returns Completed order details
+   */
+  async completeDraftOrder(draftOrderId: string, paymentPending: boolean = false): Promise<any> {
+    const query = `
+      mutation draftOrderComplete($id: ID!, $paymentPending: Boolean) {
+        draftOrderComplete(id: $id, paymentPending: $paymentPending) {
+          draftOrder {
+            id
+            status
+            order {
+              id
+              name
+              email
+              confirmationNumber
+              confirmed
+              totalPrice
+              subtotalPrice
+              totalTax
+              totalShippingPrice
+              currencyCode
+              displayFinancialStatus
+              displayFulfillmentStatus
+              createdAt
+              updatedAt
+              lineItems(first: 100) {
+                edges {
+                  node {
+                    id
+                    title
+                    quantity
+                    variant {
+                      id
+                      title
+                    }
+                  }
+                }
+              }
+            }
+          }
+          userErrors {
+            field
+            message
+          }
+        }
+      }
+    `;
+
+    return this.queryAdmin<any>(query, { id: draftOrderId, paymentPending });
+  }
+
+  /**
    * Check if service is properly configured
    */
   isConfigured(): boolean {

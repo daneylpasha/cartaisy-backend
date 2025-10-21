@@ -1124,6 +1124,265 @@
 				"type": "object",
 				"additionalProperties": false
 			},
+			"PaymentMethodData": {
+				"description": "Payment method data for responses",
+				"properties": {
+					"id": {
+						"type": "string"
+					},
+					"type": {
+						"type": "string",
+						"enum": [
+							"card",
+							"google_pay",
+							"apple_pay"
+						]
+					},
+					"displayName": {
+						"type": "string"
+					},
+					"card": {
+						"properties": {
+							"expYear": {
+								"type": "number",
+								"format": "double"
+							},
+							"expMonth": {
+								"type": "number",
+								"format": "double"
+							},
+							"last4": {
+								"type": "string"
+							},
+							"brand": {
+								"type": "string"
+							}
+						},
+						"required": [
+							"expYear",
+							"expMonth",
+							"last4",
+							"brand"
+						],
+						"type": "object"
+					},
+					"billingAddress": {
+						"properties": {
+							"zip": {
+								"type": "string"
+							},
+							"country": {
+								"type": "string"
+							},
+							"province": {
+								"type": "string"
+							},
+							"city": {
+								"type": "string"
+							},
+							"address2": {
+								"type": "string"
+							},
+							"address1": {
+								"type": "string"
+							}
+						},
+						"required": [
+							"zip",
+							"country",
+							"province",
+							"city",
+							"address1"
+						],
+						"type": "object"
+					},
+					"isDefault": {
+						"type": "boolean"
+					},
+					"isExpired": {
+						"type": "boolean"
+					},
+					"createdAt": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"id",
+					"type",
+					"displayName",
+					"billingAddress",
+					"isDefault",
+					"isExpired",
+					"createdAt"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"GetPaymentMethodsResponse": {
+				"description": "Response for get payment methods",
+				"properties": {
+					"success": {
+						"type": "boolean"
+					},
+					"data": {
+						"properties": {
+							"hasDefault": {
+								"type": "boolean"
+							},
+							"count": {
+								"type": "number",
+								"format": "double"
+							},
+							"paymentMethods": {
+								"items": {
+									"$ref": "#/components/schemas/PaymentMethodData"
+								},
+								"type": "array"
+							}
+						},
+						"required": [
+							"hasDefault",
+							"count",
+							"paymentMethods"
+						],
+						"type": "object"
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"AddPaymentMethodResponse": {
+				"description": "Response for add payment method",
+				"properties": {
+					"success": {
+						"type": "boolean"
+					},
+					"data": {
+						"properties": {
+							"paymentMethod": {
+								"$ref": "#/components/schemas/PaymentMethodData"
+							}
+						},
+						"required": [
+							"paymentMethod"
+						],
+						"type": "object"
+					},
+					"message": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"success",
+					"data",
+					"message"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"AddPaymentMethodRequest": {
+				"description": "Request to add payment method",
+				"properties": {
+					"stripePaymentMethodId": {
+						"type": "string"
+					},
+					"billingAddress": {
+						"properties": {
+							"lastName": {
+								"type": "string"
+							},
+							"firstName": {
+								"type": "string"
+							},
+							"zip": {
+								"type": "string"
+							},
+							"country": {
+								"type": "string"
+							},
+							"province": {
+								"type": "string"
+							},
+							"city": {
+								"type": "string"
+							},
+							"address2": {
+								"type": "string"
+							},
+							"address1": {
+								"type": "string"
+							}
+						},
+						"required": [
+							"zip",
+							"country",
+							"province",
+							"city",
+							"address1"
+						],
+						"type": "object"
+					},
+					"isDefault": {
+						"type": "boolean"
+					}
+				},
+				"required": [
+					"stripePaymentMethodId",
+					"billingAddress"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"DeletePaymentMethodResponse": {
+				"description": "Response for delete payment method",
+				"properties": {
+					"success": {
+						"type": "boolean"
+					},
+					"message": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"success",
+					"message"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"SetDefaultPaymentMethodResponse": {
+				"description": "Response for set default payment method",
+				"properties": {
+					"success": {
+						"type": "boolean"
+					},
+					"data": {
+						"properties": {
+							"paymentMethod": {
+								"$ref": "#/components/schemas/PaymentMethodData"
+							}
+						},
+						"required": [
+							"paymentMethod"
+						],
+						"type": "object"
+					},
+					"message": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"success",
+					"data",
+					"message"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
 			"PromoTag": {
 				"description": "PromoTag for promotional badges on carousel items",
 				"properties": {
@@ -2135,6 +2394,759 @@
 					"DISCOUNT"
 				],
 				"description": "Sort options for collection products"
+			},
+			"InitCheckoutResponse": {
+				"description": "Response for checkout session initialization",
+				"properties": {
+					"success": {
+						"type": "boolean"
+					},
+					"data": {
+						"properties": {
+							"expiresAt": {
+								"type": "string"
+							},
+							"itemCount": {
+								"type": "number",
+								"format": "double"
+							},
+							"currency": {
+								"type": "string"
+							},
+							"subtotal": {
+								"type": "number",
+								"format": "double"
+							},
+							"cartId": {
+								"type": "string"
+							},
+							"sessionId": {
+								"type": "string"
+							}
+						},
+						"required": [
+							"expiresAt",
+							"itemCount",
+							"currency",
+							"subtotal",
+							"cartId",
+							"sessionId"
+						],
+						"type": "object"
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"InitCheckoutRequest": {
+				"description": "Request to initialize checkout session",
+				"properties": {
+					"cartId": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"cartId"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"ShippingRate": {
+				"description": "Checkout API Types\n\nTypeScript interfaces for checkout flow requests and responses\nEnsures type safety across checkout controllers and services",
+				"properties": {
+					"handle": {
+						"type": "string"
+					},
+					"title": {
+						"type": "string"
+					},
+					"price": {
+						"type": "number",
+						"format": "double"
+					},
+					"description": {
+						"type": "string"
+					},
+					"estimatedDelivery": {
+						"type": "string"
+					},
+					"deliveryMethodType": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"handle",
+					"title",
+					"price"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"AddressSummary": {
+				"properties": {
+					"address1": {
+						"type": "string"
+					},
+					"address2": {
+						"type": "string"
+					},
+					"city": {
+						"type": "string"
+					},
+					"province": {
+						"type": "string"
+					},
+					"country": {
+						"type": "string"
+					},
+					"zip": {
+						"type": "string"
+					},
+					"phone": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"address1",
+					"city",
+					"province",
+					"country",
+					"zip"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"GetShippingRatesResponse": {
+				"description": "Response with available shipping rates",
+				"properties": {
+					"success": {
+						"type": "boolean"
+					},
+					"data": {
+						"properties": {
+							"address": {
+								"$ref": "#/components/schemas/AddressSummary"
+							},
+							"shippingRates": {
+								"items": {
+									"$ref": "#/components/schemas/ShippingRate"
+								},
+								"type": "array"
+							}
+						},
+						"required": [
+							"address",
+							"shippingRates"
+						],
+						"type": "object"
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"SaveStep1Response": {
+				"description": "Response for Step 1 completion",
+				"properties": {
+					"success": {
+						"type": "boolean"
+					},
+					"data": {
+						"properties": {
+							"estimatedDelivery": {
+								"type": "string"
+							},
+							"shippingCost": {
+								"type": "number",
+								"format": "double"
+							},
+							"completedSteps": {
+								"items": {
+									"type": "number",
+									"format": "double"
+								},
+								"type": "array"
+							},
+							"currentStep": {
+								"type": "number",
+								"format": "double"
+							},
+							"status": {
+								"type": "string"
+							},
+							"sessionId": {
+								"type": "string"
+							}
+						},
+						"required": [
+							"shippingCost",
+							"completedSteps",
+							"currentStep",
+							"status",
+							"sessionId"
+						],
+						"type": "object"
+					},
+					"message": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"success",
+					"data",
+					"message"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"SaveStep1Request": {
+				"description": "Request to save Step 1 (shipping) data",
+				"properties": {
+					"sessionId": {
+						"type": "string"
+					},
+					"shippingAddressId": {
+						"type": "number",
+						"format": "double"
+					},
+					"deliveryInstructions": {
+						"type": "string"
+					},
+					"contactNumber": {
+						"type": "string"
+					},
+					"shippingRateHandle": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"sessionId",
+					"shippingAddressId",
+					"contactNumber",
+					"shippingRateHandle"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"SaveStep2Response": {
+				"description": "Response for Step 2 completion",
+				"properties": {
+					"success": {
+						"type": "boolean"
+					},
+					"data": {
+						"properties": {
+							"paymentMethod": {
+								"properties": {
+									"type": {
+										"type": "string"
+									},
+									"displayName": {
+										"type": "string"
+									},
+									"id": {
+										"type": "string"
+									}
+								},
+								"required": [
+									"type",
+									"displayName",
+									"id"
+								],
+								"type": "object"
+							},
+							"completedSteps": {
+								"items": {
+									"type": "number",
+									"format": "double"
+								},
+								"type": "array"
+							},
+							"currentStep": {
+								"type": "number",
+								"format": "double"
+							},
+							"status": {
+								"type": "string"
+							},
+							"sessionId": {
+								"type": "string"
+							}
+						},
+						"required": [
+							"paymentMethod",
+							"completedSteps",
+							"currentStep",
+							"status",
+							"sessionId"
+						],
+						"type": "object"
+					},
+					"message": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"success",
+					"data",
+					"message"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"SaveStep2Request": {
+				"description": "Request to save Step 2 (payment method) data",
+				"properties": {
+					"sessionId": {
+						"type": "string"
+					},
+					"paymentMethodId": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"sessionId",
+					"paymentMethodId"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"DiscountInfo": {
+				"properties": {
+					"code": {
+						"type": "string"
+					},
+					"amount": {
+						"type": "number",
+						"format": "double"
+					},
+					"type": {
+						"type": "string",
+						"enum": [
+							"percentage",
+							"fixed_amount"
+						]
+					},
+					"applicable": {
+						"type": "boolean"
+					}
+				},
+				"required": [
+					"code",
+					"amount",
+					"type",
+					"applicable"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"PricingBreakdown": {
+				"properties": {
+					"subtotal": {
+						"type": "number",
+						"format": "double"
+					},
+					"shippingCost": {
+						"type": "number",
+						"format": "double"
+					},
+					"discountAmount": {
+						"type": "number",
+						"format": "double"
+					},
+					"couponDiscount": {
+						"type": "number",
+						"format": "double"
+					},
+					"tax": {
+						"type": "number",
+						"format": "double"
+					},
+					"grandTotal": {
+						"type": "number",
+						"format": "double"
+					},
+					"currency": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"subtotal",
+					"shippingCost",
+					"discountAmount",
+					"couponDiscount",
+					"tax",
+					"grandTotal",
+					"currency"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"ApplyPromoResponse": {
+				"description": "Response for promo code application",
+				"properties": {
+					"success": {
+						"type": "boolean"
+					},
+					"data": {
+						"properties": {
+							"pricing": {
+								"$ref": "#/components/schemas/PricingBreakdown"
+							},
+							"discount": {
+								"$ref": "#/components/schemas/DiscountInfo"
+							}
+						},
+						"required": [
+							"pricing",
+							"discount"
+						],
+						"type": "object"
+					},
+					"message": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"ApplyPromoRequest": {
+				"description": "Request to apply promo code",
+				"properties": {
+					"sessionId": {
+						"type": "string"
+					},
+					"promoCode": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"sessionId",
+					"promoCode"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"CheckoutSummaryResponse": {
+				"description": "Response for checkout summary",
+				"properties": {
+					"success": {
+						"type": "boolean"
+					},
+					"data": {
+						"properties": {
+							"expiresAt": {
+								"type": "string"
+							},
+							"status": {
+								"type": "string"
+							},
+							"promoCode": {
+								"type": "string"
+							},
+							"deliveryInstructions": {
+								"type": "string"
+							},
+							"pricing": {
+								"$ref": "#/components/schemas/PricingBreakdown"
+							},
+							"paymentMethod": {
+								"properties": {
+									"last4": {
+										"type": "string"
+									},
+									"type": {
+										"type": "string"
+									},
+									"displayName": {
+										"type": "string"
+									},
+									"id": {
+										"type": "string"
+									}
+								},
+								"required": [
+									"type",
+									"displayName",
+									"id"
+								],
+								"type": "object"
+							},
+							"shippingMethod": {
+								"properties": {
+									"estimatedDelivery": {
+										"type": "string"
+									},
+									"price": {
+										"type": "number",
+										"format": "double"
+									},
+									"title": {
+										"type": "string"
+									}
+								},
+								"required": [
+									"price",
+									"title"
+								],
+								"type": "object"
+							},
+							"shippingAddress": {
+								"allOf": [
+									{
+										"$ref": "#/components/schemas/AddressSummary"
+									},
+									{
+										"properties": {
+											"lastName": {
+												"type": "string"
+											},
+											"firstName": {
+												"type": "string"
+											}
+										},
+										"type": "object"
+									}
+								]
+							},
+							"items": {
+								"items": {
+									"properties": {
+										"total": {
+											"type": "number",
+											"format": "double"
+										},
+										"quantity": {
+											"type": "number",
+											"format": "double"
+										},
+										"price": {
+											"type": "number",
+											"format": "double"
+										},
+										"image": {
+											"type": "string",
+											"nullable": true
+										},
+										"variantTitle": {
+											"type": "string"
+										},
+										"title": {
+											"type": "string"
+										},
+										"id": {
+											"type": "string"
+										}
+									},
+									"required": [
+										"total",
+										"quantity",
+										"price",
+										"image",
+										"title",
+										"id"
+									],
+									"type": "object"
+								},
+								"type": "array"
+							},
+							"sessionId": {
+								"type": "string"
+							}
+						},
+						"required": [
+							"expiresAt",
+							"status",
+							"pricing",
+							"paymentMethod",
+							"shippingMethod",
+							"shippingAddress",
+							"items",
+							"sessionId"
+						],
+						"type": "object"
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"CompleteCheckoutResponse": {
+				"description": "Response for successful checkout completion",
+				"properties": {
+					"success": {
+						"type": "boolean"
+					},
+					"data": {
+						"properties": {
+							"payment": {
+								"properties": {
+									"clientSecret": {
+										"type": "string"
+									},
+									"paymentIntentId": {
+										"type": "string"
+									},
+									"status": {
+										"type": "string",
+										"enum": [
+											"succeeded",
+											"requires_action",
+											"processing"
+										]
+									}
+								},
+								"required": [
+									"paymentIntentId",
+									"status"
+								],
+								"type": "object"
+							},
+							"order": {
+								"properties": {
+									"estimatedDelivery": {
+										"type": "string"
+									},
+									"status": {
+										"type": "string"
+									},
+									"currency": {
+										"type": "string"
+									},
+									"totalPrice": {
+										"type": "number",
+										"format": "double"
+									},
+									"confirmationNumber": {
+										"type": "string"
+									},
+									"shopifyOrderId": {
+										"type": "string"
+									},
+									"orderNumber": {
+										"type": "string"
+									},
+									"id": {
+										"type": "string"
+									}
+								},
+								"required": [
+									"status",
+									"currency",
+									"totalPrice",
+									"orderNumber",
+									"id"
+								],
+								"type": "object"
+							}
+						},
+						"required": [
+							"payment",
+							"order"
+						],
+						"type": "object"
+					},
+					"message": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"success",
+					"data",
+					"message"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"CheckoutRequiresActionResponse": {
+				"description": "Response when checkout requires additional action (3D Secure)",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"enum": [
+							true
+						],
+						"nullable": false
+					},
+					"requiresAction": {
+						"type": "boolean",
+						"enum": [
+							true
+						],
+						"nullable": false
+					},
+					"data": {
+						"properties": {
+							"nextAction": {
+								"properties": {
+									"redirectUrl": {
+										"type": "string"
+									},
+									"type": {
+										"type": "string"
+									}
+								},
+								"required": [
+									"type"
+								],
+								"type": "object"
+							},
+							"clientSecret": {
+								"type": "string"
+							},
+							"paymentIntentId": {
+								"type": "string"
+							}
+						},
+						"required": [
+							"nextAction",
+							"clientSecret",
+							"paymentIntentId"
+						],
+						"type": "object"
+					},
+					"message": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"success",
+					"requiresAction",
+					"data",
+					"message"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"CompleteCheckoutRequest": {
+				"description": "Request to complete checkout and process payment",
+				"properties": {
+					"sessionId": {
+						"type": "string"
+					},
+					"paymentIntentId": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"sessionId"
+				],
+				"type": "object",
+				"additionalProperties": false
 			},
 			"CartLineItem": {
 				"description": "Cart line item details",
@@ -3464,6 +4476,180 @@
 				]
 			}
 		},
+		"/payment-methods": {
+			"get": {
+				"operationId": "GetPaymentMethods",
+				"responses": {
+					"200": {
+						"description": "List of user's payment methods",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GetPaymentMethodsResponse"
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "Unauthorized"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Get all payment methods for authenticated user",
+				"tags": [
+					"Payment Methods"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": []
+			},
+			"post": {
+				"operationId": "AddPaymentMethod",
+				"responses": {
+					"200": {
+						"description": "Created payment method",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/AddPaymentMethodResponse"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "Bad Request - Invalid payment method"
+					},
+					"401": {
+						"description": "Unauthorized"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Add a new payment method\n\nFlow:\n1. Frontend creates payment method with Stripe.js (PCI compliant)\n2. Frontend sends stripePaymentMethodId to backend\n3. Backend attaches to Stripe customer\n4. Backend saves to database",
+				"tags": [
+					"Payment Methods"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [],
+				"requestBody": {
+					"description": "- Payment method details",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/AddPaymentMethodRequest",
+								"description": "- Payment method details"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/payment-methods/{id}": {
+			"delete": {
+				"operationId": "DeletePaymentMethod",
+				"responses": {
+					"200": {
+						"description": "Success message",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DeletePaymentMethodResponse"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "Bad Request - Cannot delete default payment method"
+					},
+					"401": {
+						"description": "Unauthorized"
+					},
+					"404": {
+						"description": "Payment method not found"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Delete a payment method",
+				"tags": [
+					"Payment Methods"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [
+					{
+						"description": "- Payment method ID",
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				]
+			}
+		},
+		"/payment-methods/{id}/default": {
+			"patch": {
+				"operationId": "SetDefaultPaymentMethod",
+				"responses": {
+					"200": {
+						"description": "Updated payment method",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SetDefaultPaymentMethodResponse"
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "Unauthorized"
+					},
+					"404": {
+						"description": "Payment method not found"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Set payment method as default",
+				"tags": [
+					"Payment Methods"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [
+					{
+						"description": "- Payment method ID",
+						"in": "path",
+						"name": "id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				]
+			}
+		},
 		"/customer/homescreen": {
 			"get": {
 				"operationId": "GetHomescreenData",
@@ -3755,6 +4941,370 @@
 						}
 					}
 				]
+			}
+		},
+		"/checkout/init": {
+			"post": {
+				"operationId": "InitializeCheckout",
+				"responses": {
+					"200": {
+						"description": "Checkout session details",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/InitCheckoutResponse"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "Bad Request - Invalid cart ID"
+					},
+					"401": {
+						"description": "Unauthorized"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Initialize checkout session from cart\n\nCreates a checkout session linked to the user's Shopify cart\nSession expires in 30 minutes",
+				"tags": [
+					"Checkout"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [],
+				"requestBody": {
+					"description": "- Cart ID",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/InitCheckoutRequest",
+								"description": "- Cart ID"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/checkout/shipping-rates": {
+			"get": {
+				"operationId": "GetShippingRates",
+				"responses": {
+					"200": {
+						"description": "Available shipping rates",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GetShippingRatesResponse"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "Bad Request"
+					},
+					"401": {
+						"description": "Unauthorized"
+					},
+					"404": {
+						"description": "Session or address not found"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Get available shipping rates for an address\n\nUses Shopify Storefront API to get real-time shipping rates",
+				"tags": [
+					"Checkout"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [
+					{
+						"description": "- Checkout session ID",
+						"in": "query",
+						"name": "sessionId",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"description": "- User address array index",
+						"in": "query",
+						"name": "addressId",
+						"required": true,
+						"schema": {
+							"format": "double",
+							"type": "number"
+						}
+					}
+				]
+			}
+		},
+		"/checkout/step1": {
+			"post": {
+				"operationId": "SaveStep1",
+				"responses": {
+					"200": {
+						"description": "Updated session",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SaveStep1Response"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "Bad Request"
+					},
+					"401": {
+						"description": "Unauthorized"
+					},
+					"404": {
+						"description": "Session not found"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Save Step 1: Shipping information",
+				"tags": [
+					"Checkout"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [],
+				"requestBody": {
+					"description": "- Shipping details",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/SaveStep1Request",
+								"description": "- Shipping details"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/checkout/step2": {
+			"post": {
+				"operationId": "SaveStep2",
+				"responses": {
+					"200": {
+						"description": "Updated session",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SaveStep2Response"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "Bad Request"
+					},
+					"401": {
+						"description": "Unauthorized"
+					},
+					"404": {
+						"description": "Session or payment method not found"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Save Step 2: Payment method",
+				"tags": [
+					"Checkout"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [],
+				"requestBody": {
+					"description": "- Payment method ID",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/SaveStep2Request",
+								"description": "- Payment method ID"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/checkout/apply-promo": {
+			"post": {
+				"operationId": "ApplyPromoCode",
+				"responses": {
+					"200": {
+						"description": "Discount details and updated pricing",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ApplyPromoResponse"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "Bad Request - Invalid promo code"
+					},
+					"401": {
+						"description": "Unauthorized"
+					},
+					"404": {
+						"description": "Session not found"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Apply promo code\n\nUses Shopify Storefront API to validate and apply discount codes",
+				"tags": [
+					"Checkout"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [],
+				"requestBody": {
+					"description": "- Promo code details",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/ApplyPromoRequest",
+								"description": "- Promo code details"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/checkout/summary/{sessionId}": {
+			"get": {
+				"operationId": "GetCheckoutSummary",
+				"responses": {
+					"200": {
+						"description": "Complete checkout summary",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CheckoutSummaryResponse"
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "Unauthorized"
+					},
+					"404": {
+						"description": "Session not found"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Get checkout summary\n\nReturns complete checkout details for review before payment",
+				"tags": [
+					"Checkout"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [
+					{
+						"description": "- Checkout session ID",
+						"in": "path",
+						"name": "sessionId",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				]
+			}
+		},
+		"/checkout/complete": {
+			"post": {
+				"operationId": "CompleteCheckout",
+				"responses": {
+					"200": {
+						"description": "Order details and payment status",
+						"content": {
+							"application/json": {
+								"schema": {
+									"anyOf": [
+										{
+											"$ref": "#/components/schemas/CompleteCheckoutResponse"
+										},
+										{
+											"$ref": "#/components/schemas/CheckoutRequiresActionResponse"
+										}
+									]
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "Bad Request"
+					},
+					"401": {
+						"description": "Unauthorized"
+					},
+					"404": {
+						"description": "Session not found"
+					},
+					"500": {
+						"description": "Internal Server Error - Payment or order creation failed"
+					}
+				},
+				"description": "Complete checkout and process payment\n\nFinal step: Creates payment intent, processes payment, creates order in Shopify\n\nFlow:\n1. Validate session and all required data\n2. Create Stripe payment intent\n3. Confirm payment\n4. On success: Create draft order in Shopify\n5. Complete draft order\n6. Save order in database\n7. Mark session as completed",
+				"tags": [
+					"Checkout"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [],
+				"requestBody": {
+					"description": "- Checkout completion request",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/CompleteCheckoutRequest",
+								"description": "- Checkout completion request"
+							}
+						}
+					}
+				}
 			}
 		},
 		"/cart/create": {
