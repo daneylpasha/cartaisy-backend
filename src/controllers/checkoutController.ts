@@ -5,6 +5,7 @@ import User from '../models/User';
 import Order from '../models/Order';
 import shopifyStorefront from '../services/shopifyStorefrontService';
 import stripeService from '../services/stripeService';
+import { normalizeAddressForShopify } from '../utils/addressHelper';
 import {
   InitCheckoutRequest,
   InitCheckoutResponse,
@@ -202,13 +203,20 @@ export class CheckoutController extends Controller {
 
       const address = user.addresses[addressId];
 
+      // Normalize address to ISO codes for Shopify
+      const normalizedAddress = normalizeAddressForShopify({
+        country: address.country,
+        countryCode: address.countryCode,
+        province: address.province,
+      });
+
       // Update cart buyer identity to get shipping rates from Shopify
       const shopifyResponse = await shopifyStorefront.updateCartBuyerIdentity(session.shopifyCartId, {
         address1: address.address1,
         address2: address.address2,
         city: address.city || '',
-        province: address.province,
-        country: address.country,
+        province: normalizedAddress.provinceCode,
+        country: normalizedAddress.countryCode,
         zip: address.zip,
         firstName: address.firstName,
         lastName: address.lastName,
@@ -312,7 +320,24 @@ export class CheckoutController extends Controller {
       }
 
       // Get shipping rate details from Shopify
-      const shopifyResponse = await shopifyStorefront.updateCartBuyerIdentity(session.shopifyCartId, user.addresses[shippingAddressId]);
+      const address = user.addresses[shippingAddressId];
+      const normalizedAddress = normalizeAddressForShopify({
+        country: address.country,
+        countryCode: address.countryCode,
+        province: address.province,
+      });
+
+      const shopifyResponse = await shopifyStorefront.updateCartBuyerIdentity(session.shopifyCartId, {
+        address1: address.address1,
+        address2: address.address2,
+        city: address.city || '',
+        province: normalizedAddress.provinceCode,
+        country: normalizedAddress.countryCode,
+        zip: address.zip,
+        firstName: address.firstName,
+        lastName: address.lastName,
+        phone: address.phone,
+      });
       const cart = shopifyResponse?.data?.cartBuyerIdentityUpdate?.cart;
       const deliveryGroup = cart?.deliveryGroups?.edges?.[0]?.node;
       const selectedRate = deliveryGroup?.deliveryOptions?.find((opt: any) => opt.handle === shippingRateHandle);
@@ -931,8 +956,13 @@ export class CheckoutController extends Controller {
       session.paymentStatus = 'succeeded';
       await session.save();
 
-      // Get shipping address
+      // Get shipping address and normalize for Shopify
       const shippingAddress = user.addresses?.[session.shippingAddressId || 0];
+      const normalizedShippingAddress = normalizeAddressForShopify({
+        country: shippingAddress.country,
+        countryCode: shippingAddress.countryCode,
+        province: shippingAddress.province,
+      });
 
       // Prepare line items for draft order
       const lineItems = cart.lines.edges.map((edge: any) => ({
@@ -948,8 +978,8 @@ export class CheckoutController extends Controller {
           address1: shippingAddress.address1,
           address2: shippingAddress.address2,
           city: shippingAddress.city || '',
-          province: shippingAddress.province,
-          country: shippingAddress.country,
+          province: normalizedShippingAddress.provinceCode,
+          country: normalizedShippingAddress.countryCode,
           zip: shippingAddress.zip,
           firstName: shippingAddress.firstName,
           lastName: shippingAddress.lastName,
