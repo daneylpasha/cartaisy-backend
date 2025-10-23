@@ -14,7 +14,6 @@ export interface ShippingRate {
   title: string;
   price: number;
   description?: string;
-  estimatedDelivery?: string;
   deliveryMethodType?: string;
 }
 
@@ -116,7 +115,6 @@ export interface SaveShippingResponse {
     currentStep: number;
     completedSteps: number[];
     shippingCost: number;
-    estimatedDelivery?: string;
   };
   message: string;
 }
@@ -199,7 +197,6 @@ export interface CheckoutSummaryResponse {
     shippingMethod: {
       title: string;
       price: number;
-      estimatedDelivery?: string;
     };
     paymentMethod: {
       id: string;
@@ -242,7 +239,6 @@ export interface CompleteCheckoutResponse {
       totalPrice: number;
       currency: string;
       status: string;
-      estimatedDelivery?: string;
     };
     payment: {
       status: 'succeeded' | 'requires_action' | 'processing';

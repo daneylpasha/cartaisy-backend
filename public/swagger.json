@@ -2471,9 +2471,6 @@
 					"description": {
 						"type": "string"
 					},
-					"estimatedDelivery": {
-						"type": "string"
-					},
 					"deliveryMethodType": {
 						"type": "string"
 					}
@@ -2560,9 +2557,6 @@
 					},
 					"data": {
 						"properties": {
-							"estimatedDelivery": {
-								"type": "string"
-							},
 							"shippingCost": {
 								"type": "number",
 								"format": "double"
@@ -2885,9 +2879,6 @@
 							},
 							"shippingMethod": {
 								"properties": {
-									"estimatedDelivery": {
-										"type": "string"
-									},
 									"price": {
 										"type": "number",
 										"format": "double"
@@ -3018,9 +3009,6 @@
 							},
 							"order": {
 								"properties": {
-									"estimatedDelivery": {
-										"type": "string"
-									},
 									"status": {
 										"type": "string"
 									},
