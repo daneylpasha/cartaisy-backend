@@ -21,6 +21,7 @@ import {
   CompleteCheckoutResponse,
   CheckoutRequiresActionResponse,
 } from '../types/api/checkout';
+import { parseDeliveryEstimate } from '../utils/deliveryEstimator';
 
 /**
  * Checkout Controller
@@ -251,14 +252,20 @@ export class CheckoutController extends Controller {
         throw new Error('No shipping options available for this address');
       }
 
-      // Transform shipping rates
-      const shippingRates = deliveryGroup.deliveryOptions.map((option: any) => ({
-        handle: option.handle,
-        title: option.title,
-        price: parseFloat(option.estimatedCost?.amount || '0'),
-        description: option.description,
-        deliveryMethodType: option.deliveryMethodType,
-      }));
+      // Transform shipping rates with delivery estimates from Shopify
+      const shippingRates = deliveryGroup.deliveryOptions.map((option: any) => {
+        // Parse delivery estimate using utility function (handles Shopify formats + fallbacks)
+        const estimatedDelivery = parseDeliveryEstimate(option.description, option.title);
+
+        return {
+          handle: option.handle,
+          title: option.title,
+          price: parseFloat(option.estimatedCost?.amount || '0'),
+          description: option.description,
+          estimatedDelivery,
+          deliveryMethodType: option.deliveryMethodType,
+        };
+      });
 
       return {
         success: true,

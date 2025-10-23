@@ -1170,6 +1170,14 @@ class ShopifyStorefrontService {
                       currencyCode
                     }
                     deliveryMethodType
+                    deliveryPromise {
+                      minDeliveryDateTime
+                      maxDeliveryDateTime
+                    }
+                    estimatedDeliveryTimeV2 {
+                      min
+                      max
+                    }
                   }
                   selectedDeliveryOption {
                     handle
