@@ -215,8 +215,8 @@ export class CheckoutController extends Controller {
         address1: address.address1,
         address2: address.address2,
         city: address.city || '',
-        province: normalizedAddress.provinceCode,
-        country: normalizedAddress.countryCode,
+        province: normalizedAddress.provinceCode,  // ISO code (e.g., "TX")
+        country: normalizedAddress.countryCode,     // ISO code (e.g., "US")
         zip: address.zip,
         firstName: address.firstName,
         lastName: address.lastName,
@@ -232,7 +232,17 @@ export class CheckoutController extends Controller {
       const cart = shopifyResponse?.data?.cartBuyerIdentityUpdate?.cart;
       const deliveryGroup = cart?.deliveryGroups?.edges?.[0]?.node;
 
-      if (!deliveryGroup || !deliveryGroup.deliveryOptions) {
+      // Log for debugging
+      console.log('Shopify cart response:', JSON.stringify({
+        hasCart: !!cart,
+        hasDeliveryGroups: !!cart?.deliveryGroups,
+        deliveryGroupsCount: cart?.deliveryGroups?.edges?.length || 0,
+        hasDeliveryOptions: !!deliveryGroup?.deliveryOptions,
+        deliveryOptionsCount: deliveryGroup?.deliveryOptions?.length || 0,
+        address: { province: normalizedAddress.provinceCode, country: normalizedAddress.countryCode }
+      }));
+
+      if (!deliveryGroup || !deliveryGroup.deliveryOptions || deliveryGroup.deliveryOptions.length === 0) {
         this.setStatus(400);
         throw new Error('No shipping options available for this address');
       }
