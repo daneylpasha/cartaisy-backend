@@ -1128,7 +1128,7 @@ class ShopifyStorefrontService {
 
   /**
    * Update cart delivery address to get shipping rates
-   * Uses Shopify 2025-01 API (deliveryAddressPreferences is deprecated)
+   * Uses Shopify 2025-01 API (cartDeliveryAddressesAdd)
    * @param cartId - Shopify cart ID
    * @param deliveryAddress - Shipping address to calculate rates for
    * @returns Cart with available delivery options
@@ -1147,35 +1147,29 @@ class ShopifyStorefrontService {
       phone?: string;
     }
   ): Promise<any> {
-    // Step 1: Add/Update delivery address using new 2025-01 API
-    const updateAddressQuery = `
-      mutation cartDeliveryAddressUpdate($cartId: ID!, $deliveryAddress: CartDeliveryAddressInput!) {
-        cartDeliveryAddressUpdate(cartId: $cartId, deliveryAddress: $deliveryAddress) {
+    // Use cartDeliveryAddressesAdd mutation (2025-01 API)
+    const addAddressQuery = `
+      mutation cartDeliveryAddressesAdd($cartId: ID!, $deliveryAddresses: [CartDeliveryAddressInput!]!) {
+        cartDeliveryAddressesAdd(cartId: $cartId, deliveryAddresses: $deliveryAddresses) {
           cart {
             id
-            deliveryAddresses {
-              id
-              address1
-              address2
-              city
-              province
-              country
-              zip
-              firstName
-              lastName
-              phone
-            }
             deliveryGroups(first: 10) {
               edges {
                 node {
                   id
                   deliveryAddress {
-                    id
-                    address1
-                    city
-                    province
-                    country
-                    zip
+                    ... on MailingAddress {
+                      id
+                      address1
+                      address2
+                      city
+                      province
+                      country
+                      zip
+                      firstName
+                      lastName
+                      phone
+                    }
                   }
                   deliveryOptions {
                     handle
@@ -1222,19 +1216,23 @@ class ShopifyStorefrontService {
       }
     `;
 
-    return this.query<any>(updateAddressQuery, {
+    return this.query<any>(addAddressQuery, {
       cartId,
-      deliveryAddress: {
-        address1: deliveryAddress.address1,
-        address2: deliveryAddress.address2 || undefined,
-        city: deliveryAddress.city,
-        provinceCode: deliveryAddress.province,
-        countryCode: deliveryAddress.country,
-        zip: deliveryAddress.zip,
-        firstName: deliveryAddress.firstName || undefined,
-        lastName: deliveryAddress.lastName || undefined,
-        phone: deliveryAddress.phone || undefined,
-      },
+      deliveryAddresses: [
+        {
+          deliveryAddress: {
+            address1: deliveryAddress.address1,
+            address2: deliveryAddress.address2 || undefined,
+            city: deliveryAddress.city,
+            provinceCode: deliveryAddress.province,
+            countryCode: deliveryAddress.country,
+            zip: deliveryAddress.zip,
+            firstName: deliveryAddress.firstName || undefined,
+            lastName: deliveryAddress.lastName || undefined,
+            phone: deliveryAddress.phone || undefined,
+          },
+        },
+      ],
     });
   }
 
