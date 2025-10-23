@@ -1149,7 +1149,7 @@ class ShopifyStorefrontService {
   ): Promise<any> {
     // Use cartDeliveryAddressesAdd mutation (2025-01 API)
     const addAddressQuery = `
-      mutation cartDeliveryAddressesAdd($cartId: ID!, $addresses: [CartDeliveryAddressInput!]!) {
+      mutation cartDeliveryAddressesAdd($cartId: ID!, $addresses: [CartSelectableAddressInput!]!) {
         cartDeliveryAddressesAdd(cartId: $cartId, addresses: $addresses) {
           cart {
             id
@@ -1231,6 +1231,7 @@ class ShopifyStorefrontService {
             lastName: deliveryAddress.lastName || undefined,
             phone: deliveryAddress.phone || undefined,
           },
+          oneTimeUse: true, // Mark as one-time use address for checkout
         },
       ],
     });
