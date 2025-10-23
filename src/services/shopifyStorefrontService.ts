@@ -1149,8 +1149,8 @@ class ShopifyStorefrontService {
   ): Promise<any> {
     // Use cartDeliveryAddressesAdd mutation (2025-01 API)
     const addAddressQuery = `
-      mutation cartDeliveryAddressesAdd($cartId: ID!, $deliveryAddresses: [CartDeliveryAddressInput!]!) {
-        cartDeliveryAddressesAdd(cartId: $cartId, deliveryAddresses: $deliveryAddresses) {
+      mutation cartDeliveryAddressesAdd($cartId: ID!, $addresses: [CartDeliveryAddressInput!]!) {
+        cartDeliveryAddressesAdd(cartId: $cartId, addresses: $addresses) {
           cart {
             id
             deliveryGroups(first: 10) {
@@ -1218,7 +1218,7 @@ class ShopifyStorefrontService {
 
     return this.query<any>(addAddressQuery, {
       cartId,
-      deliveryAddresses: [
+      addresses: [
         {
           deliveryAddress: {
             address1: deliveryAddress.address1,
