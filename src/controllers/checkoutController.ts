@@ -242,6 +242,9 @@ export class CheckoutController extends Controller {
         address: { province: normalizedAddress.provinceCode, country: normalizedAddress.countryCode }
       }));
 
+      // Log full cart response for debugging
+      console.log('Full cart data:', JSON.stringify(cart, null, 2));
+
       if (!deliveryGroup || !deliveryGroup.deliveryOptions || deliveryGroup.deliveryOptions.length === 0) {
         this.setStatus(400);
         throw new Error('No shipping options available for this address');
