@@ -1127,8 +1127,8 @@ class ShopifyStorefrontService {
   }
 
   /**
-   * Update cart delivery address to get shipping rates
-   * Uses Shopify 2025-01 API (cartDeliveryAddressesAdd)
+   * Update cart buyer identity with country code to get shipping rates
+   * Uses Shopify 2025-01 API - cartBuyerIdentityUpdate with countryCode
    * @param cartId - Shopify cart ID
    * @param deliveryAddress - Shipping address to calculate rates for
    * @returns Cart with available delivery options
@@ -1147,30 +1147,20 @@ class ShopifyStorefrontService {
       phone?: string;
     }
   ): Promise<any> {
-    // Use cartDeliveryAddressesAdd mutation (2025-01 API)
-    const addAddressQuery = `
-      mutation cartDeliveryAddressesAdd($cartId: ID!, $addresses: [CartSelectableAddressInput!]!) {
-        cartDeliveryAddressesAdd(cartId: $cartId, addresses: $addresses) {
+    // Use cartBuyerIdentityUpdate with countryCode (2025-01 compatible)
+    // Setting countryCode triggers shipping rate calculation for that country's zone
+    const query = `
+      mutation cartBuyerIdentityUpdate($cartId: ID!, $buyerIdentity: CartBuyerIdentityInput!) {
+        cartBuyerIdentityUpdate(cartId: $cartId, buyerIdentity: $buyerIdentity) {
           cart {
             id
+            buyerIdentity {
+              countryCode
+            }
             deliveryGroups(first: 10) {
               edges {
                 node {
                   id
-                  deliveryAddress {
-                    ... on MailingAddress {
-                      id
-                      address1
-                      address2
-                      city
-                      province
-                      country
-                      zip
-                      firstName
-                      lastName
-                      phone
-                    }
-                  }
                   deliveryOptions {
                     handle
                     title
@@ -1216,24 +1206,11 @@ class ShopifyStorefrontService {
       }
     `;
 
-    return this.query<any>(addAddressQuery, {
+    return this.query<any>(query, {
       cartId,
-      addresses: [
-        {
-          deliveryAddress: {
-            address1: deliveryAddress.address1,
-            address2: deliveryAddress.address2 || undefined,
-            city: deliveryAddress.city,
-            provinceCode: deliveryAddress.province,
-            countryCode: deliveryAddress.country,
-            zip: deliveryAddress.zip,
-            firstName: deliveryAddress.firstName || undefined,
-            lastName: deliveryAddress.lastName || undefined,
-            phone: deliveryAddress.phone || undefined,
-          },
-          oneTimeUse: true, // Mark as one-time use address for checkout
-        },
-      ],
+      buyerIdentity: {
+        countryCode: deliveryAddress.country, // ISO country code (e.g., "US", "CA")
+      },
     });
   }
 

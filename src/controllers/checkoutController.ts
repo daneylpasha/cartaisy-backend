@@ -210,8 +210,8 @@ export class CheckoutController extends Controller {
         province: address.province,
       });
 
-      // Update cart delivery address to get shipping rates from Shopify
-      // Using new 2025-01 API (cartDeliveryAddressesAdd)
+      // Update cart buyer identity with country code to get shipping rates from Shopify
+      // Using cartBuyerIdentityUpdate with countryCode (2025-01 compatible)
       const shopifyResponse = await shopifyStorefront.updateCartBuyerIdentity(session.shopifyCartId, {
         address1: address.address1,
         address2: address.address2,
@@ -224,13 +224,13 @@ export class CheckoutController extends Controller {
         phone: address.phone,
       });
 
-      if (shopifyResponse?.data?.cartDeliveryAddressesAdd?.userErrors?.length > 0) {
-        const error = shopifyResponse.data.cartDeliveryAddressesAdd.userErrors[0];
+      if (shopifyResponse?.data?.cartBuyerIdentityUpdate?.userErrors?.length > 0) {
+        const error = shopifyResponse.data.cartBuyerIdentityUpdate.userErrors[0];
         this.setStatus(400);
         throw new Error(error.message || 'Failed to get shipping rates');
       }
 
-      const cart = shopifyResponse?.data?.cartDeliveryAddressesAdd?.cart;
+      const cart = shopifyResponse?.data?.cartBuyerIdentityUpdate?.cart;
       const deliveryGroup = cart?.deliveryGroups?.edges?.[0]?.node;
 
       // Log for debugging
@@ -352,7 +352,7 @@ export class CheckoutController extends Controller {
         lastName: address.lastName,
         phone: address.phone,
       });
-      const cart = shopifyResponse?.data?.cartDeliveryAddressesAdd?.cart;
+      const cart = shopifyResponse?.data?.cartBuyerIdentityUpdate?.cart;
       const deliveryGroup = cart?.deliveryGroups?.edges?.[0]?.node;
       const selectedRate = deliveryGroup?.deliveryOptions?.find((opt: any) => opt.handle === shippingRateHandle);
 
