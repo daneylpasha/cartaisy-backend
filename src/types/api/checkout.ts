@@ -95,9 +95,9 @@ export interface GetShippingRatesResponse {
 }
 
 /**
- * Request to save Step 1 (shipping) data
+ * Request to save shipping information
  */
-export interface SaveStep1Request {
+export interface SaveShippingRequest {
   sessionId: string;
   shippingAddressId: number;
   deliveryInstructions?: string;
@@ -106,9 +106,9 @@ export interface SaveStep1Request {
 }
 
 /**
- * Response for Step 1 completion
+ * Response for saving shipping information
  */
-export interface SaveStep1Response {
+export interface SaveShippingResponse {
   success: boolean;
   data: {
     sessionId: string;

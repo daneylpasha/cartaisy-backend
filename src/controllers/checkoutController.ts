@@ -10,8 +10,8 @@ import {
   InitCheckoutRequest,
   InitCheckoutResponse,
   GetShippingRatesResponse,
-  SaveStep1Request,
-  SaveStep1Response,
+  SaveShippingRequest,
+  SaveShippingResponse,
   SaveStep2Request,
   SaveStep2Response,
   ApplyPromoRequest,
@@ -287,22 +287,22 @@ export class CheckoutController extends Controller {
   }
 
   /**
-   * Save Step 1: Shipping information
+   * Save shipping information
    *
    * @param requestBody - Shipping details
    * @param request - Express request with authenticated user
    * @returns Updated session
    */
-  @Post('step1')
+  @Post('save-shipping')
   @Security('jwt')
   @Response(400, 'Bad Request')
   @Response(401, 'Unauthorized')
   @Response(404, 'Session not found')
   @Response(500, 'Internal Server Error')
-  public async saveStep1(
-    @Body() requestBody: SaveStep1Request,
+  public async saveShipping(
+    @Body() requestBody: SaveShippingRequest,
     @Request() request: any
-  ): Promise<SaveStep1Response> {
+  ): Promise<SaveShippingResponse> {
     try {
       const userId = request.user._id;
       const { sessionId, shippingAddressId, deliveryInstructions, contactNumber, shippingRateHandle } = requestBody;
@@ -405,7 +405,7 @@ export class CheckoutController extends Controller {
         message: 'Shipping information saved successfully',
       };
     } catch (error) {
-      console.error('Error saving step 1:', error);
+      console.error('Error saving shipping information:', error);
 
       if (!this.getStatus || this.getStatus() === 200) {
         this.setStatus(500);

@@ -2552,8 +2552,8 @@
 				"type": "object",
 				"additionalProperties": false
 			},
-			"SaveStep1Response": {
-				"description": "Response for Step 1 completion",
+			"SaveShippingResponse": {
+				"description": "Response for saving shipping information",
 				"properties": {
 					"success": {
 						"type": "boolean"
@@ -2606,8 +2606,8 @@
 				"type": "object",
 				"additionalProperties": false
 			},
-			"SaveStep1Request": {
-				"description": "Request to save Step 1 (shipping) data",
+			"SaveShippingRequest": {
+				"description": "Request to save shipping information",
 				"properties": {
 					"sessionId": {
 						"type": "string"
@@ -5050,16 +5050,16 @@
 				]
 			}
 		},
-		"/checkout/step1": {
+		"/checkout/save-shipping": {
 			"post": {
-				"operationId": "SaveStep1",
+				"operationId": "SaveShipping",
 				"responses": {
 					"200": {
 						"description": "Updated session",
 						"content": {
 							"application/json": {
 								"schema": {
-									"$ref": "#/components/schemas/SaveStep1Response"
+									"$ref": "#/components/schemas/SaveShippingResponse"
 								}
 							}
 						}
@@ -5077,7 +5077,7 @@
 						"description": "Internal Server Error"
 					}
 				},
-				"description": "Save Step 1: Shipping information",
+				"description": "Save shipping information",
 				"tags": [
 					"Checkout"
 				],
@@ -5093,7 +5093,7 @@
 					"content": {
 						"application/json": {
 							"schema": {
-								"$ref": "#/components/schemas/SaveStep1Request",
+								"$ref": "#/components/schemas/SaveShippingRequest",
 								"description": "- Shipping details"
 							}
 						}

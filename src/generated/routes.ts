@@ -755,7 +755,7 @@ const models: TsoaRoute.Models = {
         "additionalProperties": false,
     },
     // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
-    "SaveStep1Response": {
+    "SaveShippingResponse": {
         "dataType": "refObject",
         "properties": {
             "success": {"dataType":"boolean","required":true},
@@ -765,7 +765,7 @@ const models: TsoaRoute.Models = {
         "additionalProperties": false,
     },
     // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
-    "SaveStep1Request": {
+    "SaveShippingRequest": {
         "dataType": "refObject",
         "properties": {
             "sessionId": {"dataType":"string","required":true},
@@ -2045,27 +2045,27 @@ export function RegisterRoutes(app: Router) {
             }
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
-        const argsCheckoutController_saveStep1: Record<string, TsoaRoute.ParameterSchema> = {
-                requestBody: {"in":"body","name":"requestBody","required":true,"ref":"SaveStep1Request"},
+        const argsCheckoutController_saveShipping: Record<string, TsoaRoute.ParameterSchema> = {
+                requestBody: {"in":"body","name":"requestBody","required":true,"ref":"SaveShippingRequest"},
                 request: {"in":"request","name":"request","required":true,"dataType":"object"},
         };
-        app.post('/api/v1/checkout/step1',
+        app.post('/api/v1/checkout/save-shipping',
             authenticateMiddleware([{"jwt":[]}]),
             ...(fetchMiddlewares<RequestHandler>(CheckoutController)),
-            ...(fetchMiddlewares<RequestHandler>(CheckoutController.prototype.saveStep1)),
+            ...(fetchMiddlewares<RequestHandler>(CheckoutController.prototype.saveShipping)),
 
-            async function CheckoutController_saveStep1(request: ExRequest, response: ExResponse, next: any) {
+            async function CheckoutController_saveShipping(request: ExRequest, response: ExResponse, next: any) {
 
             // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
 
             let validatedArgs: any[] = [];
             try {
-                validatedArgs = templateService.getValidatedArgs({ args: argsCheckoutController_saveStep1, request, response });
+                validatedArgs = templateService.getValidatedArgs({ args: argsCheckoutController_saveShipping, request, response });
 
                 const controller = new CheckoutController();
 
               await templateService.apiHandler({
-                methodName: 'saveStep1',
+                methodName: 'saveShipping',
                 controller,
                 response,
                 next,
