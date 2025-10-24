@@ -5,6 +5,13 @@
   "spec": {
     "outputDirectory": "public",
     "specVersion": 3,
+    "securityDefinitions": {
+      "jwt": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
     "spec": {
       "info": {
         "title": "Cartaisy API",
@@ -16,15 +23,7 @@
           "url": "http://localhost:3000/api/v1",
           "description": "Development server"
         }
-      ],
-      "securityDefinitions": {
-        "jwt": {
-          "type": "http",
-          "scheme": "bearer",
-          "bearerFormat": "JWT",
-          "description": "JWT authentication token"
-        }
-      }
+      ]
     }
   },
   "routes": {
