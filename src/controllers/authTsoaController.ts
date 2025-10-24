@@ -330,17 +330,27 @@ export class AuthController extends Controller {
         };
       }
 
-      // Prepare user data (exclude sensitive fields)
+      // Find default address
+      const defaultAddress = request.user.addresses?.find((addr: any) => addr.isDefault === true) ||
+                            (request.user.addresses && request.user.addresses.length > 0 ? request.user.addresses[0] : null);
+
+      // Get country from default address or from user's country field or empty string
+      const country = defaultAddress?.country || (request.user as any).country || '';
+
+      // Prepare user data with all required fields (empty strings if missing)
       const userData = {
         id: (request.user._id as any).toString(),
-        name: request.user.name,
+        fullName: request.user.name || '',
         email: request.user.email,
+        phoneNumber: request.user.phone || '',
+        country: country,
+        gender: request.user.profile?.gender || '',
+        dateOfBirth: request.user.profile?.dateOfBirth ? new Date(request.user.profile.dateOfBirth).toISOString() : '',
+        defaultAddress: defaultAddress || null,
         role: request.user.role,
         isEmailVerified: request.user.isVerified,
         isActive: request.user.isActive,
-        avatar: request.user.profile.avatar,
-        phone: request.user.phone,
-        dateOfBirth: request.user.profile.dateOfBirth,
+        avatar: request.user.profile?.avatar,
         addresses: request.user.addresses,
         preferences: request.user.preferences,
         totalOrdersCount: (request.user as any).totalOrdersCount,
@@ -457,9 +467,22 @@ export class AuthController extends Controller {
         'notifications'
       ];
 
+      // Handle firstName and lastName combination
+      if (updates.firstName || updates.lastName) {
+        const firstName = updates.firstName || '';
+        const lastName = updates.lastName || '';
+        // Combine firstName and lastName into name field
+        updateObj.name = `${firstName} ${lastName}`.trim();
+      }
+
       // Process each field in the updates
       Object.keys(updates).forEach(field => {
         const value = updates[field as keyof typeof updates];
+
+        // Skip firstName and lastName as we already handled them
+        if (field === 'firstName' || field === 'lastName') {
+          return;
+        }
 
         // Handle nested fields
         if (profileFields.includes(field)) {
@@ -477,7 +500,7 @@ export class AuthController extends Controller {
           // Handle addresses array
           updateObj.addresses = value;
         } else {
-          // Direct field on user document (name, phone, or any custom field)
+          // Direct field on user document (name, phone, country, or any custom field)
           updateObj[field] = value;
         }
       });

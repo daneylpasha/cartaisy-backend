@@ -105,14 +105,17 @@ export interface GetProfileResponse {
   data?: {
     user: {
       id: string;
-      name?: string;
+      fullName: string;
       email: string;
+      phoneNumber: string;
+      country: string;
+      gender: string;
+      dateOfBirth: string;
+      defaultAddress: any | null;
       role: string;
       isEmailVerified: boolean;
       isActive: boolean;
       avatar?: string;
-      phone?: string;
-      dateOfBirth?: Date;
       addresses?: any[];
       preferences?: any;
       totalOrdersCount?: number;
@@ -129,10 +132,13 @@ export interface GetProfileResponse {
  */
 export interface UpdateProfileRequest {
   name?: string;
+  firstName?: string;
+  lastName?: string;
   phone?: string;
   avatar?: string;
-  dateOfBirth?: Date;
+  dateOfBirth?: Date | string;
   gender?: string;
+  country?: string;
   interests?: string[];
   bio?: string;
   occupation?: string;

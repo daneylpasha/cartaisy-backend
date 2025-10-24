@@ -3633,13 +3633,6 @@
 										"items": {},
 										"type": "array"
 									},
-									"dateOfBirth": {
-										"type": "string",
-										"format": "date-time"
-									},
-									"phone": {
-										"type": "string"
-									},
 									"avatar": {
 										"type": "string"
 									},
@@ -3652,10 +3645,25 @@
 									"role": {
 										"type": "string"
 									},
+									"defaultAddress": {
+										"nullable": true
+									},
+									"dateOfBirth": {
+										"type": "string"
+									},
+									"gender": {
+										"type": "string"
+									},
+									"country": {
+										"type": "string"
+									},
+									"phoneNumber": {
+										"type": "string"
+									},
 									"email": {
 										"type": "string"
 									},
-									"name": {
+									"fullName": {
 										"type": "string"
 									},
 									"id": {
@@ -3667,7 +3675,13 @@
 									"isActive",
 									"isEmailVerified",
 									"role",
+									"defaultAddress",
+									"dateOfBirth",
+									"gender",
+									"country",
+									"phoneNumber",
 									"email",
+									"fullName",
 									"id"
 								],
 								"type": "object"
@@ -3744,6 +3758,12 @@
 					"name": {
 						"type": "string"
 					},
+					"firstName": {
+						"type": "string"
+					},
+					"lastName": {
+						"type": "string"
+					},
 					"phone": {
 						"type": "string"
 					},
@@ -3751,10 +3771,20 @@
 						"type": "string"
 					},
 					"dateOfBirth": {
-						"type": "string",
-						"format": "date-time"
+						"anyOf": [
+							{
+								"type": "string",
+								"format": "date-time"
+							},
+							{
+								"type": "string"
+							}
+						]
 					},
 					"gender": {
+						"type": "string"
+					},
+					"country": {
 						"type": "string"
 					},
 					"interests": {

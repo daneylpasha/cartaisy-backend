@@ -1040,7 +1040,7 @@ const models: TsoaRoute.Models = {
         "properties": {
             "status": {"dataType":"union","subSchemas":[{"dataType":"enum","enums":["success"]},{"dataType":"enum","enums":["error"]}],"required":true},
             "message": {"dataType":"string"},
-            "data": {"dataType":"nestedObjectLiteral","nestedProperties":{"user":{"dataType":"nestedObjectLiteral","nestedProperties":{"lastLoginAt":{"dataType":"datetime"},"createdAt":{"dataType":"datetime","required":true},"totalSpent":{"dataType":"double"},"totalOrdersCount":{"dataType":"double"},"preferences":{"dataType":"any"},"addresses":{"dataType":"array","array":{"dataType":"any"}},"dateOfBirth":{"dataType":"datetime"},"phone":{"dataType":"string"},"avatar":{"dataType":"string"},"isActive":{"dataType":"boolean","required":true},"isEmailVerified":{"dataType":"boolean","required":true},"role":{"dataType":"string","required":true},"email":{"dataType":"string","required":true},"name":{"dataType":"string"},"id":{"dataType":"string","required":true}},"required":true}}},
+            "data": {"dataType":"nestedObjectLiteral","nestedProperties":{"user":{"dataType":"nestedObjectLiteral","nestedProperties":{"lastLoginAt":{"dataType":"datetime"},"createdAt":{"dataType":"datetime","required":true},"totalSpent":{"dataType":"double"},"totalOrdersCount":{"dataType":"double"},"preferences":{"dataType":"any"},"addresses":{"dataType":"array","array":{"dataType":"any"}},"avatar":{"dataType":"string"},"isActive":{"dataType":"boolean","required":true},"isEmailVerified":{"dataType":"boolean","required":true},"role":{"dataType":"string","required":true},"defaultAddress":{"dataType":"union","subSchemas":[{"dataType":"any"},{"dataType":"enum","enums":[null]}],"required":true},"dateOfBirth":{"dataType":"string","required":true},"gender":{"dataType":"string","required":true},"country":{"dataType":"string","required":true},"phoneNumber":{"dataType":"string","required":true},"email":{"dataType":"string","required":true},"fullName":{"dataType":"string","required":true},"id":{"dataType":"string","required":true}},"required":true}}},
         },
         "additionalProperties": false,
     },
@@ -1069,10 +1069,13 @@ const models: TsoaRoute.Models = {
         "dataType": "refObject",
         "properties": {
             "name": {"dataType":"string"},
+            "firstName": {"dataType":"string"},
+            "lastName": {"dataType":"string"},
             "phone": {"dataType":"string"},
             "avatar": {"dataType":"string"},
-            "dateOfBirth": {"dataType":"datetime"},
+            "dateOfBirth": {"dataType":"union","subSchemas":[{"dataType":"datetime"},{"dataType":"string"}]},
             "gender": {"dataType":"string"},
+            "country": {"dataType":"string"},
             "interests": {"dataType":"array","array":{"dataType":"string"}},
             "bio": {"dataType":"string"},
             "occupation": {"dataType":"string"},
