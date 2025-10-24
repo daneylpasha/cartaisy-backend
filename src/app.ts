@@ -130,7 +130,6 @@ app.get('/api/health/detailed', async (_req: Request, res: Response) => {
   }
 });
 // Import routes
-import authRoutes from './routes/authRoutes';
 import productRoutes from './routes/productRoutes';
 import customerRoutes from './routes/customerRoutes';
 import shopifyRoutes from './routes/shopifyRoutes';
@@ -142,7 +141,7 @@ import calloutBannerRoutes from './routes/calloutBannerRoutes';
 import collectionDisplayRoutes from './routes/collectionDisplayRoutes';
 
 // API Routes with versioning
-app.use(`/api/${apiConfig.version}/auth`, authRoutes);
+// Note: Auth routes are now handled by TSOA (see RegisterRoutes below)
 app.use(`/api/${apiConfig.version}/products`, productRoutes);
 app.use(`/api/${apiConfig.version}/customer`, customerRoutes);
 app.use(`/api/${apiConfig.version}/shopify`, shopifyRoutes);

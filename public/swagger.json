@@ -3332,6 +3332,555 @@
 				"type": "object",
 				"additionalProperties": false
 			},
+			"RegisterResponse": {
+				"description": "User registration response",
+				"properties": {
+					"status": {
+						"type": "string",
+						"enum": [
+							"success",
+							"error"
+						]
+					},
+					"message": {
+						"type": "string"
+					},
+					"data": {
+						"properties": {
+							"refreshToken": {
+								"type": "string"
+							},
+							"token": {
+								"type": "string"
+							},
+							"user": {
+								"properties": {
+									"createdAt": {
+										"type": "string",
+										"format": "date-time"
+									},
+									"isActive": {
+										"type": "boolean"
+									},
+									"isEmailVerified": {
+										"type": "boolean"
+									},
+									"role": {
+										"type": "string"
+									},
+									"email": {
+										"type": "string"
+									},
+									"name": {
+										"type": "string"
+									},
+									"id": {
+										"type": "string"
+									}
+								},
+								"required": [
+									"createdAt",
+									"isActive",
+									"isEmailVerified",
+									"role",
+									"email",
+									"id"
+								],
+								"type": "object"
+							}
+						},
+						"required": [
+							"refreshToken",
+							"token",
+							"user"
+						],
+						"type": "object"
+					}
+				},
+				"required": [
+					"status",
+					"message"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"RegisterRequest": {
+				"description": "User registration request",
+				"properties": {
+					"email": {
+						"type": "string"
+					},
+					"password": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"email",
+					"password"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"LoginResponse": {
+				"description": "User login response",
+				"properties": {
+					"status": {
+						"type": "string",
+						"enum": [
+							"success",
+							"error"
+						]
+					},
+					"message": {
+						"type": "string"
+					},
+					"data": {
+						"properties": {
+							"refreshToken": {
+								"type": "string"
+							},
+							"token": {
+								"type": "string"
+							},
+							"user": {
+								"properties": {
+									"lastLoginAt": {
+										"type": "string",
+										"format": "date-time"
+									},
+									"avatar": {
+										"type": "string"
+									},
+									"isActive": {
+										"type": "boolean"
+									},
+									"isEmailVerified": {
+										"type": "boolean"
+									},
+									"role": {
+										"type": "string"
+									},
+									"email": {
+										"type": "string"
+									},
+									"name": {
+										"type": "string"
+									},
+									"id": {
+										"type": "string"
+									}
+								},
+								"required": [
+									"isActive",
+									"isEmailVerified",
+									"role",
+									"email",
+									"id"
+								],
+								"type": "object"
+							}
+						},
+						"required": [
+							"refreshToken",
+							"token",
+							"user"
+						],
+						"type": "object"
+					}
+				},
+				"required": [
+					"status",
+					"message"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"LoginRequest": {
+				"description": "User login request",
+				"properties": {
+					"email": {
+						"type": "string"
+					},
+					"password": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"email",
+					"password"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"ForgotPasswordResponse": {
+				"description": "Forgot password response",
+				"properties": {
+					"status": {
+						"type": "string",
+						"enum": [
+							"success",
+							"error"
+						]
+					},
+					"message": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"status",
+					"message"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"ForgotPasswordRequest": {
+				"description": "Forgot password request",
+				"properties": {
+					"email": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"email"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"ResetPasswordResponse": {
+				"description": "Reset password response",
+				"properties": {
+					"status": {
+						"type": "string",
+						"enum": [
+							"success",
+							"error"
+						]
+					},
+					"message": {
+						"type": "string"
+					},
+					"data": {
+						"properties": {
+							"token": {
+								"type": "string"
+							}
+						},
+						"required": [
+							"token"
+						],
+						"type": "object"
+					}
+				},
+				"required": [
+					"status",
+					"message"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"ResetPasswordRequest": {
+				"description": "Reset password request",
+				"properties": {
+					"token": {
+						"type": "string"
+					},
+					"newPassword": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"token",
+					"newPassword"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"GetProfileResponse": {
+				"description": "Get profile response",
+				"properties": {
+					"status": {
+						"type": "string",
+						"enum": [
+							"success",
+							"error"
+						]
+					},
+					"message": {
+						"type": "string"
+					},
+					"data": {
+						"properties": {
+							"user": {
+								"properties": {
+									"lastLoginAt": {
+										"type": "string",
+										"format": "date-time"
+									},
+									"createdAt": {
+										"type": "string",
+										"format": "date-time"
+									},
+									"totalSpent": {
+										"type": "number",
+										"format": "double"
+									},
+									"totalOrdersCount": {
+										"type": "number",
+										"format": "double"
+									},
+									"preferences": {},
+									"addresses": {
+										"items": {},
+										"type": "array"
+									},
+									"dateOfBirth": {
+										"type": "string",
+										"format": "date-time"
+									},
+									"phone": {
+										"type": "string"
+									},
+									"avatar": {
+										"type": "string"
+									},
+									"isActive": {
+										"type": "boolean"
+									},
+									"isEmailVerified": {
+										"type": "boolean"
+									},
+									"role": {
+										"type": "string"
+									},
+									"email": {
+										"type": "string"
+									},
+									"name": {
+										"type": "string"
+									},
+									"id": {
+										"type": "string"
+									}
+								},
+								"required": [
+									"createdAt",
+									"isActive",
+									"isEmailVerified",
+									"role",
+									"email",
+									"id"
+								],
+								"type": "object"
+							}
+						},
+						"required": [
+							"user"
+						],
+						"type": "object"
+					}
+				},
+				"required": [
+					"status"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"UpdateProfileResponse": {
+				"description": "Update profile response",
+				"properties": {
+					"status": {
+						"type": "string",
+						"enum": [
+							"success",
+							"error"
+						]
+					},
+					"message": {
+						"type": "string"
+					},
+					"data": {
+						"properties": {
+							"updatedFields": {
+								"items": {
+									"type": "string"
+								},
+								"type": "array"
+							},
+							"user": {}
+						},
+						"required": [
+							"updatedFields",
+							"user"
+						],
+						"type": "object"
+					}
+				},
+				"required": [
+					"status",
+					"message"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"Record_string.string_": {
+				"properties": {},
+				"additionalProperties": {
+					"type": "string"
+				},
+				"type": "object",
+				"description": "Construct a type with a set of properties K of type T"
+			},
+			"Record_string.boolean_": {
+				"properties": {},
+				"additionalProperties": {
+					"type": "boolean"
+				},
+				"type": "object",
+				"description": "Construct a type with a set of properties K of type T"
+			},
+			"UpdateProfileRequest": {
+				"description": "Update profile request - accepts any key/value pairs\nRestricted fields cannot be updated",
+				"properties": {
+					"name": {
+						"type": "string"
+					},
+					"phone": {
+						"type": "string"
+					},
+					"avatar": {
+						"type": "string"
+					},
+					"dateOfBirth": {
+						"type": "string",
+						"format": "date-time"
+					},
+					"gender": {
+						"type": "string"
+					},
+					"interests": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array"
+					},
+					"bio": {
+						"type": "string"
+					},
+					"occupation": {
+						"type": "string"
+					},
+					"company": {
+						"type": "string"
+					},
+					"website": {
+						"type": "string"
+					},
+					"socialLinks": {
+						"$ref": "#/components/schemas/Record_string.string_"
+					},
+					"addresses": {
+						"items": {},
+						"type": "array"
+					},
+					"currency": {
+						"type": "string"
+					},
+					"language": {
+						"type": "string"
+					},
+					"theme": {
+						"type": "string"
+					},
+					"notifications": {
+						"$ref": "#/components/schemas/Record_string.boolean_"
+					}
+				},
+				"type": "object",
+				"additionalProperties": {}
+			},
+			"ChangePasswordResponse": {
+				"description": "Change password response",
+				"properties": {
+					"status": {
+						"type": "string",
+						"enum": [
+							"success",
+							"error"
+						]
+					},
+					"message": {
+						"type": "string"
+					},
+					"data": {
+						"properties": {
+							"token": {
+								"type": "string"
+							}
+						},
+						"required": [
+							"token"
+						],
+						"type": "object"
+					}
+				},
+				"required": [
+					"status",
+					"message"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"ChangePasswordRequest": {
+				"description": "Change password request",
+				"properties": {
+					"currentPassword": {
+						"type": "string"
+					},
+					"newPassword": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"currentPassword",
+					"newPassword"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"DeleteAccountResponse": {
+				"description": "Delete account response",
+				"properties": {
+					"status": {
+						"type": "string",
+						"enum": [
+							"success",
+							"error"
+						]
+					},
+					"message": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"status",
+					"message"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"DeleteAccountRequest": {
+				"description": "Delete account request",
+				"properties": {
+					"password": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"password"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
 			"IAddress": {
 				"properties": {
 					"label": {
@@ -5637,6 +6186,359 @@
 						}
 					}
 				]
+			}
+		},
+		"/auth/register": {
+			"post": {
+				"operationId": "Register",
+				"responses": {
+					"201": {
+						"description": "User registered successfully",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/RegisterResponse"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "Bad Request - Email already exists"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Register a new user",
+				"summary": "Register a new user account",
+				"tags": [
+					"Authentication"
+				],
+				"security": [],
+				"parameters": [],
+				"requestBody": {
+					"description": "User registration data",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/RegisterRequest",
+								"description": "User registration data"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/auth/login": {
+			"post": {
+				"operationId": "Login",
+				"responses": {
+					"200": {
+						"description": "Login successful",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/LoginResponse"
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "Unauthorized - Invalid credentials"
+					},
+					"403": {
+						"description": "Forbidden - Account deactivated"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Login user",
+				"summary": "Authenticate user and get access token",
+				"tags": [
+					"Authentication"
+				],
+				"security": [],
+				"parameters": [],
+				"requestBody": {
+					"description": "User login credentials",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/LoginRequest",
+								"description": "User login credentials"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/auth/forgot-password": {
+			"post": {
+				"operationId": "ForgotPassword",
+				"responses": {
+					"200": {
+						"description": "Password reset email sent if account exists",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ForgotPasswordResponse"
+								}
+							}
+						}
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Request password reset",
+				"summary": "Send password reset email",
+				"tags": [
+					"Authentication"
+				],
+				"security": [],
+				"parameters": [],
+				"requestBody": {
+					"description": "Email address for password reset",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/ForgotPasswordRequest",
+								"description": "Email address for password reset"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/auth/reset-password": {
+			"post": {
+				"operationId": "ResetPassword",
+				"responses": {
+					"200": {
+						"description": "Password reset successful",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ResetPasswordResponse"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "Bad Request - Invalid or expired token"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Reset password with token",
+				"summary": "Reset password using reset token from email",
+				"tags": [
+					"Authentication"
+				],
+				"security": [],
+				"parameters": [],
+				"requestBody": {
+					"description": "Reset token and new password",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/ResetPasswordRequest",
+								"description": "Reset token and new password"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/auth/profile": {
+			"get": {
+				"operationId": "GetProfile",
+				"responses": {
+					"200": {
+						"description": "Profile retrieved successfully",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GetProfileResponse"
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "Unauthorized"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Get current user profile",
+				"summary": "Get authenticated user's profile data",
+				"tags": [
+					"Authentication"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": []
+			},
+			"patch": {
+				"operationId": "UpdateProfile",
+				"responses": {
+					"200": {
+						"description": "Profile updated successfully",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/UpdateProfileResponse"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "Bad Request"
+					},
+					"401": {
+						"description": "Unauthorized"
+					},
+					"404": {
+						"description": "User not found"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Update user profile",
+				"summary": "Update authenticated user's profile",
+				"tags": [
+					"Authentication"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [],
+				"requestBody": {
+					"description": "Profile fields to update",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/UpdateProfileRequest",
+								"description": "Profile fields to update"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/auth/change-password": {
+			"post": {
+				"operationId": "ChangePassword",
+				"responses": {
+					"200": {
+						"description": "Password changed successfully",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ChangePasswordResponse"
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "Unauthorized"
+					},
+					"404": {
+						"description": "User not found"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Change password",
+				"summary": "Change authenticated user's password",
+				"tags": [
+					"Authentication"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [],
+				"requestBody": {
+					"description": "Current password and new password",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/ChangePasswordRequest",
+								"description": "Current password and new password"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/auth/account": {
+			"delete": {
+				"operationId": "DeleteAccount",
+				"responses": {
+					"200": {
+						"description": "Account deleted successfully",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/DeleteAccountResponse"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "Bad Request"
+					},
+					"401": {
+						"description": "Unauthorized"
+					},
+					"404": {
+						"description": "User not found"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Delete user account",
+				"summary": "Soft delete user account (requires password verification)",
+				"tags": [
+					"Authentication"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [],
+				"requestBody": {
+					"description": "Password for verification",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/DeleteAccountRequest",
+								"description": "Password for verification"
+							}
+						}
+					}
+				}
 			}
 		},
 		"/addresses": {

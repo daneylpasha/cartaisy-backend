@@ -1,5 +1,6 @@
 import { Request } from 'express';
 import jwt from 'jsonwebtoken';
+import User from './models/User';
 
 /**
  * Express Authentication Handler for TSOA
@@ -21,17 +22,38 @@ export async function expressAuthentication(
 
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default-secret') as any;
+      const userId = decoded.userId || decoded.id;
 
-      // Return user object that will be available as request.user in controllers
+      // Fetch full user object from database (excluding password)
+      const user = await User.findById(userId).select('-password');
+
+      if (!user) {
+        throw new Error('User not found');
+      }
+
+      // Check if user is active
+      if (!user.isActive) {
+        throw new Error('Account has been deactivated');
+      }
+
+      // Return full user object that will be available as request.user in controllers
       return {
-        _id: decoded.userId || decoded.id,
-        id: decoded.userId || decoded.id,
-        email: decoded.email,
-        role: decoded.role,
-        name: decoded.name,
+        _id: user._id,
+        id: user._id.toString(),
+        email: user.email,
+        role: user.role,
+        name: user.name,
+        isActive: user.isActive,
+        isVerified: user.isVerified,
+        phone: user.phone,
+        profile: user.profile,
+        addresses: user.addresses,
+        preferences: user.preferences,
+        createdAt: user.createdAt,
+        lastLoginAt: user.lastLoginAt
       };
     } catch (error) {
-      throw new Error('Invalid or expired token');
+      throw new Error(error instanceof Error ? error.message : 'Invalid or expired token');
     }
   }
 
@@ -49,14 +71,31 @@ export async function expressAuthentication(
 
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default-secret') as any;
+      const userId = decoded.userId || decoded.id;
 
-      // Return user object that will be available as request.user in controllers
+      // Fetch full user object from database (excluding password)
+      const user = await User.findById(userId).select('-password');
+
+      if (!user || !user.isActive) {
+        // User not found or inactive - return null for guest user
+        return null;
+      }
+
+      // Return full user object that will be available as request.user in controllers
       return {
-        _id: decoded.userId || decoded.id,
-        id: decoded.userId || decoded.id,
-        email: decoded.email,
-        role: decoded.role,
-        name: decoded.name,
+        _id: user._id,
+        id: user._id.toString(),
+        email: user.email,
+        role: user.role,
+        name: user.name,
+        isActive: user.isActive,
+        isVerified: user.isVerified,
+        phone: user.phone,
+        profile: user.profile,
+        addresses: user.addresses,
+        preferences: user.preferences,
+        createdAt: user.createdAt,
+        lastLoginAt: user.lastLoginAt
       };
     } catch (error) {
       // Invalid token - return null for guest user
