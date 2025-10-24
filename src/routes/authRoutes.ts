@@ -7,7 +7,8 @@ import {
   resetPassword,
   getProfile,
   updateProfile,
-  changePassword
+  changePassword,
+  deleteAccount
 } from '../controllers/authController';
 import { authenticate } from '../middleware/auth';
 import {
@@ -121,6 +122,18 @@ router.post(
   ],
   handleValidationErrors,
   changePassword
+);
+
+// Delete account (requires password verification)
+router.delete(
+  '/account',
+  authenticate,
+  [
+    require('express-validator').body('password')
+      .notEmpty().withMessage('Password is required to delete account')
+  ],
+  handleValidationErrors,
+  deleteAccount
 );
 
 /**

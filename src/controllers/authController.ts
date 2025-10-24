@@ -480,7 +480,7 @@ export const changePassword = async (req: AuthRequest, res: Response): Promise<v
 
     // Get user with password field
     const user = await User.findById(req.user._id).select('+password');
-    
+
     if (!user) {
       res.status(404).json({
         status: 'error',
@@ -491,7 +491,7 @@ export const changePassword = async (req: AuthRequest, res: Response): Promise<v
 
     // Check current password
     const isPasswordCorrect = await user.comparePassword(currentPassword);
-    
+
     if (!isPasswordCorrect) {
       res.status(401).json({
         status: 'error',
@@ -519,6 +519,78 @@ export const changePassword = async (req: AuthRequest, res: Response): Promise<v
     res.status(500).json({
       status: 'error',
       message: 'Failed to change password. Please try again.'
+    });
+  }
+};
+
+/**
+ * Delete user account
+ * Requires password verification for security
+ */
+export const deleteAccount = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({
+        status: 'error',
+        message: 'User not authenticated'
+      });
+      return;
+    }
+
+    const { password } = req.body as { password: string };
+
+    if (!password) {
+      res.status(400).json({
+        status: 'error',
+        message: 'Password is required to delete account'
+      });
+      return;
+    }
+
+    // Get user with password field
+    const user = await User.findById(req.user._id).select('+password');
+
+    if (!user) {
+      res.status(404).json({
+        status: 'error',
+        message: 'User not found'
+      });
+      return;
+    }
+
+    // Verify password
+    const isPasswordCorrect = await user.comparePassword(password);
+
+    if (!isPasswordCorrect) {
+      res.status(401).json({
+        status: 'error',
+        message: 'Incorrect password. Account deletion cancelled.'
+      });
+      return;
+    }
+
+    // Soft delete: deactivate account instead of hard delete
+    // This preserves order history and allows account recovery if needed
+    user.isActive = false;
+    user.name = 'Deleted User';
+    user.email = `deleted_${user._id}@cartaisy.com`; // Prevent email conflicts
+    await user.save();
+
+    // Note: Consider adding background job to:
+    // - Clean up user data after 30 days
+    // - Send confirmation email
+    // - Cancel active subscriptions
+    // - Remove from mailing lists
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Account deleted successfully. We\'re sorry to see you go.'
+    });
+  } catch (error) {
+    console.error('Delete account error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to delete account. Please try again.'
     });
   }
 };
