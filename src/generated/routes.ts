@@ -1060,6 +1060,27 @@ const models: TsoaRoute.Models = {
         "type": {"dataType":"nestedObjectLiteral","nestedProperties":{},"additionalProperties":{"dataType":"string"},"validators":{}},
     },
     // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "AddressData": {
+        "dataType": "refObject",
+        "properties": {
+            "label": {"dataType":"string"},
+            "type": {"dataType":"union","subSchemas":[{"dataType":"enum","enums":["billing"]},{"dataType":"enum","enums":["shipping"]},{"dataType":"enum","enums":["both"]}]},
+            "firstName": {"dataType":"string"},
+            "lastName": {"dataType":"string"},
+            "company": {"dataType":"string"},
+            "address1": {"dataType":"string","required":true},
+            "address2": {"dataType":"string"},
+            "city": {"dataType":"string"},
+            "province": {"dataType":"string","required":true},
+            "country": {"dataType":"string","required":true},
+            "countryCode": {"dataType":"string"},
+            "zip": {"dataType":"string","required":true},
+            "phone": {"dataType":"string"},
+            "deliveryInstructions": {"dataType":"string"},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
     "Record_string.boolean_": {
         "dataType": "refAlias",
         "type": {"dataType":"nestedObjectLiteral","nestedProperties":{},"additionalProperties":{"dataType":"boolean"},"validators":{}},
@@ -1082,6 +1103,7 @@ const models: TsoaRoute.Models = {
             "company": {"dataType":"string"},
             "website": {"dataType":"string"},
             "socialLinks": {"ref":"Record_string.string_"},
+            "address": {"ref":"AddressData"},
             "addresses": {"dataType":"array","array":{"dataType":"any"}},
             "currency": {"dataType":"string"},
             "language": {"dataType":"string"},

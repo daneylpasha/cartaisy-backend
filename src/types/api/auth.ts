@@ -127,6 +127,26 @@ export interface GetProfileResponse {
 }
 
 /**
+ * Address data structure
+ */
+export interface AddressData {
+  label?: string;
+  type?: 'billing' | 'shipping' | 'both';
+  firstName?: string;
+  lastName?: string;
+  company?: string;
+  address1: string;
+  address2?: string;
+  city?: string;
+  province: string;
+  country: string;
+  countryCode?: string;
+  zip: string;
+  phone?: string;
+  deliveryInstructions?: string;
+}
+
+/**
  * Update profile request - accepts any key/value pairs
  * Restricted fields cannot be updated
  */
@@ -145,6 +165,7 @@ export interface UpdateProfileRequest {
   company?: string;
   website?: string;
   socialLinks?: Record<string, string>;
+  address?: AddressData;
   addresses?: any[];
   currency?: string;
   language?: string;

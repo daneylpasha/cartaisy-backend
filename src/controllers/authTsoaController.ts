@@ -475,12 +475,33 @@ export class AuthController extends Controller {
         updateObj.name = `${firstName} ${lastName}`.trim();
       }
 
+      // Handle address updates - when address is provided, set it as default
+      if (updates.address) {
+        const currentUser = await User.findById(request.user._id);
+        if (currentUser) {
+          // Set all existing addresses to non-default
+          const existingAddresses = currentUser.addresses || [];
+          const updatedAddresses = existingAddresses.map((addr: any) => ({
+            ...addr.toObject(),
+            isDefault: false
+          }));
+
+          // Add the new address with isDefault: true
+          const newAddress = {
+            ...updates.address,
+            isDefault: true
+          };
+
+          updateObj.addresses = [...updatedAddresses, newAddress];
+        }
+      }
+
       // Process each field in the updates
       Object.keys(updates).forEach(field => {
         const value = updates[field as keyof typeof updates];
 
-        // Skip firstName and lastName as we already handled them
-        if (field === 'firstName' || field === 'lastName') {
+        // Skip firstName, lastName, and address as we already handled them
+        if (field === 'firstName' || field === 'lastName' || field === 'address') {
           return;
         }
 
@@ -497,8 +518,10 @@ export class AuthController extends Controller {
             updateObj[`preferences.${field}`] = value;
           }
         } else if (field === 'addresses' && Array.isArray(value)) {
-          // Handle addresses array
-          updateObj.addresses = value;
+          // Handle addresses array (only if address wasn't provided separately)
+          if (!updates.address) {
+            updateObj.addresses = value;
+          }
         } else {
           // Direct field on user document (name, phone, country, or any custom field)
           updateObj[field] = value;

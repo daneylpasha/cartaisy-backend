@@ -3744,6 +3744,66 @@
 				"type": "object",
 				"description": "Construct a type with a set of properties K of type T"
 			},
+			"AddressData": {
+				"description": "Address data structure",
+				"properties": {
+					"label": {
+						"type": "string"
+					},
+					"type": {
+						"type": "string",
+						"enum": [
+							"billing",
+							"shipping",
+							"both"
+						]
+					},
+					"firstName": {
+						"type": "string"
+					},
+					"lastName": {
+						"type": "string"
+					},
+					"company": {
+						"type": "string"
+					},
+					"address1": {
+						"type": "string"
+					},
+					"address2": {
+						"type": "string"
+					},
+					"city": {
+						"type": "string"
+					},
+					"province": {
+						"type": "string"
+					},
+					"country": {
+						"type": "string"
+					},
+					"countryCode": {
+						"type": "string"
+					},
+					"zip": {
+						"type": "string"
+					},
+					"phone": {
+						"type": "string"
+					},
+					"deliveryInstructions": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"address1",
+					"province",
+					"country",
+					"zip"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
 			"Record_string.boolean_": {
 				"properties": {},
 				"additionalProperties": {
@@ -3807,6 +3867,9 @@
 					},
 					"socialLinks": {
 						"$ref": "#/components/schemas/Record_string.string_"
+					},
+					"address": {
+						"$ref": "#/components/schemas/AddressData"
 					},
 					"addresses": {
 						"items": {},
