@@ -1,7 +1,7 @@
 import { Get, Post, Delete, Route, Tags, Response, Body, Security, Request, Query } from 'tsoa';
 import { Controller } from '@tsoa/runtime';
 import Favorite from '../models/Favorite';
-import Product from '../models/Product';
+import shopifyStorefront from '../services/shopifyStorefrontService';
 import {
   FavoritesResponse,
   FavoriteRequest,
@@ -185,7 +185,7 @@ export class FavoritesController extends Controller {
 
   /**
    * Get user's favorite products with full details and pagination
-   * Returns complete product data matching the PLP (Product Listing Page) structure
+   * Fetches product data directly from Shopify for real-time accuracy
    */
   @Get('detailed')
   @Security('jwt')
@@ -264,94 +264,84 @@ export class FavoritesController extends Controller {
         };
       }
 
-      // Helper function to extract numeric ID from GID format or return as-is
-      const normalizeProductId = (id: string): string => {
-        // If it's a GID format: gid://shopify/Product/123456
-        const gidMatch = id.match(/gid:\/\/shopify\/Product\/(\d+)/);
-        if (gidMatch) {
-          return gidMatch[1];
-        }
-        return id;
-      };
-
-      // Normalize all product IDs and create variations for matching
-      const normalizedIds = productIds.map(normalizeProductId);
-      const gidFormattedIds = normalizedIds.map(id => `gid://shopify/Product/${id}`);
-
-      // Create a comprehensive list of IDs to search for (both formats)
-      const allIdVariations = [...new Set([...productIds, ...normalizedIds, ...gidFormattedIds])];
-
-      // Debug logging to help diagnose ID format issues
-      console.log('Favorites Debug:', {
-        originalProductIds: productIds,
-        normalizedIds: normalizedIds,
-        gidFormattedIds: gidFormattedIds,
-        allIdVariations: allIdVariations,
-      });
-
-      // Fetch products with the same structure as PLP
-      // Query using $in with all ID variations to handle format mismatches
-      const products = await Product.find({
-        $or: [
-          { shopifyProductId: { $in: allIdVariations } },
-          { _id: { $in: productIds.filter(id => /^[0-9a-fA-F]{24}$/.test(id)) } } // MongoDB ObjectId format
-        ],
-        status: 'active',
-      })
-        .populate('category', 'name slug')
-        .select('-seo -inventoryTracking.history -analytics.conversionEvents')
-        .lean();
-
-      console.log(`Found ${products.length} products from ${productIds.length} favorites`);
-      if (products.length > 0) {
-        console.log('Sample product shopifyProductId:', products[0]?.shopifyProductId);
-      }
-
-      // Create a mapping that handles multiple ID formats
-      const productsMap = new Map<string, any>();
-      products.forEach((p: any) => {
-        // Map by shopifyProductId
-        if (p.shopifyProductId) {
-          productsMap.set(p.shopifyProductId, p);
-          // Also map by normalized version
-          const normalized = normalizeProductId(p.shopifyProductId);
-          productsMap.set(normalized, p);
-          // Also map by GID version
-          productsMap.set(`gid://shopify/Product/${normalized}`, p);
-        }
-        // Map by MongoDB _id
-        if (p._id) {
-          productsMap.set(p._id.toString(), p);
+      // Fetch products from Shopify in parallel
+      const productPromises = productIds.map(async (productId) => {
+        try {
+          const response = await shopifyStorefront.getProductById(productId);
+          return response?.data?.product || null;
+        } catch (error) {
+          console.error(`Failed to fetch product ${productId} from Shopify:`, error);
+          return null;
         }
       });
 
-      // Sort products to match the order of favorites (most recent first)
-      const sortedProducts = productIds
-        .map((id) => {
-          // Try original ID first
-          let product = productsMap.get(id);
-          if (!product) {
-            // Try normalized ID
-            const normalized = normalizeProductId(id);
-            product = productsMap.get(normalized);
-          }
-          if (!product) {
-            // Try GID format
-            const gidFormat = `gid://shopify/Product/${normalizeProductId(id)}`;
-            product = productsMap.get(gidFormat);
-          }
-          return product;
-        })
-        .filter((p) => p !== undefined);
+      const shopifyProducts = await Promise.all(productPromises);
+
+      // Filter out null values (products that failed to fetch)
+      const validProducts = shopifyProducts.filter((p) => p !== null);
+
+      // Transform Shopify products to match expected format
+      const transformedProducts = validProducts.map((product: any) => {
+        // Extract numeric ID from GID
+        const numericId = product.id?.match(/gid:\/\/shopify\/Product\/(\d+)/)?.[1] || product.id;
+
+        // Get price information
+        const minPrice = parseFloat(product.priceRange?.minVariantPrice?.amount || '0');
+        const compareAtPrice = parseFloat(product.compareAtPriceRange?.minVariantPrice?.amount || '0');
+
+        // Transform images
+        const images = product.images?.edges?.map((edge: any, index: number) => ({
+          url: edge.node.url,
+          alt: edge.node.altText || product.title,
+          position: index + 1,
+        })) || [];
+
+        // Transform variants
+        const variants = product.variants?.edges?.map((edge: any) => {
+          const variant = edge.node;
+          return {
+            id: variant.id,
+            title: variant.title,
+            price: parseFloat(variant.price?.amount || '0'),
+            compareAtPrice: variant.compareAtPrice ? parseFloat(variant.compareAtPrice.amount) : null,
+            availableForSale: variant.availableForSale,
+            quantityAvailable: variant.quantityAvailable,
+            options: variant.selectedOptions,
+            image: variant.image ? {
+              url: variant.image.url,
+              alt: variant.image.altText || variant.title,
+            } : null,
+          };
+        }) || [];
+
+        return {
+          id: numericId,
+          shopifyProductId: numericId,
+          title: product.title,
+          description: product.description || '',
+          handle: product.handle,
+          vendor: product.vendor,
+          productType: product.productType,
+          tags: product.tags || [],
+          price: minPrice,
+          compareAtPrice: compareAtPrice > minPrice ? compareAtPrice : null,
+          availableForSale: product.availableForSale,
+          totalInventory: product.totalInventory,
+          currencyCode: product.priceRange?.minVariantPrice?.currencyCode || 'USD',
+          images,
+          variants,
+          status: product.availableForSale ? 'active' : 'draft',
+        };
+      });
 
       return {
         success: true,
         data: {
-          products: sortedProducts,
+          products: transformedProducts,
           pagination: {
             current: pageNum,
             total: Math.ceil(totalFavorites / limitNum),
-            count: sortedProducts.length,
+            count: transformedProducts.length,
             totalProducts: totalFavorites,
           },
         },

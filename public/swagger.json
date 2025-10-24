@@ -4822,7 +4822,7 @@
 						"description": "Internal Server Error"
 					}
 				},
-				"description": "Get user's favorite products with full details and pagination\nReturns complete product data matching the PLP (Product Listing Page) structure",
+				"description": "Get user's favorite products with full details and pagination\nFetches product data directly from Shopify for real-time accuracy",
 				"tags": [
 					"Favorites"
 				],
