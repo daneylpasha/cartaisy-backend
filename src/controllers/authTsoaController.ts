@@ -475,46 +475,47 @@ export class AuthController extends Controller {
         updateObj.name = `${firstName} ${lastName}`.trim();
       }
 
-      // Handle address updates - when address is provided, update existing address and set as default
-      if (updates.address && typeof updates.addressIndex === 'number') {
-        const currentUser = await User.findById(request.user._id);
-        if (currentUser) {
-          const addressIndex = updates.addressIndex;
+      // Fetch the user document for modification
+      const user = await User.findById(request.user._id);
 
-          // Validate address index
-          if (addressIndex < 0 || addressIndex >= currentUser.addresses.length) {
-            this.setStatus(400);
-            return {
-              status: 'error',
-              message: 'Invalid address index'
-            };
-          }
-
-          // Set all existing addresses to non-default
-          const updatedAddresses = currentUser.addresses.map((addr: any, idx: number) => {
-            const addressObj = addr.toObject ? addr.toObject() : addr;
-
-            if (idx === addressIndex) {
-              // Update the specified address with new data and set as default
-              return {
-                ...addressObj,
-                ...updates.address,
-                isDefault: true
-              };
-            } else {
-              // Keep other addresses unchanged but set as non-default
-              return {
-                ...addressObj,
-                isDefault: false
-              };
-            }
-          });
-
-          updateObj.addresses = updatedAddresses;
-        }
+      if (!user) {
+        this.setStatus(404);
+        return {
+          status: 'error',
+          message: 'User not found'
+        };
       }
 
-      // Process each field in the updates
+      // Handle address updates - when address is provided, update existing address and set as default
+      if (updates.address && typeof updates.addressIndex === 'number') {
+        const addressIndex = updates.addressIndex;
+
+        // Validate address index
+        if (addressIndex < 0 || addressIndex >= user.addresses.length) {
+          this.setStatus(400);
+          return {
+            status: 'error',
+            message: 'Invalid address index'
+          };
+        }
+
+        // Update all addresses: set target as default, others as non-default
+        user.addresses.forEach((addr: any, idx: number) => {
+          if (idx === addressIndex) {
+            // Update the specified address with new data and set as default
+            Object.assign(addr, updates.address);
+            addr.isDefault = true;
+          } else {
+            // Keep other addresses unchanged but set as non-default
+            addr.isDefault = false;
+          }
+        });
+
+        // Mark addresses as modified so Mongoose knows to save the changes
+        user.markModified('addresses');
+      }
+
+      // Process each field in the updates and build updateObj
       Object.keys(updates).forEach(field => {
         const value = updates[field as keyof typeof updates];
 
@@ -538,7 +539,8 @@ export class AuthController extends Controller {
         } else if (field === 'addresses' && Array.isArray(value)) {
           // Handle addresses array (only if address wasn't provided separately)
           if (!updates.address) {
-            updateObj.addresses = value;
+            user.addresses = value;
+            user.markModified('addresses');
           }
         } else {
           // Direct field on user document (name, phone, country, or any custom field)
@@ -546,24 +548,35 @@ export class AuthController extends Controller {
         }
       });
 
-      // Update user with strict: false to allow dynamic fields
-      const user = await User.findByIdAndUpdate(
-        request.user._id,
-        { $set: updateObj },
-        {
-          new: true,
-          runValidators: true,
-          strict: false  // Allow fields not defined in schema
-        }
-      );
+      // Apply other updates directly to user document
+      Object.keys(updateObj).forEach(key => {
+        const value = updateObj[key];
 
-      if (!user) {
-        this.setStatus(404);
-        return {
-          status: 'error',
-          message: 'User not found'
-        };
-      }
+        if (key.includes('.')) {
+          // Handle nested fields like 'profile.gender'
+          const [parent, child] = key.split('.');
+          if (!user[parent as keyof typeof user]) {
+            (user as any)[parent] = {};
+          }
+
+          if (child.includes('.')) {
+            // Handle double nested like 'preferences.notifications.email'
+            const [subParent, subChild] = child.split('.');
+            if (!(user[parent as keyof typeof user] as any)[subParent]) {
+              (user[parent as keyof typeof user] as any)[subParent] = {};
+            }
+            (user[parent as keyof typeof user] as any)[subParent][subChild] = value;
+          } else {
+            (user[parent as keyof typeof user] as any)[child] = value;
+          }
+        } else {
+          // Direct field assignment
+          (user as any)[key] = value;
+        }
+      });
+
+      // Save the user document
+      await user.save();
 
       // Get updated user object including dynamic fields
       const userObj = user.toObject();
