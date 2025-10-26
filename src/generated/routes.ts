@@ -1104,6 +1104,7 @@ const models: TsoaRoute.Models = {
             "website": {"dataType":"string"},
             "socialLinks": {"ref":"Record_string.string_"},
             "address": {"ref":"AddressData"},
+            "addressIndex": {"dataType":"double"},
             "addresses": {"dataType":"array","array":{"dataType":"any"}},
             "currency": {"dataType":"string"},
             "language": {"dataType":"string"},

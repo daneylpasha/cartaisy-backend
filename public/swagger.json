@@ -3871,6 +3871,10 @@
 					"address": {
 						"$ref": "#/components/schemas/AddressData"
 					},
+					"addressIndex": {
+						"type": "number",
+						"format": "double"
+					},
 					"addresses": {
 						"items": {},
 						"type": "array"

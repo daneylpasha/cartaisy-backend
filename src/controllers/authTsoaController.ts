@@ -475,24 +475,42 @@ export class AuthController extends Controller {
         updateObj.name = `${firstName} ${lastName}`.trim();
       }
 
-      // Handle address updates - when address is provided, set it as default
-      if (updates.address) {
+      // Handle address updates - when address is provided, update existing address and set as default
+      if (updates.address && typeof updates.addressIndex === 'number') {
         const currentUser = await User.findById(request.user._id);
         if (currentUser) {
+          const addressIndex = updates.addressIndex;
+
+          // Validate address index
+          if (addressIndex < 0 || addressIndex >= currentUser.addresses.length) {
+            this.setStatus(400);
+            return {
+              status: 'error',
+              message: 'Invalid address index'
+            };
+          }
+
           // Set all existing addresses to non-default
-          const existingAddresses = currentUser.addresses || [];
-          const updatedAddresses = existingAddresses.map((addr: any) => ({
-            ...addr.toObject(),
-            isDefault: false
-          }));
+          const updatedAddresses = currentUser.addresses.map((addr: any, idx: number) => {
+            const addressObj = addr.toObject ? addr.toObject() : addr;
 
-          // Add the new address with isDefault: true
-          const newAddress = {
-            ...updates.address,
-            isDefault: true
-          };
+            if (idx === addressIndex) {
+              // Update the specified address with new data and set as default
+              return {
+                ...addressObj,
+                ...updates.address,
+                isDefault: true
+              };
+            } else {
+              // Keep other addresses unchanged but set as non-default
+              return {
+                ...addressObj,
+                isDefault: false
+              };
+            }
+          });
 
-          updateObj.addresses = [...updatedAddresses, newAddress];
+          updateObj.addresses = updatedAddresses;
         }
       }
 
@@ -500,8 +518,8 @@ export class AuthController extends Controller {
       Object.keys(updates).forEach(field => {
         const value = updates[field as keyof typeof updates];
 
-        // Skip firstName, lastName, and address as we already handled them
-        if (field === 'firstName' || field === 'lastName' || field === 'address') {
+        // Skip firstName, lastName, address, and addressIndex as we already handled them
+        if (field === 'firstName' || field === 'lastName' || field === 'address' || field === 'addressIndex') {
           return;
         }
 

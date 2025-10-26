@@ -166,6 +166,7 @@ export interface UpdateProfileRequest {
   website?: string;
   socialLinks?: Record<string, string>;
   address?: AddressData;
+  addressIndex?: number;
   addresses?: any[];
   currency?: string;
   language?: string;
