@@ -486,8 +486,9 @@ export class AuthController extends Controller {
         };
       }
 
-      // Handle address updates - when address is provided, update existing address and set as default
-      if (updates.address && typeof updates.addressIndex === 'number') {
+      // Handle address updates - when addressIndex is provided, set that address as default
+      // If address data is also provided, update the address fields too
+      if (typeof updates.addressIndex === 'number') {
         const addressIndex = updates.addressIndex;
 
         // Validate address index
@@ -502,8 +503,11 @@ export class AuthController extends Controller {
         // Update all addresses: set target as default, others as non-default
         user.addresses.forEach((addr: any, idx: number) => {
           if (idx === addressIndex) {
-            // Update the specified address with new data and set as default
-            Object.assign(addr, updates.address);
+            // If address data is provided, update it
+            if (updates.address) {
+              Object.assign(addr, updates.address);
+            }
+            // Set as default
             addr.isDefault = true;
           } else {
             // Keep other addresses unchanged but set as non-default
