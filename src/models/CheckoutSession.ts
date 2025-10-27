@@ -428,7 +428,7 @@ CheckoutSessionSchema.virtual('completionPercentage').get(function (this: ICheck
  */
 CheckoutSessionSchema.virtual('isReadyForPayment').get(function (this: ICheckoutSession): boolean {
   return (
-    !!this.shippingAddressId &&
+    (this.shippingAddressId !== undefined && this.shippingAddressId !== null) &&
     !!this.selectedShippingRate &&
     !!this.paymentMethodId &&
     this.status === 'step3'
