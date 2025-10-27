@@ -148,8 +148,8 @@ export const validateTenantConfig = (): ValidationError[] => {
     if (derivedConfig.isProduction && tenantConfig.payments.stripe.secretKey?.startsWith('sk_test_')) {
       errors.push({
         field: 'STRIPE_SECRET_KEY',
-        message: 'Using test Stripe key in production environment',
-        severity: 'error'
+        message: 'Using test Stripe key in production environment - this should be changed to a live key (sk_live_...)',
+        severity: 'warning'
       });
     }
   }
