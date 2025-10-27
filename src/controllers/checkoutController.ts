@@ -731,8 +731,8 @@ export class CheckoutController extends Controller {
     try {
       const userId = request.user._id;
 
-      // Find session with populated references
-      const session = await CheckoutSession.findById(sessionId).populate('paymentMethodId');
+      // Find session
+      const session = await CheckoutSession.findById(sessionId);
 
       if (!session) {
         this.setStatus(404);
@@ -917,11 +917,20 @@ export class CheckoutController extends Controller {
         }
       }
 
+      // Debug logging
+      console.log('Complete checkout validation:', {
+        shippingAddressId: session.shippingAddressId,
+        selectedShippingRate: session.selectedShippingRate,
+        paymentMethodId: session.paymentMethodId,
+        status: session.status,
+        isReadyForPayment: (session as any).isReadyForPayment
+      });
+
       // Validate all required fields
       if (!(session as any).isReadyForPayment) {
         this.setStatus(400);
         const missing = [];
-        if (!session.shippingAddressId) missing.push('shipping address');
+        if (session.shippingAddressId === undefined || session.shippingAddressId === null) missing.push('shipping address');
         if (!session.selectedShippingRate) missing.push('shipping method');
         if (!session.paymentMethodId) missing.push('payment method');
         if (session.status !== 'step3') missing.push(`status is '${session.status}' instead of 'step3'`);
