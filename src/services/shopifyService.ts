@@ -412,6 +412,11 @@ export const syncOrders = async (daysBack: number = 30): Promise<SyncResult> => 
 
     const orders = response.body.orders;
 
+    if (!orders || !Array.isArray(orders)) {
+      console.log('No orders found in Shopify response');
+      return { synced: 0, errors: [] };
+    }
+
     for (const shopifyOrder of orders) {
       try {
         // Check if order already exists
