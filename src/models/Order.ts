@@ -24,11 +24,19 @@ import {
 // =============================================================================
 
 const OrderLineItemSchema = new Schema({
-  productId: { 
-    type: Schema.Types.ObjectId, 
-    ref: 'Product', 
-    required: [true, 'Product ID is required'],
+  productId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Product',
+    required: false,
     index: true
+  },
+  shopifyProductId: {
+    type: String,
+    trim: true
+  },
+  shopifyVariantId: {
+    type: String,
+    trim: true
   },
   variantId: { 
     type: String,
