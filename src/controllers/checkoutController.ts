@@ -628,7 +628,27 @@ export class CheckoutController extends Controller {
 
       if (!discountCode || !discountCode.applicable) {
         this.setStatus(400);
-        throw new Error('Promo code is not applicable to this order');
+        return {
+          success: false,
+          data: {
+            discount: {
+              code: promoCode.trim().toUpperCase(),
+              amount: 0,
+              type: 'fixed_amount',
+              applicable: false,
+            },
+            pricing: {
+              subtotal: session.subtotal,
+              shippingCost: session.shippingCost,
+              discountAmount: 0,
+              couponDiscount: 0,
+              tax: session.tax,
+              grandTotal: session.grandTotal,
+              currency: session.currency,
+            },
+          },
+          message: 'Promo code is not applicable to this order. Please check the code requirements.',
+        };
       }
 
       // Calculate discount amount
