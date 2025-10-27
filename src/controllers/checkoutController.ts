@@ -389,6 +389,9 @@ export class CheckoutController extends Controller {
       // Extend expiration
       session.extendExpiration(30);
 
+      // Explicitly mark shippingAddressId as modified to ensure it's saved
+      session.markModified('shippingAddressId');
+
       await session.save();
 
       return {
