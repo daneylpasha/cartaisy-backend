@@ -1124,124 +1124,91 @@
 				"type": "object",
 				"additionalProperties": false
 			},
-			"PaymentMethodData": {
-				"description": "Payment method data for responses",
+			"StoredPaymentCard": {
+				"description": "Stored payment method card details",
+				"properties": {
+					"brand": {
+						"type": "string"
+					},
+					"last4": {
+						"type": "string"
+					},
+					"exp_month": {
+						"type": "number",
+						"format": "double"
+					},
+					"exp_year": {
+						"type": "number",
+						"format": "double"
+					},
+					"country": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"brand",
+					"last4",
+					"exp_month",
+					"exp_year"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"StoredPaymentMethod": {
+				"description": "Stored payment method object (sanitized from Stripe)",
 				"properties": {
 					"id": {
 						"type": "string"
 					},
 					"type": {
-						"type": "string",
-						"enum": [
-							"card",
-							"google_pay",
-							"apple_pay"
-						]
-					},
-					"displayName": {
 						"type": "string"
 					},
 					"card": {
-						"properties": {
-							"expYear": {
-								"type": "number",
-								"format": "double"
-							},
-							"expMonth": {
-								"type": "number",
-								"format": "double"
-							},
-							"last4": {
-								"type": "string"
-							},
-							"brand": {
-								"type": "string"
-							}
-						},
-						"required": [
-							"expYear",
-							"expMonth",
-							"last4",
-							"brand"
-						],
-						"type": "object"
-					},
-					"billingAddress": {
-						"properties": {
-							"zip": {
-								"type": "string"
-							},
-							"country": {
-								"type": "string"
-							},
-							"province": {
-								"type": "string"
-							},
-							"city": {
-								"type": "string"
-							},
-							"address2": {
-								"type": "string"
-							},
-							"address1": {
-								"type": "string"
-							}
-						},
-						"required": [
-							"zip",
-							"country",
-							"province",
-							"city",
-							"address1"
-						],
-						"type": "object"
+						"$ref": "#/components/schemas/StoredPaymentCard"
 					},
 					"isDefault": {
 						"type": "boolean"
 					},
-					"isExpired": {
-						"type": "boolean"
+					"created": {
+						"type": "number",
+						"format": "double"
 					},
-					"createdAt": {
+					"allow_redisplay": {
 						"type": "string"
 					}
 				},
 				"required": [
 					"id",
 					"type",
-					"displayName",
-					"billingAddress",
 					"isDefault",
-					"isExpired",
-					"createdAt"
+					"created"
 				],
 				"type": "object",
 				"additionalProperties": false
 			},
-			"GetPaymentMethodsResponse": {
-				"description": "Response for get payment methods",
+			"ListStoredPaymentMethodsResponse": {
+				"description": "List stored payment methods response",
 				"properties": {
 					"success": {
 						"type": "boolean"
 					},
 					"data": {
 						"properties": {
-							"hasDefault": {
-								"type": "boolean"
-							},
 							"count": {
 								"type": "number",
 								"format": "double"
 							},
+							"defaultPaymentMethodId": {
+								"type": "string"
+							},
 							"paymentMethods": {
 								"items": {
-									"$ref": "#/components/schemas/PaymentMethodData"
+									"$ref": "#/components/schemas/StoredPaymentMethod"
 								},
 								"type": "array"
 							}
 						},
 						"required": [
-							"hasDefault",
 							"count",
 							"paymentMethods"
 						],
@@ -1255,8 +1222,110 @@
 				"type": "object",
 				"additionalProperties": false
 			},
-			"AddPaymentMethodResponse": {
-				"description": "Response for add payment method",
+			"StorePaymentMethodResponse": {
+				"description": "Store payment method response",
+				"properties": {
+					"success": {
+						"type": "boolean"
+					},
+					"message": {
+						"type": "string"
+					},
+					"data": {
+						"properties": {
+							"paymentMethod": {
+								"$ref": "#/components/schemas/StoredPaymentMethod"
+							}
+						},
+						"required": [
+							"paymentMethod"
+						],
+						"type": "object"
+					}
+				},
+				"required": [
+					"success",
+					"message"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"StorePaymentMethodRequest": {
+				"description": "Store payment method request",
+				"properties": {
+					"paymentMethodId": {
+						"type": "string"
+					},
+					"setAsDefault": {
+						"type": "boolean"
+					}
+				},
+				"required": [
+					"paymentMethodId"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"DeleteStoredPaymentMethodResponse": {
+				"description": "Delete stored payment method response",
+				"properties": {
+					"success": {
+						"type": "boolean"
+					},
+					"message": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"success",
+					"message"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"UpdateDefaultPaymentMethodResponse": {
+				"description": "Update default payment method response",
+				"properties": {
+					"success": {
+						"type": "boolean"
+					},
+					"message": {
+						"type": "string"
+					},
+					"data": {
+						"properties": {
+							"paymentMethodId": {
+								"type": "string"
+							}
+						},
+						"required": [
+							"paymentMethodId"
+						],
+						"type": "object"
+					}
+				},
+				"required": [
+					"success",
+					"message"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"UpdateDefaultPaymentMethodRequest": {
+				"description": "Update default payment method request",
+				"properties": {
+					"paymentMethodId": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"paymentMethodId"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"GetDefaultStoredPaymentMethodResponse": {
+				"description": "Get default stored payment method response",
 				"properties": {
 					"success": {
 						"type": "boolean"
@@ -1264,7 +1333,7 @@
 					"data": {
 						"properties": {
 							"paymentMethod": {
-								"$ref": "#/components/schemas/PaymentMethodData"
+								"$ref": "#/components/schemas/StoredPaymentMethod"
 							}
 						},
 						"required": [
@@ -1277,108 +1346,7 @@
 					}
 				},
 				"required": [
-					"success",
-					"data",
-					"message"
-				],
-				"type": "object",
-				"additionalProperties": false
-			},
-			"AddPaymentMethodRequest": {
-				"description": "Request to add payment method",
-				"properties": {
-					"stripePaymentMethodId": {
-						"type": "string"
-					},
-					"billingAddress": {
-						"properties": {
-							"lastName": {
-								"type": "string"
-							},
-							"firstName": {
-								"type": "string"
-							},
-							"zip": {
-								"type": "string"
-							},
-							"country": {
-								"type": "string"
-							},
-							"province": {
-								"type": "string"
-							},
-							"city": {
-								"type": "string"
-							},
-							"address2": {
-								"type": "string"
-							},
-							"address1": {
-								"type": "string"
-							}
-						},
-						"required": [
-							"zip",
-							"country",
-							"province",
-							"city",
-							"address1"
-						],
-						"type": "object"
-					},
-					"isDefault": {
-						"type": "boolean"
-					}
-				},
-				"required": [
-					"stripePaymentMethodId",
-					"billingAddress"
-				],
-				"type": "object",
-				"additionalProperties": false
-			},
-			"DeletePaymentMethodResponse": {
-				"description": "Response for delete payment method",
-				"properties": {
-					"success": {
-						"type": "boolean"
-					},
-					"message": {
-						"type": "string"
-					}
-				},
-				"required": [
-					"success",
-					"message"
-				],
-				"type": "object",
-				"additionalProperties": false
-			},
-			"SetDefaultPaymentMethodResponse": {
-				"description": "Response for set default payment method",
-				"properties": {
-					"success": {
-						"type": "boolean"
-					},
-					"data": {
-						"properties": {
-							"paymentMethod": {
-								"$ref": "#/components/schemas/PaymentMethodData"
-							}
-						},
-						"required": [
-							"paymentMethod"
-						],
-						"type": "object"
-					},
-					"message": {
-						"type": "string"
-					}
-				},
-				"required": [
-					"success",
-					"data",
-					"message"
+					"success"
 				],
 				"type": "object",
 				"additionalProperties": false
@@ -5130,14 +5098,14 @@
 		},
 		"/payment-methods": {
 			"get": {
-				"operationId": "GetPaymentMethods",
+				"operationId": "ListPaymentMethods",
 				"responses": {
 					"200": {
-						"description": "List of user's payment methods",
+						"description": "Payment methods retrieved successfully",
 						"content": {
 							"application/json": {
 								"schema": {
-									"$ref": "#/components/schemas/GetPaymentMethodsResponse"
+									"$ref": "#/components/schemas/ListStoredPaymentMethodsResponse"
 								}
 							}
 						}
@@ -5149,7 +5117,8 @@
 						"description": "Internal Server Error"
 					}
 				},
-				"description": "Get all payment methods for authenticated user",
+				"description": "List all payment methods for the authenticated user",
+				"summary": "Get all saved payment methods",
 				"tags": [
 					"Payment Methods"
 				],
@@ -5163,18 +5132,18 @@
 			"post": {
 				"operationId": "AddPaymentMethod",
 				"responses": {
-					"200": {
-						"description": "Created payment method",
+					"201": {
+						"description": "Payment method added successfully",
 						"content": {
 							"application/json": {
 								"schema": {
-									"$ref": "#/components/schemas/AddPaymentMethodResponse"
+									"$ref": "#/components/schemas/StorePaymentMethodResponse"
 								}
 							}
 						}
 					},
 					"400": {
-						"description": "Bad Request - Invalid payment method"
+						"description": "Bad Request"
 					},
 					"401": {
 						"description": "Unauthorized"
@@ -5183,7 +5152,8 @@
 						"description": "Internal Server Error"
 					}
 				},
-				"description": "Add a new payment method\n\nFlow:\n1. Frontend creates payment method with Stripe.js (PCI compliant)\n2. Frontend sends stripePaymentMethodId to backend\n3. Backend attaches to Stripe customer\n4. Backend saves to database",
+				"description": "Add a new payment method",
+				"summary": "Attach payment method created on frontend",
 				"tags": [
 					"Payment Methods"
 				],
@@ -5194,35 +5164,32 @@
 				],
 				"parameters": [],
 				"requestBody": {
-					"description": "- Payment method details",
+					"description": "Payment method ID from Stripe SDK",
 					"required": true,
 					"content": {
 						"application/json": {
 							"schema": {
-								"$ref": "#/components/schemas/AddPaymentMethodRequest",
-								"description": "- Payment method details"
+								"$ref": "#/components/schemas/StorePaymentMethodRequest",
+								"description": "Payment method ID from Stripe SDK"
 							}
 						}
 					}
 				}
 			}
 		},
-		"/payment-methods/{id}": {
+		"/payment-methods/{paymentMethodId}": {
 			"delete": {
-				"operationId": "DeletePaymentMethod",
+				"operationId": "RemovePaymentMethod",
 				"responses": {
 					"200": {
-						"description": "Success message",
+						"description": "Payment method removed successfully",
 						"content": {
 							"application/json": {
 								"schema": {
-									"$ref": "#/components/schemas/DeletePaymentMethodResponse"
+									"$ref": "#/components/schemas/DeleteStoredPaymentMethodResponse"
 								}
 							}
 						}
-					},
-					"400": {
-						"description": "Bad Request - Cannot delete default payment method"
 					},
 					"401": {
 						"description": "Unauthorized"
@@ -5234,7 +5201,8 @@
 						"description": "Internal Server Error"
 					}
 				},
-				"description": "Delete a payment method",
+				"description": "Remove a payment method",
+				"summary": "Detach payment method from customer",
 				"tags": [
 					"Payment Methods"
 				],
@@ -5245,9 +5213,9 @@
 				],
 				"parameters": [
 					{
-						"description": "- Payment method ID",
+						"description": "Payment method ID to remove",
 						"in": "path",
-						"name": "id",
+						"name": "paymentMethodId",
 						"required": true,
 						"schema": {
 							"type": "string"
@@ -5256,19 +5224,22 @@
 				]
 			}
 		},
-		"/payment-methods/{id}/default": {
-			"patch": {
+		"/payment-methods/default": {
+			"put": {
 				"operationId": "SetDefaultPaymentMethod",
 				"responses": {
 					"200": {
-						"description": "Updated payment method",
+						"description": "Default payment method updated successfully",
 						"content": {
 							"application/json": {
 								"schema": {
-									"$ref": "#/components/schemas/SetDefaultPaymentMethodResponse"
+									"$ref": "#/components/schemas/UpdateDefaultPaymentMethodResponse"
 								}
 							}
 						}
+					},
+					"400": {
+						"description": "Bad Request"
 					},
 					"401": {
 						"description": "Unauthorized"
@@ -5280,7 +5251,8 @@
 						"description": "Internal Server Error"
 					}
 				},
-				"description": "Set payment method as default",
+				"description": "Set a payment method as default",
+				"summary": "Set default payment method for future charges",
 				"tags": [
 					"Payment Methods"
 				],
@@ -5289,17 +5261,54 @@
 						"jwt": []
 					}
 				],
-				"parameters": [
-					{
-						"description": "- Payment method ID",
-						"in": "path",
-						"name": "id",
-						"required": true,
-						"schema": {
-							"type": "string"
+				"parameters": [],
+				"requestBody": {
+					"description": "Payment method ID to set as default",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/UpdateDefaultPaymentMethodRequest",
+								"description": "Payment method ID to set as default"
+							}
 						}
 					}
-				]
+				}
+			},
+			"get": {
+				"operationId": "GetDefaultPaymentMethod",
+				"responses": {
+					"200": {
+						"description": "Default payment method retrieved successfully",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/GetDefaultStoredPaymentMethodResponse"
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "Unauthorized"
+					},
+					"404": {
+						"description": "No default payment method found"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Get default payment method",
+				"summary": "Get the default payment method for the user",
+				"tags": [
+					"Payment Methods"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": []
 			}
 		},
 		"/customer/homescreen": {
