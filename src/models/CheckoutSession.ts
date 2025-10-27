@@ -44,8 +44,8 @@ export interface ICheckoutSession extends Document {
   contactNumber?: string;
   selectedShippingRate?: IShippingRate;
 
-  // Step 2: Payment Method
-  paymentMethodId?: mongoose.Types.ObjectId;
+  // Step 2: Payment Method (Stripe payment method ID, e.g., pm_xxx)
+  paymentMethodId?: string;
 
   // Step 3: Discount/Promo Code
   promoCode?: string;
@@ -201,9 +201,10 @@ const CheckoutSessionSchema = new Schema<ICheckoutSession>(
     },
 
     // Step 2: Payment
+    // Step 2: Payment Method (Stripe payment method ID)
     paymentMethodId: {
-      type: Schema.Types.ObjectId,
-      ref: 'PaymentMethod',
+      type: String,
+      trim: true,
     },
 
     // Step 3: Discount

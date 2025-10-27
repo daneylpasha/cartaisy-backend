@@ -496,7 +496,7 @@ export class CheckoutController extends Controller {
       }
 
       // Update session with Stripe payment method ID
-      session.paymentMethodId = paymentMethodId as any;
+      session.paymentMethodId = paymentMethodId;
 
       // Mark step 2 complete and move to step 3
       session.completeStep(2);
