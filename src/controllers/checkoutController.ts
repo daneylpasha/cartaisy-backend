@@ -981,7 +981,7 @@ export class CheckoutController extends Controller {
         stripeService.dollarsToCents(session.grandTotal),
         session.currency.toLowerCase(),
         stripeCustomerId,
-        paymentMethod.stripePaymentMethodId,
+        paymentMethod, // paymentMethod is already the Stripe PM ID string
         {
           sessionId: session._id.toString(),
           userId: userId.toString(),
