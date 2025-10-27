@@ -2,6 +2,7 @@ import { Body, Controller, Get, Path, Post, Query, Request, Route, Security, Tag
 import CheckoutSession from '../models/CheckoutSession';
 import User from '../models/User';
 import Order from '../models/Order';
+import Product from '../models/Product';
 import shopifyStorefront from '../services/shopifyStorefrontService';
 import stripeService from '../services/stripeService';
 import { normalizeAddressForShopify } from '../utils/addressHelper';
@@ -1040,12 +1041,18 @@ export class CheckoutController extends Controller {
         province: shippingAddress.province,
       });
 
-      const lineItems = cart.lines.edges.map((edge: any) => {
+      const lineItems = await Promise.all(cart.lines.edges.map(async (edge: any) => {
         const node = edge.node;
         const merchandise = node.merchandise;
         const itemPrice = parseFloat(merchandise.priceV2?.amount || '0');
+
+        const product = await Product.findOne({ shopifyProductId: merchandise.product?.id });
+        if (!product) {
+          throw new Error(`Product not found in database: ${merchandise.product?.title}`);
+        }
+
         return {
-          productId: merchandise.product?.id,
+          productId: product._id,
           shopifyProductId: merchandise.product?.id,
           shopifyVariantId: merchandise.id,
           title: merchandise.product?.title || 'Product',
@@ -1055,7 +1062,7 @@ export class CheckoutController extends Controller {
           price: itemPrice,
           total: itemPrice * node.quantity,
         };
-      });
+      }));
 
       const orderNumber = `ORD-${Date.now()}-${userId.toString().slice(-6).toUpperCase()}`;
 
