@@ -1040,77 +1040,82 @@ export class CheckoutController extends Controller {
         province: shippingAddress.province,
       });
 
-      // Prepare line items for draft order
-      const lineItems = cart.lines.edges.map((edge: any) => ({
-        variantId: edge.node.merchandise.id,
-        quantity: edge.node.quantity,
-      }));
-
-      // Create draft order
-      const draftOrderResponse = await shopifyStorefront.createDraftOrder({
-        email: user.email,
-        lineItems,
-        shippingAddress: {
-          address1: shippingAddress.address1,
-          address2: shippingAddress.address2,
-          city: shippingAddress.city || '',
-          province: normalizedShippingAddress.provinceCode,
-          country: normalizedShippingAddress.countryCode,
-          zip: shippingAddress.zip,
-          firstName: shippingAddress.firstName,
-          lastName: shippingAddress.lastName,
-          phone: session.contactNumber || shippingAddress.phone,
-        },
-        shippingLine: session.selectedShippingRate ? {
-          title: session.selectedShippingRate.title,
-          price: session.selectedShippingRate.price,
-          shippingRateHandle: session.selectedShippingRate.handle,
-        } : undefined,
-        note: session.deliveryInstructions,
-        tags: ['mobile-app', 'stripe-payment'],
-        metafields: [
-          { namespace: 'custom', key: 'payment_intent_id', value: paymentIntent.id, type: 'single_line_text_field' },
-          { namespace: 'custom', key: 'session_id', value: session._id.toString(), type: 'single_line_text_field' },
-        ],
+      // Prepare line items from cart
+      const lineItems = cart.lines.edges.map((edge: any) => {
+        const node = edge.node;
+        const merchandise = node.merchandise;
+        return {
+          shopifyProductId: merchandise.product?.id,
+          shopifyVariantId: merchandise.id,
+          title: merchandise.product?.title || 'Product',
+          variantTitle: merchandise.title || '',
+          sku: merchandise.sku || '',
+          quantity: node.quantity,
+          price: parseFloat(merchandise.priceV2?.amount || '0'),
+          total: parseFloat(merchandise.priceV2?.amount || '0') * node.quantity,
+          image: merchandise.image?.url || null,
+        };
       });
 
-      if (draftOrderResponse?.data?.draftOrderCreate?.userErrors?.length > 0) {
-        const error = draftOrderResponse.data.draftOrderCreate.userErrors[0];
-        throw new Error(`Failed to create draft order: ${error.message}`);
-      }
+      // Generate order number
+      const orderNumber = `ORD-${Date.now()}-${userId.toString().slice(-6).toUpperCase()}`;
 
-      const draftOrder = draftOrderResponse?.data?.draftOrderCreate?.draftOrder;
-      session.shopifyDraftOrderId = draftOrder.id;
-      await session.save();
-
-      // Complete draft order (paymentPending=false since we already processed payment)
-      const completeResponse = await shopifyStorefront.completeDraftOrder(draftOrder.id, false);
-
-      if (completeResponse?.data?.draftOrderComplete?.userErrors?.length > 0) {
-        const error = completeResponse.data.draftOrderComplete.userErrors[0];
-        throw new Error(`Failed to complete order: ${error.message}`);
-      }
-
-      const shopifyOrder = completeResponse?.data?.draftOrderComplete?.draftOrder?.order;
-      session.shopifyOrderId = shopifyOrder.id;
-
-      // Create order in database
+      // Create order directly in database (skip Shopify due to plan limitations)
       const order = new Order({
         userId,
-        shopifyOrderId: shopifyOrder.id,
-        orderNumber: shopifyOrder.name,
-        confirmationNumber: shopifyOrder.confirmationNumber,
+        orderNumber,
+        confirmationNumber: `CONF-${Date.now()}`,
         email: user.email,
-        totalPrice: session.grandTotal,
+        phone: session.contactNumber,
+        lineItems,
+        subtotalPrice: session.subtotal,
         subtotal: session.subtotal,
         shippingCost: session.shippingCost,
         tax: session.tax,
-        discount: session.discountAmount,
+        discount: session.discountAmount || 0,
+        totalPrice: session.grandTotal,
         currency: session.currency,
-        paymentMethod: 'stripe',
-        paymentStatus: 'paid',
-        shippingAddress: shippingAddress,
+        financial: {
+          status: 'paid',
+          method: 'stripe',
+          transactionId: paymentIntent.id,
+          paidAt: new Date(),
+        },
+        payment: {
+          method: 'stripe',
+          status: 'paid',
+          transactionId: paymentIntent.id,
+          amount: session.grandTotal,
+          currency: session.currency,
+          paidAt: new Date(),
+        },
+        shippingAddress: {
+          firstName: shippingAddress.firstName,
+          lastName: shippingAddress.lastName,
+          address1: shippingAddress.address1,
+          address2: shippingAddress.address2,
+          city: shippingAddress.city,
+          province: shippingAddress.province,
+          country: shippingAddress.country,
+          zip: shippingAddress.zip,
+          phone: session.contactNumber || shippingAddress.phone,
+          countryCode: shippingAddress.countryCode,
+          provinceCode: normalizedShippingAddress.provinceCode,
+        },
+        shipping: {
+          method: session.selectedShippingRate?.title || 'Standard',
+          cost: session.shippingCost,
+          estimatedDelivery: session.estimatedDelivery,
+        },
         status: 'pending',
+        fulfillmentStatus: 'unfulfilled',
+        notes: session.deliveryInstructions || '',
+        source: 'mobile_app',
+        metadata: {
+          stripePaymentIntentId: paymentIntent.id,
+          checkoutSessionId: session._id.toString(),
+          cartId: session.shopifyCartId,
+        },
       });
 
       await order.save();
