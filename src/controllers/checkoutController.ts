@@ -1,6 +1,5 @@
 import { Body, Controller, Get, Path, Post, Query, Request, Route, Security, Tags, Response } from 'tsoa';
 import CheckoutSession from '../models/CheckoutSession';
-import PaymentMethod from '../models/PaymentMethod';
 import User from '../models/User';
 import Order from '../models/Order';
 import shopifyStorefront from '../services/shopifyStorefrontService';
@@ -461,27 +460,43 @@ export class CheckoutController extends Controller {
         throw new Error('Please complete shipping information first');
       }
 
-      // Find and validate payment method
-      const paymentMethod = await PaymentMethod.findById(paymentMethodId);
-      if (!paymentMethod) {
-        this.setStatus(404);
-        throw new Error('Payment method not found');
-      }
-
-      // Verify ownership
-      if (!paymentMethod.belongsToUser(userId)) {
-        this.setStatus(403);
-        throw new Error('Unauthorized access to payment method');
-      }
-
-      // Check if expired
-      if (paymentMethod.isExpired) {
+      // Fetch user to get Stripe customer ID
+      const user = await User.findById(userId);
+      if (!user || !user.stripeCustomerId) {
         this.setStatus(400);
-        throw new Error('Payment method has expired');
+        throw new Error('User does not have a Stripe customer account');
       }
 
-      // Update session
-      session.paymentMethodId = paymentMethod._id;
+      // Validate payment method exists in Stripe and belongs to user
+      try {
+        const stripePaymentMethod = await stripeService.getPaymentMethod(paymentMethodId);
+
+        // Verify ownership - payment method must belong to user's Stripe customer
+        if (stripePaymentMethod.customer !== user.stripeCustomerId) {
+          this.setStatus(403);
+          throw new Error('Unauthorized access to payment method');
+        }
+
+        // Check if card is expired (if it's a card payment method)
+        if (stripePaymentMethod.card) {
+          const now = new Date();
+          const expYear = stripePaymentMethod.card.exp_year;
+          const expMonth = stripePaymentMethod.card.exp_month;
+          const expDate = new Date(expYear, expMonth, 0); // Last day of expiry month
+
+          if (expDate < now) {
+            this.setStatus(400);
+            throw new Error('Payment method has expired');
+          }
+        }
+      } catch (error) {
+        console.error('Error validating Stripe payment method:', error);
+        this.setStatus(404);
+        throw new Error('Payment method not found or invalid');
+      }
+
+      // Update session with Stripe payment method ID
+      session.paymentMethodId = paymentMethodId as any;
 
       // Mark step 2 complete and move to step 3
       session.completeStep(2);
@@ -493,6 +508,15 @@ export class CheckoutController extends Controller {
 
       await session.save();
 
+      // Fetch payment method details from Stripe for response
+      const stripePaymentMethod = await stripeService.getPaymentMethod(paymentMethodId);
+
+      // Format payment method display name
+      let displayName = 'Payment method';
+      if (stripePaymentMethod.card) {
+        displayName = `${stripePaymentMethod.card.brand} •••• ${stripePaymentMethod.card.last4}`;
+      }
+
       return {
         success: true,
         data: {
@@ -501,9 +525,9 @@ export class CheckoutController extends Controller {
           currentStep: session.currentStep,
           completedSteps: session.completedSteps,
           paymentMethod: {
-            id: paymentMethod._id.toString(),
-            displayName: (paymentMethod as any).displayName,
-            type: paymentMethod.type,
+            id: stripePaymentMethod.id,
+            displayName: displayName,
+            type: stripePaymentMethod.type,
           },
         },
         message: 'Payment method saved successfully',
