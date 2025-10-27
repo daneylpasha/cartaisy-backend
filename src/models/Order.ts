@@ -283,10 +283,9 @@ const OrderRatingSchema = new Schema({
 }, { _id: false });
 
 const SupportTicketSchema = new Schema({
-  id: { 
-    type: String, 
+  id: {
+    type: String,
     required: [true, 'Support ticket ID is required'],
-    unique: true,
     trim: true
   },
   subject: { 
