@@ -1040,39 +1040,35 @@ export class CheckoutController extends Controller {
         province: shippingAddress.province,
       });
 
-      // Prepare line items from cart
       const lineItems = cart.lines.edges.map((edge: any) => {
         const node = edge.node;
         const merchandise = node.merchandise;
+        const itemPrice = parseFloat(merchandise.priceV2?.amount || '0');
         return {
+          productId: merchandise.product?.id,
           shopifyProductId: merchandise.product?.id,
           shopifyVariantId: merchandise.id,
           title: merchandise.product?.title || 'Product',
           variantTitle: merchandise.title || '',
           sku: merchandise.sku || '',
           quantity: node.quantity,
-          price: parseFloat(merchandise.priceV2?.amount || '0'),
-          total: parseFloat(merchandise.priceV2?.amount || '0') * node.quantity,
-          image: merchandise.image?.url || null,
+          price: itemPrice,
+          total: itemPrice * node.quantity,
         };
       });
 
-      // Generate order number
       const orderNumber = `ORD-${Date.now()}-${userId.toString().slice(-6).toUpperCase()}`;
 
-      // Create order directly in database (skip Shopify due to plan limitations)
       const order = new Order({
-        userId,
+        user: userId,
         orderNumber,
         confirmationNumber: `CONF-${Date.now()}`,
         email: user.email,
         phone: session.contactNumber,
         lineItems,
         subtotalPrice: session.subtotal,
-        subtotal: session.subtotal,
-        shippingCost: session.shippingCost,
-        tax: session.tax,
-        discount: session.discountAmount || 0,
+        totalTax: session.tax,
+        totalDiscount: session.discountAmount || 0,
         totalPrice: session.grandTotal,
         currency: session.currency,
         financial: {
@@ -1110,7 +1106,7 @@ export class CheckoutController extends Controller {
         status: 'pending',
         fulfillmentStatus: 'unfulfilled',
         notes: session.deliveryInstructions || '',
-        source: 'mobile_app',
+        source: 'mobile',
         metadata: {
           stripePaymentIntentId: paymentIntent.id,
           checkoutSessionId: session._id.toString(),
