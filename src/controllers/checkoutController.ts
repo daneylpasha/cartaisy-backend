@@ -917,7 +917,13 @@ export class CheckoutController extends Controller {
       // Validate all required fields
       if (!(session as any).isReadyForPayment) {
         this.setStatus(400);
-        throw new Error('Please complete all checkout steps before proceeding');
+        const missing = [];
+        if (!session.shippingAddressId) missing.push('shipping address');
+        if (!session.selectedShippingRate) missing.push('shipping method');
+        if (!session.paymentMethodId) missing.push('payment method');
+        if (session.status !== 'step3') missing.push(`status is '${session.status}' instead of 'step3'`);
+
+        throw new Error(`Please complete all checkout steps before proceeding. Missing: ${missing.join(', ')}`);
       }
 
       // Get user and payment method
