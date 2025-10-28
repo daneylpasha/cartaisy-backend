@@ -1127,8 +1127,8 @@ class ShopifyStorefrontService {
   }
 
   /**
-   * Update cart buyer identity with country code to get shipping rates
-   * Uses Shopify 2025-01 API - cartBuyerIdentityUpdate with countryCode
+   * Update cart buyer identity with full delivery address to get shipping rates
+   * Uses Shopify 2025-01 API - cartBuyerIdentityUpdate with deliveryAddressPreferences
    * @param cartId - Shopify cart ID
    * @param deliveryAddress - Shipping address to calculate rates for
    * @returns Cart with available delivery options
@@ -1147,8 +1147,8 @@ class ShopifyStorefrontService {
       phone?: string;
     }
   ): Promise<any> {
-    // Use cartBuyerIdentityUpdate with countryCode (2025-01 compatible)
-    // Setting countryCode triggers shipping rate calculation for that country's zone
+    // Use cartBuyerIdentityUpdate with full delivery address
+    // Shopify needs complete address (city, province, zip, country) to calculate accurate shipping rates
     const query = `
       mutation cartBuyerIdentityUpdate($cartId: ID!, $buyerIdentity: CartBuyerIdentityInput!) {
         cartBuyerIdentityUpdate(cartId: $cartId, buyerIdentity: $buyerIdentity) {
@@ -1156,6 +1156,16 @@ class ShopifyStorefrontService {
             id
             buyerIdentity {
               countryCode
+              deliveryAddressPreferences {
+                ... on MailingAddress {
+                  address1
+                  address2
+                  city
+                  provinceCode
+                  countryCodeV2
+                  zip
+                }
+              }
             }
             deliveryGroups(first: 10) {
               edges {
@@ -1210,6 +1220,21 @@ class ShopifyStorefrontService {
       cartId,
       buyerIdentity: {
         countryCode: deliveryAddress.country, // ISO country code (e.g., "US", "CA")
+        deliveryAddressPreferences: [
+          {
+            deliveryAddress: {
+              address1: deliveryAddress.address1,
+              address2: deliveryAddress.address2 || '',
+              city: deliveryAddress.city,
+              provinceCode: deliveryAddress.province, // ISO province code (e.g., "TX", "CA")
+              countryCode: deliveryAddress.country,    // ISO country code (e.g., "US", "CA")
+              zip: deliveryAddress.zip,
+              firstName: deliveryAddress.firstName || '',
+              lastName: deliveryAddress.lastName || '',
+              phone: deliveryAddress.phone || '',
+            },
+          },
+        ],
       },
     });
   }

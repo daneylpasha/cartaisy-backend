@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Path, Post, Query, Request, Route, Security, Tags, Response } from 'tsoa';
-import CheckoutSession from '../models/CheckoutSession';
+import CheckoutSession, { ICheckoutSessionDocument } from '../models/CheckoutSession';
 import User from '../models/User';
 import Order from '../models/Order';
 import shopifyStorefront from '../services/shopifyStorefrontService';
@@ -81,7 +81,7 @@ export class CheckoutController extends Controller {
       }
 
       // Check for existing active session for this user
-      const existingSession = await CheckoutSession.findActiveByUser(userId);
+      const existingSession = await (CheckoutSession as any).findActiveByUser(userId) as ICheckoutSessionDocument | null;
       if (existingSession) {
         // Extend expiration and return existing session
         existingSession.extendExpiration(30);
@@ -170,7 +170,7 @@ export class CheckoutController extends Controller {
       }
 
       // Find checkout session
-      const session = await CheckoutSession.findById(sessionId);
+      const session = await CheckoutSession.findById(sessionId) as ICheckoutSessionDocument | null;
       if (!session) {
         this.setStatus(404);
         throw new Error('Checkout session not found');
@@ -183,7 +183,7 @@ export class CheckoutController extends Controller {
       }
 
       // Check expiration
-      if ((session as any).isExpired) {
+      if (session.isExpired) {
         this.setStatus(400);
         throw new Error('Checkout session has expired');
       }
@@ -313,7 +313,7 @@ export class CheckoutController extends Controller {
       }
 
       // Find session
-      const session = await CheckoutSession.findById(sessionId);
+      const session = await CheckoutSession.findById(sessionId) as ICheckoutSessionDocument | null;
       if (!session) {
         this.setStatus(404);
         throw new Error('Checkout session not found');
@@ -445,7 +445,7 @@ export class CheckoutController extends Controller {
       }
 
       // Find session
-      const session = await CheckoutSession.findById(sessionId);
+      const session = await CheckoutSession.findById(sessionId) as ICheckoutSessionDocument | null;
       if (!session) {
         this.setStatus(404);
         throw new Error('Checkout session not found');
@@ -575,7 +575,7 @@ export class CheckoutController extends Controller {
       }
 
       // Find session
-      const session = await CheckoutSession.findById(sessionId);
+      const session = await CheckoutSession.findById(sessionId) as ICheckoutSessionDocument | null;
       if (!session) {
         this.setStatus(404);
         throw new Error('Checkout session not found');
@@ -732,7 +732,7 @@ export class CheckoutController extends Controller {
       const userId = request.user._id;
 
       // Find session
-      const session = await CheckoutSession.findById(sessionId);
+      const session = await CheckoutSession.findById(sessionId) as ICheckoutSessionDocument | null;
 
       if (!session) {
         this.setStatus(404);
@@ -878,7 +878,7 @@ export class CheckoutController extends Controller {
       }
 
       // Find session with all populated data
-      const session = await CheckoutSession.findById(sessionId).populate('paymentMethodId');
+      const session = await CheckoutSession.findById(sessionId).populate('paymentMethodId') as any as ICheckoutSessionDocument | null;
 
       if (!session) {
         this.setStatus(404);
@@ -1099,7 +1099,7 @@ export class CheckoutController extends Controller {
         shipping: {
           method: session.selectedShippingRate?.title || 'Standard',
           cost: session.shippingCost,
-          estimatedDelivery: session.estimatedDelivery,
+          estimatedDelivery: session.selectedShippingRate?.estimatedDelivery,
         },
         status: 'pending',
         fulfillmentStatus: 'unfulfilled',
@@ -1255,7 +1255,7 @@ export class CheckoutController extends Controller {
 
       // Update session status on error
       try {
-        const session = await CheckoutSession.findById(requestBody.sessionId);
+        const session = await CheckoutSession.findById(requestBody.sessionId) as ICheckoutSessionDocument | null;
         if (session) {
           (session as any).status = 'failed';
           (session as any).paymentError = (error as Error).message;
