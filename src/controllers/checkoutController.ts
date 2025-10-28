@@ -163,8 +163,11 @@ export class CheckoutController extends Controller {
     try {
       const userId = request.user._id;
 
-      // Validate input
-      if (!sessionId || addressId === undefined) {
+      console.log('getShippingRates called with:', { sessionId, addressId, userId: userId.toString() });
+
+      // Validate input - addressId can be 0, so check for null/undefined specifically
+      if (!sessionId || addressId === null || addressId === undefined) {
+        console.error('Validation failed:', { sessionId, addressId });
         this.setStatus(400);
         throw new Error('Session ID and address ID are required');
       }
@@ -172,18 +175,22 @@ export class CheckoutController extends Controller {
       // Find checkout session
       const session = await CheckoutSession.findById(sessionId) as ICheckoutSessionDocument | null;
       if (!session) {
+        console.error('Checkout session not found:', sessionId);
         this.setStatus(404);
         throw new Error('Checkout session not found');
       }
+      console.log('Session found:', { sessionId, sessionUserId: session.userId.toString(), cartId: session.shopifyCartId });
 
       // Verify ownership
       if (!session.belongsToUser(userId)) {
+        console.error('Ownership verification failed:', { sessionUserId: session.userId.toString(), requestUserId: userId.toString() });
         this.setStatus(403);
         throw new Error('Unauthorized access to checkout session');
       }
 
       // Check expiration
       if (session.isExpired) {
+        console.error('Session expired:', { sessionId, expiresAt: session.expiresAt });
         this.setStatus(400);
         throw new Error('Checkout session has expired');
       }
@@ -191,16 +198,27 @@ export class CheckoutController extends Controller {
       // Get user and address
       const user = await User.findById(userId);
       if (!user) {
+        console.error('User not found:', userId);
         this.setStatus(404);
         throw new Error('User not found');
       }
+      console.log('User found:', { userId, addressCount: user.addresses?.length || 0 });
 
       if (!user.addresses || !user.addresses[addressId]) {
+        console.error('Address not found:', { userId, addressId, addressCount: user.addresses?.length || 0 });
         this.setStatus(404);
         throw new Error('Address not found');
       }
 
       const address = user.addresses[addressId];
+      console.log('Address retrieved:', {
+        addressId,
+        country: address.country,
+        countryCode: address.countryCode,
+        province: address.province,
+        city: address.city,
+        zip: address.zip
+      });
 
       // Normalize address to ISO codes for Shopify
       const normalizedAddress = normalizeAddressForShopify({
@@ -208,9 +226,20 @@ export class CheckoutController extends Controller {
         countryCode: address.countryCode,
         province: address.province,
       });
+      console.log('Normalized address:', normalizedAddress);
 
       // Update cart buyer identity with country code to get shipping rates from Shopify
       // Using cartBuyerIdentityUpdate with countryCode (2025-01 compatible)
+      console.log('Calling Shopify updateCartBuyerIdentity with:', {
+        cartId: session.shopifyCartId,
+        address: {
+          city: address.city || '',
+          province: normalizedAddress.provinceCode,
+          country: normalizedAddress.countryCode,
+          zip: address.zip,
+        }
+      });
+
       const shopifyResponse = await shopifyStorefront.updateCartBuyerIdentity(session.shopifyCartId, {
         address1: address.address1,
         address2: address.address2,
@@ -221,6 +250,12 @@ export class CheckoutController extends Controller {
         firstName: address.firstName,
         lastName: address.lastName,
         phone: address.phone,
+      });
+
+      console.log('Shopify response received:', {
+        hasUserErrors: shopifyResponse?.data?.cartBuyerIdentityUpdate?.userErrors?.length > 0,
+        userErrors: shopifyResponse?.data?.cartBuyerIdentityUpdate?.userErrors,
+        hasCart: !!shopifyResponse?.data?.cartBuyerIdentityUpdate?.cart
       });
 
       if (shopifyResponse?.data?.cartBuyerIdentityUpdate?.userErrors?.length > 0) {
