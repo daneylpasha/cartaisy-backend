@@ -1120,22 +1120,132 @@ export class CheckoutController extends Controller {
       session.completeStep(3);
       await session.save();
 
+      // Get payment method details from Stripe for complete response
+      const stripePaymentMethod = await stripeService.getPaymentMethod((session as any).paymentMethodId);
+
+      // Cast session and order to any for type flexibility
+      const sessionData = session as any;
+      const orderData = order as any;
+
+      // Build complete response with all order details
       return {
         success: true,
         data: {
           order: {
+            // Basic Order Information
             id: order._id.toString(),
-            orderNumber: order.orderNumber,
-            shopifyOrderId: order.shopifyOrderId,
-            confirmationNumber: order.confirmationNumber,
-            totalPrice: order.totalPrice,
-            currency: order.currency || 'USD',
-            status: order.status,
-            estimatedDelivery: session.selectedShippingRate?.description,
-          },
-          payment: {
-            status: 'succeeded',
-            paymentIntentId: paymentIntent.id,
+            orderNumber: orderData.orderNumber,
+            confirmationNumber: orderData.confirmationNumber || `CONF-${Date.now()}`,
+            shopifyOrderId: orderData.shopifyOrderId || null,
+            email: orderData.email,
+            phone: sessionData.contactNumber || shippingAddress.phone,
+
+            // Products Purchased - Complete Details
+            products: orderData.lineItems.map((item: any) => ({
+              productId: item.shopifyProductId,
+              variantId: item.shopifyVariantId,
+              title: item.title,
+              sku: item.sku,
+              quantity: item.quantity,
+              price: item.price,
+              totalPrice: item.price * item.quantity,
+              image: cart.lines.edges.find((edge: any) =>
+                edge.node.merchandise.id === item.shopifyVariantId
+              )?.node.merchandise.image?.url || null,
+            })),
+
+            // Complete Pricing Breakdown
+            pricing: {
+              subtotal: orderData.subtotalPrice,
+              shippingCost: sessionData.shippingCost || 0,
+              discount: sessionData.discountAmount || 0,
+              tax: orderData.totalTax,
+              totalPrice: orderData.totalPrice,
+              currency: orderData.currency || 'USD',
+            },
+
+            // Discount Information (if applied)
+            discount: sessionData.discount ? {
+              code: sessionData.discount.code,
+              amount: sessionData.discount.amount,
+              type: sessionData.discount.type,
+              applicable: sessionData.discount.applicable,
+            } : null,
+
+            // Complete Shipping Address
+            shippingAddress: {
+              firstName: shippingAddress.firstName,
+              lastName: shippingAddress.lastName,
+              fullName: `${shippingAddress.firstName} ${shippingAddress.lastName}`,
+              company: shippingAddress.company || null,
+              address1: shippingAddress.address1,
+              address2: shippingAddress.address2 || null,
+              city: shippingAddress.city,
+              province: shippingAddress.province,
+              country: shippingAddress.country,
+              zip: shippingAddress.zip,
+              phone: sessionData.contactNumber || shippingAddress.phone,
+            },
+
+            // Billing Address (same as shipping for now)
+            billingAddress: {
+              firstName: shippingAddress.firstName,
+              lastName: shippingAddress.lastName,
+              fullName: `${shippingAddress.firstName} ${shippingAddress.lastName}`,
+              company: shippingAddress.company || null,
+              address1: shippingAddress.address1,
+              address2: shippingAddress.address2 || null,
+              city: shippingAddress.city,
+              province: shippingAddress.province,
+              country: shippingAddress.country,
+              zip: shippingAddress.zip,
+              phone: sessionData.contactNumber || shippingAddress.phone,
+            },
+
+            // Payment Details - Complete
+            payment: {
+              method: 'stripe',
+              status: 'succeeded',
+              transactionId: paymentIntent.id,
+              cardBrand: stripePaymentMethod.card?.brand || null,
+              last4: stripePaymentMethod.card?.last4 || null,
+              amount: orderData.totalPrice,
+              currency: orderData.currency || 'USD',
+              paidAt: new Date().toISOString(),
+            },
+
+            // Shipping Details
+            shipping: {
+              method: sessionData.selectedShippingRate?.title || 'Standard Shipping',
+              cost: sessionData.shippingCost || 0,
+              estimatedDelivery: sessionData.selectedShippingRate?.description || 'TBD',
+              carrier: null,
+              trackingNumber: null,
+            },
+
+            // Delivery Instructions
+            deliveryInstructions: sessionData.deliveryInstructions || null,
+
+            // Order Status
+            orderStatus: {
+              current: orderData.status || 'pending',
+              fulfillment: orderData.fulfillmentStatus || 'unfulfilled',
+              financial: orderData.financial?.status || orderData.payment?.status || 'paid',
+            },
+
+            // Timestamps
+            dates: {
+              placedAt: new Date().toISOString(),
+              estimatedDelivery: sessionData.selectedShippingRate?.description || null,
+            },
+
+            // Summary
+            summary: {
+              totalItems: orderData.lineItems.reduce((sum: number, item: any) => sum + item.quantity, 0),
+              totalProducts: orderData.lineItems.length,
+              hasSavedMoney: (sessionData.discountAmount || 0) > 0,
+              savedAmount: sessionData.discountAmount || 0,
+            },
           },
         },
         message: 'Order created successfully',
@@ -1147,8 +1257,8 @@ export class CheckoutController extends Controller {
       try {
         const session = await CheckoutSession.findById(requestBody.sessionId);
         if (session) {
-          session.status = 'failed';
-          session.paymentError = (error as Error).message;
+          (session as any).status = 'failed';
+          (session as any).paymentError = (error as Error).message;
           await session.save();
         }
       } catch (updateError) {
