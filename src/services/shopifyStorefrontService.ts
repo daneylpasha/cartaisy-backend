@@ -1226,8 +1226,8 @@ class ShopifyStorefrontService {
               address1: deliveryAddress.address1,
               address2: deliveryAddress.address2 || '',
               city: deliveryAddress.city,
-              provinceCode: deliveryAddress.province, // ISO province code (e.g., "TX", "CA")
-              countryCode: deliveryAddress.country,    // ISO country code (e.g., "US", "CA")
+              province: deliveryAddress.province, // Province name or code
+              country: deliveryAddress.country,    // Country name or ISO code
               zip: deliveryAddress.zip,
               firstName: deliveryAddress.firstName || '',
               lastName: deliveryAddress.lastName || '',
