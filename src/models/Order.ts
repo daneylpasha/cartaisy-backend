@@ -63,12 +63,14 @@ const OrderLineItemSchema = new Schema({
     trim: true,
     maxlength: [100, 'SKU cannot exceed 100 characters']
   },
-  image: { 
+  image: {
     type: String,
     validate: {
       validator: function(url: string): boolean {
         if (!url) return true; // Allow empty image
-        return /^https?:\/\/.+\.(jpg|jpeg|png|gif|webp)$/i.test(url);
+        // Allow URLs with query parameters (e.g., ?v=123)
+        return /^https?:\/\/.+\.(jpg|jpeg|png|gif|webp)(\?.*)?$/i.test(url) ||
+               /^https?:\/\/cdn\.shopify\.com\/.+/i.test(url); // Allow all Shopify CDN URLs
       },
       message: 'Image must be a valid image URL'
     }
