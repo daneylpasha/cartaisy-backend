@@ -112,6 +112,7 @@ import mongoose from 'mongoose';
 import app from './app';
 import { databaseConfig, apiConfig } from './config/tenant';
 import { validateRequiredConfig, logConfigSummary } from './config/validateConfig';
+import { dropInvalidIndexes } from './utils/dropInvalidIndexes';
 
 const PORT = Number(process.env.PORT) || Number(apiConfig.port) || 3000;
 const server = express();
@@ -150,6 +151,9 @@ server.use(app);
       serverSelectionTimeoutMS: databaseConfig.connectionTimeout,
     });
     console.log('🟢 Mongo connected');
+
+    // Drop invalid indexes that cause E11000 errors
+    await dropInvalidIndexes();
 
   } catch (e: any) {
     console.error('❌ Startup error:', e?.message || e);
