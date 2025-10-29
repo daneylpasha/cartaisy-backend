@@ -912,6 +912,7 @@ export class CheckoutController extends Controller {
           deliveryInstructions: session.deliveryInstructions,
           promoCode: session.promoCode,
           status: session.status,
+          paymentError: session.paymentError || undefined,
           expiresAt: session.expiresAt.toISOString(),
         },
       };
