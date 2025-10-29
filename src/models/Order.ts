@@ -342,10 +342,10 @@ const ReturnItemSchema = new Schema({
 }, { _id: false });
 
 const ReturnExchangeSchema = new Schema({
-  id: { 
-    type: String, 
+  id: {
+    type: String,
     required: [true, 'Return/exchange ID is required'],
-    unique: true,
+    // Note: unique removed - uniqueness should be per-order, not global
     trim: true
   },
   type: { 
