@@ -1194,11 +1194,16 @@ export class CheckoutController extends Controller {
           productId = product?._id;
         }
 
+        // Get product image from Shopify cart
+        const productImage = merchandise.image?.url || merchandise.product?.featuredImage?.url || null;
+
         return {
           productId, // MongoDB product ID for populate
           shopifyProductId: merchandise.product?.id,
           shopifyVariantId: merchandise.id,
           title: merchandise.product?.title || 'Product',
+          variantTitle: merchandise.title || null,
+          image: productImage, // Direct image URL from Shopify
           sku: merchandise.sku || '',
           quantity: node.quantity,
           price: itemPrice,
