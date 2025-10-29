@@ -844,6 +844,13 @@ export class CheckoutController extends Controller {
         }
       }
 
+      // Calculate current pricing from Shopify cart (real-time)
+      const currentSubtotal = parseFloat(cart.estimatedCost?.subtotalAmount?.amount || '0');
+      const currentTax = parseFloat(cart.estimatedCost?.totalTaxAmount?.amount || '0');
+      const currentDiscount = parseFloat(cart.estimatedCost?.totalDutyAmount?.amount || '0'); // Discount from cart
+      const shippingCost = session.shippingCost || 0;
+      const currentGrandTotal = currentSubtotal + shippingCost + currentTax - currentDiscount;
+
       return {
         success: true,
         data: {
@@ -867,13 +874,13 @@ export class CheckoutController extends Controller {
           },
           paymentMethod: paymentMethodData,
           pricing: {
-            subtotal: session.subtotal,
-            shippingCost: session.shippingCost,
-            discountAmount: session.discountAmount,
-            couponDiscount: session.discountAmount,
-            tax: session.tax,
-            grandTotal: session.grandTotal,
-            currency: session.currency,
+            subtotal: currentSubtotal,
+            shippingCost: shippingCost,
+            discountAmount: currentDiscount,
+            couponDiscount: currentDiscount,
+            tax: currentTax,
+            grandTotal: currentGrandTotal,
+            currency: cart.estimatedCost?.subtotalAmount?.currencyCode || session.currency || 'USD',
           },
           deliveryInstructions: session.deliveryInstructions,
           promoCode: session.promoCode,
