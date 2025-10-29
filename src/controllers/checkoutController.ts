@@ -1012,16 +1012,33 @@ export class CheckoutController extends Controller {
         isReadyForPayment: (session as any).isReadyForPayment
       });
 
-      // Validate all required fields
-      if (!(session as any).isReadyForPayment) {
+      // Validate all required fields (allow retrying failed sessions)
+      const canProceed = (
+        (session.shippingAddressId !== undefined && session.shippingAddressId !== null) &&
+        !!session.selectedShippingRate &&
+        !!session.paymentMethodId &&
+        (session.status === 'step3' || session.status === 'failed')
+      );
+
+      if (!canProceed) {
         this.setStatus(400);
         const missing = [];
         if (session.shippingAddressId === undefined || session.shippingAddressId === null) missing.push('shipping address');
         if (!session.selectedShippingRate) missing.push('shipping method');
         if (!session.paymentMethodId) missing.push('payment method');
-        if (session.status !== 'step3') missing.push(`status is '${session.status}' instead of 'step3'`);
+        if (session.status !== 'step3' && session.status !== 'failed') {
+          missing.push(`status is '${session.status}' (must be 'step3' or 'failed' to retry)`);
+        }
 
         throw new Error(`Please complete all checkout steps before proceeding. Missing: ${missing.join(', ')}`);
+      }
+
+      // Reset failed status to allow retry
+      if (session.status === 'failed') {
+        console.log('Retrying failed checkout session:', session._id.toString());
+        session.status = 'step3';
+        session.paymentStatus = 'pending';
+        session.paymentError = undefined;
       }
 
       // Get user
