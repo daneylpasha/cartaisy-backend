@@ -624,9 +624,22 @@ export class CheckoutController extends Controller {
 
       // If promo code is empty, remove discount
       if (!promoCode || promoCode.trim() === '') {
+        // Get fresh cart data to return current pricing
+        const cartResponse = await shopifyStorefront.getCart(session.shopifyCartId);
+        const cart = cartResponse?.data?.cart;
+
+        const currentSubtotal = parseFloat(cart?.estimatedCost?.subtotalAmount?.amount || session.subtotal);
+        const currentTax = parseFloat(cart?.estimatedCost?.totalTaxAmount?.amount || session.tax);
+        const shippingCost = session.shippingCost || 0;
+
         session.promoCode = undefined;
         session.discount = undefined;
-        session.updatePricing({ discountAmount: 0 });
+        session.updatePricing({
+          subtotal: currentSubtotal,
+          discountAmount: 0,
+          tax: currentTax,
+          shippingCost: shippingCost
+        });
         await session.save();
 
         return {
@@ -645,7 +658,7 @@ export class CheckoutController extends Controller {
               couponDiscount: 0,
               tax: session.tax,
               grandTotal: session.grandTotal,
-              currency: session.currency,
+              currency: cart?.estimatedCost?.subtotalAmount?.currencyCode || session.currency,
             },
           },
           message: 'Discount removed',
@@ -665,6 +678,12 @@ export class CheckoutController extends Controller {
       const discountCode = cart?.discountCodes?.[0];
 
       if (!discountCode || !discountCode.applicable) {
+        // Get current cart pricing even when promo is not applicable
+        const currentSubtotal = parseFloat(cart?.estimatedCost?.subtotalAmount?.amount || session.subtotal);
+        const currentTax = parseFloat(cart?.estimatedCost?.totalTaxAmount?.amount || session.tax);
+        const shippingCost = session.shippingCost || 0;
+        const currentGrandTotal = currentSubtotal + shippingCost + currentTax;
+
         this.setStatus(400);
         return {
           success: false,
@@ -676,13 +695,13 @@ export class CheckoutController extends Controller {
               applicable: false,
             },
             pricing: {
-              subtotal: session.subtotal,
-              shippingCost: session.shippingCost,
+              subtotal: currentSubtotal,
+              shippingCost: shippingCost,
               discountAmount: 0,
               couponDiscount: 0,
-              tax: session.tax,
-              grandTotal: session.grandTotal,
-              currency: session.currency,
+              tax: currentTax,
+              grandTotal: currentGrandTotal,
+              currency: cart?.estimatedCost?.subtotalAmount?.currencyCode || session.currency,
             },
           },
           message: 'Promo code is not applicable to this order. Please check the code requirements.',
@@ -697,7 +716,12 @@ export class CheckoutController extends Controller {
         }, 0);
       }
 
-      // Update session
+      // Get current pricing from Shopify cart (real-time)
+      const currentSubtotal = parseFloat(cart.estimatedCost?.subtotalAmount?.amount || '0');
+      const currentTax = parseFloat(cart.estimatedCost?.totalTaxAmount?.amount || '0');
+      const shippingCost = session.shippingCost || 0;
+
+      // Update session with real-time values
       session.promoCode = discountCode.code;
       session.discount = {
         code: discountCode.code,
@@ -705,11 +729,14 @@ export class CheckoutController extends Controller {
         type: 'fixed_amount', // Shopify returns fixed amount discounts
         applicable: true,
       };
-      session.updatePricing({ discountAmount });
 
-      // Update tax from cart (may change with discount)
-      session.tax = parseFloat(cart?.estimatedCost?.totalTaxAmount?.amount || '0');
-      session.updatePricing({ tax: session.tax });
+      // Update all pricing fields with current Shopify values
+      session.updatePricing({
+        subtotal: currentSubtotal,
+        discountAmount: discountAmount,
+        tax: currentTax,
+        shippingCost: shippingCost
+      });
 
       await session.save();
 
@@ -729,7 +756,7 @@ export class CheckoutController extends Controller {
             couponDiscount: session.discountAmount,
             tax: session.tax,
             grandTotal: session.grandTotal,
-            currency: session.currency,
+            currency: cart.estimatedCost?.subtotalAmount?.currencyCode || session.currency,
           },
         },
         message: 'Promo code applied successfully',
