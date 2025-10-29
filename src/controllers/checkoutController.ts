@@ -819,8 +819,30 @@ export class CheckoutController extends Controller {
         throw new Error('Shipping address not found');
       }
 
-      // Get payment method
-      const paymentMethod = session.paymentMethodId as any;
+      // Get payment method details from Stripe if payment method ID exists
+      let paymentMethodData = {
+        id: '',
+        displayName: '',
+        type: '',
+        last4: undefined as string | undefined,
+      };
+
+      if (session.paymentMethodId) {
+        try {
+          const stripePaymentMethod = await stripeService.getPaymentMethod(session.paymentMethodId);
+          paymentMethodData = {
+            id: stripePaymentMethod.id,
+            displayName: stripePaymentMethod.card
+              ? `${stripePaymentMethod.card.brand} •••• ${stripePaymentMethod.card.last4}`
+              : 'Payment method',
+            type: stripePaymentMethod.type,
+            last4: stripePaymentMethod.card?.last4,
+          };
+        } catch (error) {
+          console.error('Error fetching payment method details:', error);
+          // Continue with empty payment method data
+        }
+      }
 
       return {
         success: true,
@@ -843,12 +865,7 @@ export class CheckoutController extends Controller {
             price: session.selectedShippingRate?.price || 0,
             estimatedDelivery: session.selectedShippingRate?.description,
           },
-          paymentMethod: {
-            id: paymentMethod?._id?.toString() || '',
-            displayName: paymentMethod?.displayName || '',
-            type: paymentMethod?.type || '',
-            last4: paymentMethod?.card?.last4,
-          },
+          paymentMethod: paymentMethodData,
           pricing: {
             subtotal: session.subtotal,
             shippingCost: session.shippingCost,
