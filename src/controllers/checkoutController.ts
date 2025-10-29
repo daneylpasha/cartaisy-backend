@@ -1055,7 +1055,7 @@ export class CheckoutController extends Controller {
         throw new Error('Payment method not found');
       }
 
-      // Get cart from Shopify for final validation
+      // Get cart from Shopify for final validation and pricing
       const cartResponse = await shopifyStorefront.getCart(session.shopifyCartId);
       const cart = cartResponse?.data?.cart;
 
@@ -1063,6 +1063,34 @@ export class CheckoutController extends Controller {
         this.setStatus(400);
         throw new Error('Cart is empty or no longer available');
       }
+
+      // Update session with current cart pricing before payment
+      const currentSubtotal = parseFloat(cart.estimatedCost?.subtotalAmount?.amount || '0');
+      const currentTax = parseFloat(cart.estimatedCost?.totalTaxAmount?.amount || '0');
+
+      // Calculate discount if promo code was applied
+      let currentDiscount = 0;
+      if (cart.discountAllocations && cart.discountAllocations.length > 0) {
+        currentDiscount = cart.discountAllocations.reduce((sum: number, allocation: any) => {
+          return sum + parseFloat(allocation.discountedAmount?.amount || '0');
+        }, 0);
+      }
+
+      // Update session pricing with current Shopify values
+      session.updatePricing({
+        subtotal: currentSubtotal,
+        tax: currentTax,
+        discountAmount: currentDiscount,
+        shippingCost: session.shippingCost || 0
+      });
+
+      console.log('Updated session pricing before payment:', {
+        subtotal: session.subtotal,
+        tax: session.tax,
+        discount: session.discountAmount,
+        shipping: session.shippingCost,
+        grandTotal: session.grandTotal
+      });
 
       // Update session status
       session.status = 'payment_processing';
