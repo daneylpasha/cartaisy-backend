@@ -963,8 +963,8 @@ export class CheckoutController extends Controller {
         throw new Error('Session ID is required');
       }
 
-      // Find session with all populated data
-      const session = await CheckoutSession.findById(sessionId).populate('paymentMethodId') as any as ICheckoutSessionDocument | null;
+      // Find session (paymentMethodId is a string, not a reference, so no need to populate)
+      const session = await CheckoutSession.findById(sessionId) as ICheckoutSessionDocument | null;
 
       if (!session) {
         this.setStatus(404);
@@ -1024,15 +1024,16 @@ export class CheckoutController extends Controller {
         throw new Error(`Please complete all checkout steps before proceeding. Missing: ${missing.join(', ')}`);
       }
 
-      // Get user and payment method
+      // Get user
       const user = await User.findById(userId);
       if (!user) {
         this.setStatus(404);
         throw new Error('User not found');
       }
 
-      const paymentMethod = session.paymentMethodId as any;
-      if (!paymentMethod) {
+      // paymentMethodId is a string (Stripe PM ID like "pm_xxx")
+      const paymentMethodId = session.paymentMethodId;
+      if (!paymentMethodId) {
         this.setStatus(400);
         throw new Error('Payment method not found');
       }
@@ -1067,7 +1068,7 @@ export class CheckoutController extends Controller {
         stripeService.dollarsToCents(session.grandTotal),
         session.currency.toLowerCase(),
         stripeCustomerId,
-        paymentMethod, // paymentMethod is already the Stripe PM ID string
+        paymentMethodId, // paymentMethodId is the Stripe PM ID string (e.g., "pm_xxx")
         {
           sessionId: session._id.toString(),
           userId: userId.toString(),
