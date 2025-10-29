@@ -874,7 +874,15 @@ export class CheckoutController extends Controller {
       // Calculate current pricing from Shopify cart (real-time)
       const currentSubtotal = parseFloat(cart.estimatedCost?.subtotalAmount?.amount || '0');
       const currentTax = parseFloat(cart.estimatedCost?.totalTaxAmount?.amount || '0');
-      const currentDiscount = parseFloat(cart.estimatedCost?.totalDutyAmount?.amount || '0'); // Discount from cart
+
+      // Get discount from session if promo code was applied, otherwise check cart
+      let currentDiscount = session.discountAmount || 0;
+      if (!currentDiscount && cart.discountAllocations && cart.discountAllocations.length > 0) {
+        currentDiscount = cart.discountAllocations.reduce((sum: number, allocation: any) => {
+          return sum + parseFloat(allocation.discountedAmount?.amount || '0');
+        }, 0);
+      }
+
       const shippingCost = session.shippingCost || 0;
       const currentGrandTotal = currentSubtotal + shippingCost + currentTax - currentDiscount;
 
