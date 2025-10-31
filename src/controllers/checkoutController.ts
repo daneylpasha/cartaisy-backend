@@ -1221,7 +1221,8 @@ export class CheckoutController extends Controller {
         lineItems,
         subtotalPrice: session.subtotal,
         totalTax: session.tax,
-        totalDiscount: session.discountAmount || 0,
+        discount: session.discountAmount || 0,
+        shippingCost: session.shippingCost || 0,
         totalPrice: session.grandTotal,
         currency: session.currency,
         financial: {
@@ -1312,8 +1313,8 @@ export class CheckoutController extends Controller {
             // Complete Pricing Breakdown
             pricing: {
               subtotal: orderData.subtotalPrice,
-              shippingCost: sessionData.shippingCost || 0,
-              discount: orderData.totalDiscount || 0,
+              shippingCost: orderData.shippingCost || 0,
+              discount: orderData.discount || 0,
               tax: orderData.totalTax,
               totalPrice: orderData.totalPrice,
               currency: orderData.currency || 'USD',
@@ -1398,8 +1399,8 @@ export class CheckoutController extends Controller {
             summary: {
               totalItems: orderData.lineItems.reduce((sum: number, item: any) => sum + item.quantity, 0),
               totalProducts: orderData.lineItems.length,
-              hasSavedMoney: (orderData.totalDiscount || 0) > 0,
-              savedAmount: orderData.totalDiscount || 0,
+              hasSavedMoney: (orderData.discount || 0) > 0,
+              savedAmount: orderData.discount || 0,
             },
           },
         },
