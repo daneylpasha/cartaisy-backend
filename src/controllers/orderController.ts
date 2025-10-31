@@ -41,27 +41,54 @@ export const getUserOrders = async (req: AuthenticatedRequest, res: Response): P
       if (endDate) filter.placedAt.$lte = new Date(endDate as string);
     }
 
+    // Fetch orders without populate first to avoid crashes
     const orders = await Order.find(filter)
       .sort({ placedAt: -1 })
       .skip(skip)
       .limit(limitNum)
       .select('-notifications -supportTickets -returns -merchantNotes')
-      .populate({
-        path: 'lineItems.productId',
-        select: 'title handle images',
-        options: { strictPopulate: false }
-      });
+      .lean();
+
+    // Manually populate products for valid productIds only
+    const productIds = orders
+      .flatMap(order => order.lineItems || [])
+      .map(item => item.productId)
+      .filter(id => id); // Remove null/undefined
+
+    let productsMap: any = {};
+    if (productIds.length > 0) {
+      try {
+        const products = await Product.find({ _id: { $in: productIds } })
+          .select('title handle images')
+          .lean();
+        productsMap = products.reduce((acc: any, p: any) => {
+          acc[p._id.toString()] = p;
+          return acc;
+        }, {});
+      } catch (err) {
+        console.warn('Error fetching products for orders:', err);
+      }
+    }
+
+    // Attach product data to line items
+    const ordersWithProducts = orders.map(order => ({
+      ...order,
+      lineItems: (order.lineItems || []).map((item: any) => ({
+        ...item,
+        productId: item.productId ? productsMap[item.productId.toString()] || item.productId : null
+      }))
+    }));
 
     const total = await Order.countDocuments(filter);
 
     res.json({
       success: true,
       data: {
-        orders,
+        orders: ordersWithProducts,
         pagination: {
           current: pageNum,
           total: Math.ceil(total / limitNum),
-          count: orders.length,
+          count: ordersWithProducts.length,
           totalOrders: total
         }
       }
