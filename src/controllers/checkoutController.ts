@@ -1086,6 +1086,11 @@ export class CheckoutController extends Controller {
         }, 0);
       }
 
+      // Fallback: if Shopify cart doesn't have discount allocations but session has discount, use that
+      if (currentDiscount === 0 && session.discount && session.discount.amount) {
+        currentDiscount = session.discount.amount;
+      }
+
       // Update session pricing with current Shopify values
       session.updatePricing({
         subtotal: currentSubtotal,
