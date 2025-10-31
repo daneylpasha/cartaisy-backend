@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import Order from '../models/Order';
 import OrderTracking from '../models/OrderTracking';
 import Product, { IProductDocument } from '../models/Product';
+import User from '../models/User';
 import { AuthenticatedRequest } from '../types';
 
 export const getUserOrders = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
@@ -107,10 +108,8 @@ export const getOrder = async (req: AuthenticatedRequest, res: Response): Promis
     const { orderId } = req.params as { orderId: string };
     const userId = req.user?._id;
 
-    // Fetch order with lean() to avoid populate crashes
-    const order = await Order.findById(orderId)
-      .populate('user', 'name email')
-      .lean();
+    // Fetch order WITHOUT populate first to check ownership
+    const order = await Order.findById(orderId).lean();
 
     if (!order) {
       res.status(404).json({
@@ -120,7 +119,7 @@ export const getOrder = async (req: AuthenticatedRequest, res: Response): Promis
       return;
     }
 
-    // Check access permissions
+    // Check access permissions (order.user is ObjectId here)
     if (order.user.toString() !== userId?.toString()) {
       res.status(403).json({
         success: false,
@@ -128,6 +127,10 @@ export const getOrder = async (req: AuthenticatedRequest, res: Response): Promis
       });
       return;
     }
+
+    // Now populate user for response
+    const user = await User.findById(order.user).select('name email').lean();
+    const orderWithUser = { ...order, user };
 
     // Manually populate products for valid productIds only
     const productIds = (order.lineItems || [])
@@ -149,9 +152,9 @@ export const getOrder = async (req: AuthenticatedRequest, res: Response): Promis
       }
     }
 
-    // Attach product data to line items
+    // Attach product data and user to order
     const orderWithProducts = {
-      ...order,
+      ...orderWithUser,
       lineItems: (order.lineItems || []).map((item: any) => ({
         ...item,
         productId: item.productId ? productsMap[item.productId.toString()] || item.productId : null
