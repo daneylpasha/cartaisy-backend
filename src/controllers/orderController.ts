@@ -107,9 +107,10 @@ export const getOrder = async (req: AuthenticatedRequest, res: Response): Promis
     const { orderId } = req.params as { orderId: string };
     const userId = req.user?._id;
 
+    // Fetch order with lean() to avoid populate crashes
     const order = await Order.findById(orderId)
-      .populate('lineItems.productId', 'title handle images price')
-      .populate('user', 'name email');
+      .populate('user', 'name email')
+      .lean();
 
     if (!order) {
       res.status(404).json({
@@ -128,9 +129,38 @@ export const getOrder = async (req: AuthenticatedRequest, res: Response): Promis
       return;
     }
 
+    // Manually populate products for valid productIds only
+    const productIds = (order.lineItems || [])
+      .map((item: any) => item.productId)
+      .filter((id: any) => id);
+
+    let productsMap: any = {};
+    if (productIds.length > 0) {
+      try {
+        const products = await Product.find({ _id: { $in: productIds } })
+          .select('title handle images price')
+          .lean();
+        productsMap = products.reduce((acc: any, p: any) => {
+          acc[p._id.toString()] = p;
+          return acc;
+        }, {});
+      } catch (err) {
+        console.warn('Error fetching products for order:', err);
+      }
+    }
+
+    // Attach product data to line items
+    const orderWithProducts = {
+      ...order,
+      lineItems: (order.lineItems || []).map((item: any) => ({
+        ...item,
+        productId: item.productId ? productsMap[item.productId.toString()] || item.productId : null
+      }))
+    };
+
     // Get tracking information if available
     let tracking = null;
-    if (order.shipping.trackingNumber) {
+    if (order.shipping?.trackingNumber) {
       tracking = await OrderTracking.findOne({
         trackingNumber: order.shipping.trackingNumber
       });
@@ -139,7 +169,7 @@ export const getOrder = async (req: AuthenticatedRequest, res: Response): Promis
     res.json({
       success: true,
       data: {
-        order,
+        order: orderWithProducts,
         tracking
       }
     });
