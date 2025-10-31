@@ -466,10 +466,6 @@ const OrderSchema = new Schema<IOrder>({
     required: [true, 'Subtotal price is required'],
     min: [0, 'Subtotal must be positive']
   },
-  subtotal: {
-    type: Number,
-    min: [0, 'Subtotal must be positive']
-  },
   shippingCost: {
     type: Number,
     min: [0, 'Shipping cost must be positive'],
@@ -879,15 +875,15 @@ OrderSchema.pre('save', async function(this: IOrder, next): Promise<void> {
  * Find orders by user with pagination
  */
 OrderSchema.statics.findByUser = function(
-  userId: string, 
+  userId: string,
   options: { limit?: number; skip?: number; status?: string } = {}
-): mongoose.Query<MongooseDocument<IOrder>[], MongooseDocument<IOrder>> {
+) {
   const query: any = { user: userId };
-  
+
   if (options.status) {
     query['mobileStatus.current'] = options.status;
   }
-  
+
   return this.find(query)
     .sort({ placedAt: -1 })
     .limit(options.limit || 20)
@@ -900,19 +896,19 @@ OrderSchema.statics.findByUser = function(
  */
 OrderSchema.statics.findByTrackingNumber = function(
   trackingNumber: string
-): mongoose.Query<MongooseDocument<IOrder> | null, MongooseDocument<IOrder>> {
+) {
   return this.findOne({ 'shipping.trackingNumber': trackingNumber });
 };
 
 /**
  * Find orders requiring attention (support tickets, returns, etc.)
  */
-OrderSchema.statics.findRequiringAttention = function(): mongoose.Query<MongooseDocument<IOrder>[], MongooseDocument<IOrder>> {
+OrderSchema.statics.findRequiringAttention = function() {
   return this.find({
     $or: [
       { 'supportTickets.status': { $in: ['open', 'pending'] } },
       { 'returns.status': { $in: ['requested', 'approved'] } },
-      { 
+      {
         'mobileStatus.current': 'delivered',
         customerRating: { $exists: false },
         deliveredAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } // Within 7 days

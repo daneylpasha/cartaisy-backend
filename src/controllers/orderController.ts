@@ -21,6 +21,7 @@ export const getUserOrders = async (req: AuthenticatedRequest, res: Response): P
         success: false,
         message: 'Authentication required'
       });
+      return;
     }
 
     const pageNum = parseInt(page as string);
@@ -45,7 +46,11 @@ export const getUserOrders = async (req: AuthenticatedRequest, res: Response): P
       .skip(skip)
       .limit(limitNum)
       .select('-notifications -supportTickets -returns -merchantNotes')
-      .populate('lineItems.productId', 'title handle images');
+      .populate({
+        path: 'lineItems.productId',
+        select: 'title handle images',
+        options: { strictPopulate: false }
+      });
 
     const total = await Order.countDocuments(filter);
 
@@ -72,7 +77,7 @@ export const getUserOrders = async (req: AuthenticatedRequest, res: Response): P
 
 export const getOrder = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const { orderId } = req.params;
+    const { orderId } = req.params as { orderId: string };
     const userId = req.user?._id;
 
     const order = await Order.findById(orderId)
@@ -133,13 +138,24 @@ export const createOrder = async (req: AuthenticatedRequest, res: Response): Pro
       source = 'mobile',
       channel = 'app',
       campaignId
-    } = req.body;
+    } = req.body as {
+      lineItems: any[];
+      billingAddress: any;
+      shippingAddress: any;
+      shipping: any;
+      specialInstructions?: string;
+      deliveryPreferences?: any;
+      source?: string;
+      channel?: string;
+      campaignId?: string;
+    };
 
     if (!userId) {
       res.status(401).json({
         success: false,
         message: 'Authentication required'
       });
+      return;
     }
 
     // Validate required fields
@@ -148,6 +164,7 @@ export const createOrder = async (req: AuthenticatedRequest, res: Response): Pro
         success: false,
         message: 'Order must contain at least one item'
       });
+      return;
     }
 
     if (!billingAddress || !shippingAddress || !shipping) {
@@ -155,6 +172,7 @@ export const createOrder = async (req: AuthenticatedRequest, res: Response): Pro
         success: false,
         message: 'Billing address, shipping address, and shipping method are required'
       });
+      return;
     }
 
     // Validate and process line items
@@ -263,14 +281,15 @@ export const createOrder = async (req: AuthenticatedRequest, res: Response): Pro
 
 export const updateOrderStatus = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const { orderId } = req.params;
-    const { status, note, location } = req.body;
+    const { orderId } = req.params as { orderId: string };
+    const { status, note, location } = req.body as { status: string; note?: string; location?: string };
 
     if (!status) {
       res.status(400).json({
         success: false,
         message: 'Status is required'
       });
+      return;
     }
 
     const order = await Order.findById(orderId);
@@ -280,6 +299,7 @@ export const updateOrderStatus = async (req: AuthenticatedRequest, res: Response
         success: false,
         message: 'Order not found'
       });
+      return;
     }
 
     const validStatuses = ['placed', 'confirmed', 'processing', 'shipped', 'out_for_delivery', 'delivered', 'cancelled', 'returned'];
@@ -287,13 +307,6 @@ export const updateOrderStatus = async (req: AuthenticatedRequest, res: Response
       res.status(400).json({
         success: false,
         message: 'Invalid status'
-      });
-    }
-
-    if (!order) {
-      res.status(404).json({
-        success: false,
-        message: 'Order not found'
       });
       return;
     }
@@ -322,8 +335,8 @@ export const updateOrderStatus = async (req: AuthenticatedRequest, res: Response
 
 export const cancelOrder = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const { orderId } = req.params;
-    const { reason } = req.body;
+    const { orderId } = req.params as { orderId: string };
+    const { reason } = req.body as { reason?: string };
     const userId = req.user?._id;
 
     const order = await Order.findById(orderId);
@@ -333,13 +346,15 @@ export const cancelOrder = async (req: AuthenticatedRequest, res: Response): Pro
         success: false,
         message: 'Order not found'
       });
+      return;
     }
 
-    if (order.user.toString() !== userId) {
+    if (order.user.toString() !== userId?.toString()) {
       res.status(403).json({
         success: false,
         message: 'Access denied'
       });
+      return;
     }
 
     if (!order.canBeCancelled()) {
@@ -347,6 +362,7 @@ export const cancelOrder = async (req: AuthenticatedRequest, res: Response): Pro
         success: false,
         message: 'Order cannot be cancelled at this stage'
       });
+      return;
     }
 
     await order.updateMobileStatus('cancelled', reason);
@@ -373,8 +389,8 @@ export const cancelOrder = async (req: AuthenticatedRequest, res: Response): Pro
 
 export const requestReturn = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const { orderId } = req.params;
-    const { type, reason, items } = req.body; // type: 'return' or 'exchange'
+    const { orderId } = req.params as { orderId: string };
+    const { type, reason, items } = req.body as { type: 'return' | 'exchange'; reason: string; items: any[] };
     const userId = req.user?._id;
 
     if (!['return', 'exchange'].includes(type)) {
@@ -382,6 +398,7 @@ export const requestReturn = async (req: AuthenticatedRequest, res: Response): P
         success: false,
         message: 'Invalid return type'
       });
+      return;
     }
 
     const order = await Order.findById(orderId);
@@ -391,13 +408,15 @@ export const requestReturn = async (req: AuthenticatedRequest, res: Response): P
         success: false,
         message: 'Order not found'
       });
+      return;
     }
 
-    if (order.user.toString() !== userId) {
+    if (order.user.toString() !== userId?.toString()) {
       res.status(403).json({
         success: false,
         message: 'Access denied'
       });
+      return;
     }
 
     if (!order.canBeReturned()) {
@@ -405,6 +424,7 @@ export const requestReturn = async (req: AuthenticatedRequest, res: Response): P
         success: false,
         message: 'Order cannot be returned'
       });
+      return;
     }
 
     // Validate return items
@@ -413,15 +433,16 @@ export const requestReturn = async (req: AuthenticatedRequest, res: Response): P
         success: false,
         message: 'At least one item must be selected for return'
       });
+      return;
     }
 
     // Generate return ID
     const returnId = `RET-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
-    const returnRequest = {
+    const returnRequest: any = {
       id: returnId,
       type,
-      status: 'requested',
+      status: 'requested' as const,
       reason,
       items: items.map((item: any) => ({
         lineItemId: item.lineItemId,
@@ -453,7 +474,7 @@ export const requestReturn = async (req: AuthenticatedRequest, res: Response): P
 
 export const getOrderTracking = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const { orderId } = req.params;
+    const { orderId } = req.params as { orderId: string };
     const userId = req.user?._id;
 
     const order = await Order.findById(orderId).select('user shipping mobileStatus');
@@ -463,13 +484,15 @@ export const getOrderTracking = async (req: AuthenticatedRequest, res: Response)
         success: false,
         message: 'Order not found'
       });
+      return;
     }
 
-    if (order.user.toString() !== userId) {
+    if (order.user.toString() !== userId?.toString()) {
       res.status(403).json({
         success: false,
         message: 'Access denied'
       });
+      return;
     }
 
     let tracking = null;
@@ -489,7 +512,7 @@ export const getOrderTracking = async (req: AuthenticatedRequest, res: Response)
           currentStatus: tracking.currentStatus,
           estimatedDelivery: tracking.estimatedDelivery,
           events: tracking.events,
-          carrierInfo: tracking.carrierInfo
+          carrier: tracking.carrier
         } : null
       }
     });
@@ -504,7 +527,7 @@ export const getOrderTracking = async (req: AuthenticatedRequest, res: Response)
 
 export const rateOrder = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const { orderId } = req.params;
+    const { orderId } = req.params as { orderId: string };
     const {
       overallRating,
       deliveryRating,
@@ -512,7 +535,14 @@ export const rateOrder = async (req: AuthenticatedRequest, res: Response): Promi
       productQualityRating,
       customerServiceRating,
       comment
-    } = req.body;
+    } = req.body as {
+      overallRating: number;
+      deliveryRating?: number;
+      packagingRating?: number;
+      productQualityRating?: number;
+      customerServiceRating?: number;
+      comment?: string;
+    };
     const userId = req.user?._id;
 
     if (!overallRating || overallRating < 1 || overallRating > 5) {
@@ -520,6 +550,7 @@ export const rateOrder = async (req: AuthenticatedRequest, res: Response): Promi
         success: false,
         message: 'Overall rating is required and must be between 1 and 5'
       });
+      return;
     }
 
     const order = await Order.findById(orderId);
@@ -529,13 +560,15 @@ export const rateOrder = async (req: AuthenticatedRequest, res: Response): Promi
         success: false,
         message: 'Order not found'
       });
+      return;
     }
 
-    if (order.user.toString() !== userId) {
+    if (order.user.toString() !== userId?.toString()) {
       res.status(403).json({
         success: false,
         message: 'Access denied'
       });
+      return;
     }
 
     if (order.mobileStatus.current !== 'delivered') {
@@ -543,6 +576,7 @@ export const rateOrder = async (req: AuthenticatedRequest, res: Response): Promi
         success: false,
         message: 'Can only rate delivered orders'
       });
+      return;
     }
 
     if (order.customerRating) {
@@ -550,6 +584,7 @@ export const rateOrder = async (req: AuthenticatedRequest, res: Response): Promi
         success: false,
         message: 'Order has already been rated'
       });
+      return;
     }
 
     order.customerRating = {
@@ -582,8 +617,8 @@ export const rateOrder = async (req: AuthenticatedRequest, res: Response): Promi
 
 export const createSupportTicket = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const { orderId } = req.params;
-    const { subject, priority = 'medium' } = req.body;
+    const { orderId } = req.params as { orderId: string };
+    const { subject, priority = 'medium' } = req.body as { subject: string; priority?: 'low' | 'medium' | 'high' | 'urgent' };
     const userId = req.user?._id;
 
     if (!subject || subject.trim().length === 0) {
@@ -591,6 +626,7 @@ export const createSupportTicket = async (req: AuthenticatedRequest, res: Respon
         success: false,
         message: 'Subject is required'
       });
+      return;
     }
 
     const order = await Order.findById(orderId);
@@ -600,21 +636,23 @@ export const createSupportTicket = async (req: AuthenticatedRequest, res: Respon
         success: false,
         message: 'Order not found'
       });
+      return;
     }
 
-    if (order.user.toString() !== userId) {
+    if (order.user.toString() !== userId?.toString()) {
       res.status(403).json({
         success: false,
         message: 'Access denied'
       });
+      return;
     }
 
     const ticketId = `TICKET-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
-    const ticket = {
+    const ticket: any = {
       id: ticketId,
       subject: subject.trim(),
-      status: 'open',
+      status: 'open' as const,
       priority,
       createdAt: new Date(),
       lastUpdated: new Date()
@@ -642,13 +680,14 @@ export const createSupportTicket = async (req: AuthenticatedRequest, res: Respon
 export const getOrderAnalytics = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const userId = req.user?._id;
-    const { timeframe = '30' } = req.query;
+    const { timeframe = '30' } = req.query as { timeframe?: string };
 
     if (!userId) {
       res.status(401).json({
         success: false,
         message: 'Authentication required'
       });
+      return;
     }
 
     const days = parseInt(timeframe as string);
