@@ -1235,6 +1235,25 @@ export class CheckoutController extends Controller {
 
       // Get shipping address and normalize for Shopify
       const shippingAddress = user.addresses?.[session.shippingAddressId || 0];
+
+      if (!shippingAddress) {
+        console.error('Shipping address not found:', {
+          shippingAddressId: session.shippingAddressId,
+          totalAddresses: user.addresses?.length
+        });
+        this.setStatus(400);
+        throw new Error('Shipping address not found. Please select a valid address.');
+      }
+
+      // Log address details for debugging
+      console.log('Using shipping address:', {
+        addressId: session.shippingAddressId,
+        hasFirstName: !!shippingAddress.firstName,
+        hasLastName: !!shippingAddress.lastName,
+        country: shippingAddress.country,
+        city: shippingAddress.city
+      });
+
       const normalizedShippingAddress = normalizeAddressForShopify({
         country: shippingAddress.country,
         countryCode: shippingAddress.countryCode,
@@ -1320,8 +1339,8 @@ export class CheckoutController extends Controller {
           paidAt: new Date(),
         },
         shippingAddress: {
-          firstName: shippingAddress.firstName,
-          lastName: shippingAddress.lastName,
+          firstName: shippingAddress.firstName || user.name?.split(' ')[0] || 'Customer',
+          lastName: shippingAddress.lastName || user.name?.split(' ').slice(1).join(' ') || '',
           address1: shippingAddress.address1,
           address2: shippingAddress.address2,
           city: shippingAddress.city,
@@ -1412,9 +1431,9 @@ export class CheckoutController extends Controller {
 
             // Complete Shipping Address
             shippingAddress: {
-              firstName: shippingAddress.firstName,
-              lastName: shippingAddress.lastName,
-              fullName: `${shippingAddress.firstName} ${shippingAddress.lastName}`,
+              firstName: shippingAddress.firstName || user.name?.split(' ')[0] || 'Customer',
+              lastName: shippingAddress.lastName || user.name?.split(' ').slice(1).join(' ') || '',
+              fullName: `${shippingAddress.firstName || user.name?.split(' ')[0] || 'Customer'} ${shippingAddress.lastName || user.name?.split(' ').slice(1).join(' ') || ''}`.trim(),
               company: shippingAddress.company || null,
               address1: shippingAddress.address1,
               address2: shippingAddress.address2 || null,
@@ -1427,9 +1446,9 @@ export class CheckoutController extends Controller {
 
             // Billing Address (same as shipping for now)
             billingAddress: {
-              firstName: shippingAddress.firstName,
-              lastName: shippingAddress.lastName,
-              fullName: `${shippingAddress.firstName} ${shippingAddress.lastName}`,
+              firstName: shippingAddress.firstName || user.name?.split(' ')[0] || 'Customer',
+              lastName: shippingAddress.lastName || user.name?.split(' ').slice(1).join(' ') || '',
+              fullName: `${shippingAddress.firstName || user.name?.split(' ')[0] || 'Customer'} ${shippingAddress.lastName || user.name?.split(' ').slice(1).join(' ') || ''}`.trim(),
               company: shippingAddress.company || null,
               address1: shippingAddress.address1,
               address2: shippingAddress.address2 || null,
