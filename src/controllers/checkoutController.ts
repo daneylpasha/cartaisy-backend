@@ -1066,38 +1066,92 @@ export class CheckoutController extends Controller {
       }
 
       // Get cart from Shopify for final validation and pricing
-      const cartResponse = await shopifyStorefront.getCart(session.shopifyCartId);
-      const cart = cartResponse?.data?.cart;
+      // Use try-catch with retry logic for Shopify API calls
+      let cart = null;
+      let cartFetchAttempts = 0;
+      const maxCartFetchAttempts = 3;
 
+      while (cartFetchAttempts < maxCartFetchAttempts && !cart) {
+        try {
+          cartFetchAttempts++;
+          console.log(`Fetching cart from Shopify (attempt ${cartFetchAttempts}/${maxCartFetchAttempts})...`);
+
+          const cartResponse = await shopifyStorefront.getCart(session.shopifyCartId);
+          cart = cartResponse?.data?.cart;
+
+          if (cart && cart.lines?.edges && cart.lines.edges.length > 0) {
+            console.log('✓ Cart fetched successfully from Shopify');
+            break;
+          }
+        } catch (error: any) {
+          console.error(`Cart fetch attempt ${cartFetchAttempts} failed:`, error.message);
+
+          // If this is the last attempt or it's not a retryable error, throw
+          if (cartFetchAttempts >= maxCartFetchAttempts || (error.response?.status !== 503 && error.response?.status !== 429)) {
+            console.error('All cart fetch attempts failed or non-retryable error');
+            break;
+          }
+
+          // Wait before retry (exponential backoff)
+          await new Promise(resolve => setTimeout(resolve, cartFetchAttempts * 1000));
+        }
+      }
+
+      // If cart fetch failed, use session data as fallback
       if (!cart || !cart.lines?.edges || cart.lines.edges.length === 0) {
-        this.setStatus(400);
-        throw new Error('Cart is empty or no longer available');
+        console.warn('⚠ Could not fetch cart from Shopify, using session data as fallback');
+
+        // Validate that session has required data
+        if (!session.subtotal || session.subtotal <= 0) {
+          this.setStatus(400);
+          throw new Error('Cart data unavailable. Please restart checkout process.');
+        }
+
+        // Use session data for pricing (already validated during save-shipping step)
+        console.log('Using session pricing data:', {
+          subtotal: session.subtotal,
+          tax: session.tax,
+          discount: session.discountAmount,
+          shipping: session.shippingCost,
+          grandTotal: session.grandTotal
+        });
+
+        // No need to update pricing, session already has correct values
+        // Just proceed with existing session data
+      } else {
+        // Cart fetched successfully, update session with current cart pricing
+        const currentSubtotal = parseFloat(cart.estimatedCost?.subtotalAmount?.amount || '0');
+        const currentTax = parseFloat(cart.estimatedCost?.totalTaxAmount?.amount || '0');
+
+        // Calculate discount if promo code was applied
+        let currentDiscount = 0;
+        if (cart.discountAllocations && cart.discountAllocations.length > 0) {
+          currentDiscount = cart.discountAllocations.reduce((sum: number, allocation: any) => {
+            return sum + parseFloat(allocation.discountedAmount?.amount || '0');
+          }, 0);
+        }
+
+        // Fallback: if Shopify cart doesn't have discount allocations but session has discount, use that
+        if (currentDiscount === 0 && session.discount && session.discount.amount) {
+          currentDiscount = session.discount.amount;
+        }
+
+        // Update session pricing with current Shopify values
+        session.updatePricing({
+          subtotal: currentSubtotal,
+          tax: currentTax,
+          discountAmount: currentDiscount,
+          shippingCost: session.shippingCost || 0
+        });
+
+        console.log('Updated session pricing from Shopify cart:', {
+          subtotal: session.subtotal,
+          tax: session.tax,
+          discount: session.discountAmount,
+          shipping: session.shippingCost,
+          grandTotal: session.grandTotal
+        });
       }
-
-      // Update session with current cart pricing before payment
-      const currentSubtotal = parseFloat(cart.estimatedCost?.subtotalAmount?.amount || '0');
-      const currentTax = parseFloat(cart.estimatedCost?.totalTaxAmount?.amount || '0');
-
-      // Calculate discount if promo code was applied
-      let currentDiscount = 0;
-      if (cart.discountAllocations && cart.discountAllocations.length > 0) {
-        currentDiscount = cart.discountAllocations.reduce((sum: number, allocation: any) => {
-          return sum + parseFloat(allocation.discountedAmount?.amount || '0');
-        }, 0);
-      }
-
-      // Fallback: if Shopify cart doesn't have discount allocations but session has discount, use that
-      if (currentDiscount === 0 && session.discount && session.discount.amount) {
-        currentDiscount = session.discount.amount;
-      }
-
-      // Update session pricing with current Shopify values
-      session.updatePricing({
-        subtotal: currentSubtotal,
-        tax: currentTax,
-        discountAmount: currentDiscount,
-        shippingCost: session.shippingCost || 0
-      });
 
       console.log('Updated session pricing before payment:', {
         subtotal: session.subtotal,
@@ -1186,6 +1240,27 @@ export class CheckoutController extends Controller {
         countryCode: shippingAddress.countryCode,
         province: shippingAddress.province,
       });
+
+      // If cart wasn't fetched successfully, we need to fetch it again for line items
+      // This is critical for order creation
+      if (!cart || !cart.lines?.edges) {
+        console.log('Cart not available, attempting final fetch for line items...');
+        try {
+          const finalCartResponse = await shopifyStorefront.getCart(session.shopifyCartId);
+          cart = finalCartResponse?.data?.cart;
+
+          if (!cart || !cart.lines?.edges || cart.lines.edges.length === 0) {
+            console.error('❌ Critical: Cannot create order without cart items');
+            this.setStatus(400);
+            throw new Error('Unable to retrieve cart items. Please try again or contact support.');
+          }
+          console.log('✓ Cart fetched successfully for line items');
+        } catch (error: any) {
+          console.error('❌ Final cart fetch failed:', error.message);
+          this.setStatus(500);
+          throw new Error('Unable to retrieve cart items from Shopify. Please try again in a moment.');
+        }
+      }
 
       const lineItems = await Promise.all(cart.lines.edges.map(async (edge: any) => {
         const node = edge.node;
@@ -1310,9 +1385,11 @@ export class CheckoutController extends Controller {
               quantity: item.quantity,
               price: item.price,
               totalPrice: item.price * item.quantity,
-              image: cart.lines.edges.find((edge: any) =>
+              // Use image from lineItem (already saved during order creation)
+              // Fallback to cart if available
+              image: item.image || (cart?.lines?.edges?.find((edge: any) =>
                 edge.node.merchandise.id === item.shopifyVariantId
-              )?.node.merchandise.image?.url || null,
+              )?.node.merchandise.image?.url) || null,
             })),
 
             // Complete Pricing Breakdown
