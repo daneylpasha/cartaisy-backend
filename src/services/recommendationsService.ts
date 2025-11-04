@@ -353,6 +353,7 @@ async function findProductsByType(productType: string, excludeProductId: string,
     const response: any = await shopifyStorefront['query'](query, { queryString });
 
     if (!response.data?.products?.edges) {
+      console.log(`No products found for type: ${productType}`);
       return [];
     }
 
@@ -362,7 +363,10 @@ async function findProductsByType(productType: string, excludeProductId: string,
       .map((edge: any) => edge.node.handle)
       .slice(0, limit);
 
-    return await fetchProductsByHandles(handles, limit);
+    console.log(`Type matching - Found handles: [${handles.join(', ')}]`);
+    const products = await fetchProductsByHandles(handles, limit);
+    console.log(`Type matching - Fetched ${products.length} products`);
+    return products;
   } catch (error) {
     console.error('Error finding products by type:', error);
     return [];
