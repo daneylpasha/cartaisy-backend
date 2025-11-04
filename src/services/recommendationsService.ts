@@ -226,6 +226,9 @@ async function getCollectionBasedRecommendations(shopifyProductId: string, limit
     const gid = `gid://shopify/Product/${shopifyProductId}`;
     const response: any = await shopifyStorefront['query'](productQuery, { id: gid });
 
+    console.log(`Collection fallback for ${shopifyProductId}: product found = ${!!response.data?.product}`);
+    console.log(`Collections count: ${response.data?.product?.collections?.edges?.length || 0}`);
+
     if (!response.data?.product?.collections?.edges?.length) {
       console.log(`Product ${shopifyProductId} has no collections, returning random products`);
       return await getRandomProducts(limit);
@@ -233,16 +236,22 @@ async function getCollectionBasedRecommendations(shopifyProductId: string, limit
 
     // Get products from the first collection, excluding the source product
     const collection = response.data.product.collections.edges[0].node;
+    console.log(`Using collection: ${collection.handle}, products in collection: ${collection.products.edges.length}`);
+
     const productHandles = collection.products.edges
       .filter((edge: any) => edge.node.id !== gid) // Exclude source product
       .map((edge: any) => edge.node.handle)
       .slice(0, limit);
 
+    console.log(`Product handles to fetch: ${productHandles.length}`);
+
     if (productHandles.length === 0) {
+      console.log('No product handles after filtering, returning random products');
       return await getRandomProducts(limit);
     }
 
     // Fetch full product data
+    console.log(`Fetching full product data for handles: ${productHandles.join(', ')}`);
     return await fetchProductsByHandles(productHandles, limit);
   } catch (error) {
     console.error('Error in collection-based recommendations:', error);
