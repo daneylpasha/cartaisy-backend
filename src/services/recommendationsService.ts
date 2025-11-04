@@ -98,9 +98,13 @@ export const getProductRecommendations = async (
       return [];
     }
 
-    // Step 1: Call Shopify Recommendations API (REST)
+    // Step 1: Call Shopify Recommendations API (AJAX API)
+    // Docs: https://shopify.dev/docs/api/ajax/reference/product-recommendations
     const shopDomain = storeUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
-    const recommendationsUrl = `https://${shopDomain}/recommendations/products.json?product_id=${shopifyProductId}&limit=${limit * 2}`;
+
+    // Shopify limits recommendations to max 10, default locale is 'en'
+    const apiLimit = Math.min(limit, 10);
+    const recommendationsUrl = `https://${shopDomain}/recommendations/products.json?product_id=${shopifyProductId}&limit=${apiLimit}&intent=related`;
 
     let recommendedHandles: string[] = [];
 
@@ -114,7 +118,7 @@ export const getProductRecommendations = async (
 
       console.log(`Shopify recommendations for ${shopifyProductId}: found ${recommendedHandles.length} products`);
     } catch (error: any) {
-      console.log(`Shopify Recommendations API returned empty or error for ${shopifyProductId}`);
+      console.log(`Shopify Recommendations API returned empty or error for ${shopifyProductId}:`, error.response?.status, error.response?.data || error.message);
       // Continue to fallback logic
     }
 
