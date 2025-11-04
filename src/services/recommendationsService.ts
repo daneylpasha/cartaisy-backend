@@ -1,7 +1,6 @@
 import axios from 'axios';
 import { tenantConfig } from '../config/tenant';
-import Product from '../models/Product';
-import { IProduct } from '../types';
+import shopifyStorefront from './shopifyStorefrontService';
 
 /**
  * Recommendations Service
@@ -10,7 +9,7 @@ import { IProduct } from '../types';
  * - Product Detail Page (PDP) recommendations
  * - Cart-based recommendations
  *
- * Uses Shopify Storefront API for accessing recommendations
+ * Uses Shopify Storefront API for accessing recommendations and product data
  */
 
 interface ShopifyRecommendation {
@@ -22,9 +21,56 @@ interface ShopifyRecommendationsResponse {
   products?: ShopifyRecommendation[];
 }
 
+interface ShopifyProduct {
+  id: string;
+  title: string;
+  handle: string;
+  description: string;
+  vendor: string;
+  productType: string;
+  tags: string[];
+  priceRange: {
+    minVariantPrice: {
+      amount: string;
+      currencyCode: string;
+    };
+  };
+  compareAtPriceRange: {
+    minVariantPrice: {
+      amount: string;
+    };
+  };
+  images: {
+    edges: Array<{
+      node: {
+        url: string;
+        altText: string;
+        width: number;
+        height: number;
+      };
+    }>;
+  };
+  variants: {
+    edges: Array<{
+      node: {
+        id: string;
+        title: string;
+        price: {
+          amount: string;
+        };
+        compareAtPrice?: {
+          amount: string;
+        };
+        availableForSale: boolean;
+        quantityAvailable: number;
+      };
+    }>;
+  };
+}
+
 /**
  * Get product recommendations from Shopify for a specific product (PDP)
- * Uses Shopify's Storefront API recommendations endpoint
+ * Uses Shopify's Recommendations API and Storefront API
  *
  * @param shopifyProductId - Shopify product ID (e.g., "14819881320820")
  * @param limit - Number of recommendations to return
@@ -34,65 +80,57 @@ export const getProductRecommendations = async (
   limit: number = 6
 ): Promise<any[]> => {
   try {
-    const { storeUrl, storefrontAccessToken } = tenantConfig.shopify;
-
-    if (!storeUrl || !storefrontAccessToken) {
-      console.warn('Shopify Storefront credentials not configured, using fallback recommendations');
-      return getFallbackRecommendationsByShopifyId(shopifyProductId, limit);
-    }
-
     // Validate Shopify product ID
     if (!shopifyProductId || shopifyProductId.trim() === '') {
       console.warn('Invalid Shopify product ID provided');
       return [];
     }
 
-    // Call Shopify Recommendations API
-    // Format: https://your-store.myshopify.com/recommendations/products.json?product_id={shopify_product_id}&limit={limit}
+    // Check if Shopify Storefront is configured
+    if (!shopifyStorefront.isConfigured()) {
+      console.warn('Shopify Storefront not configured');
+      return [];
+    }
+
+    const { storeUrl } = tenantConfig.shopify;
+    if (!storeUrl) {
+      console.warn('SHOPIFY_STORE_URL not configured');
+      return [];
+    }
+
+    // Step 1: Call Shopify Recommendations API (REST)
     const shopDomain = storeUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
-    const recommendationsUrl = `https://${shopDomain}/recommendations/products.json?product_id=${shopifyProductId}&limit=${limit}`;
+    const recommendationsUrl = `https://${shopDomain}/recommendations/products.json?product_id=${shopifyProductId}&limit=${limit * 2}`;
 
-    const response = await axios.get<ShopifyRecommendationsResponse>(recommendationsUrl, {
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Shopify-Storefront-Access-Token': storefrontAccessToken,
-      },
-      timeout: 5000,
-    });
+    let recommendedHandles: string[] = [];
 
-    const recommendedProducts = response.data.products || [];
+    try {
+      const response = await axios.get<ShopifyRecommendationsResponse>(recommendationsUrl, {
+        timeout: 5000,
+      });
 
-    if (recommendedProducts.length === 0) {
-      console.log(`No Shopify recommendations found for product ${shopifyProductId}, using fallback`);
-      return getFallbackRecommendationsByShopifyId(shopifyProductId, limit);
+      const recommendedProducts = response.data.products || [];
+      recommendedHandles = recommendedProducts.map((p) => p.handle).filter(Boolean);
+
+      console.log(`Shopify recommendations for ${shopifyProductId}: found ${recommendedHandles.length} products`);
+    } catch (error: any) {
+      console.log(`Shopify Recommendations API returned empty or error for ${shopifyProductId}`);
+      // Continue to fallback logic
     }
 
-    // Extract product handles from Shopify response
-    const handles = recommendedProducts.map(p => p.handle).filter(Boolean);
-
-    // Fetch full product data from our database
-    const products = await Product.find({
-      handle: { $in: handles },
-      status: 'active',
-    })
-      .limit(limit)
-      .lean();
-
-    // If we don't have enough products, supplement with fallback
-    if (products.length < limit) {
-      const fallbackProducts = await getFallbackRecommendationsByShopifyId(
-        shopifyProductId,
-        limit - products.length,
-        products.map(p => p._id.toString())
-      );
-      products.push(...fallbackProducts);
+    // If no recommendations from Shopify, return empty (no fallback to avoid mismatched recommendations)
+    if (recommendedHandles.length === 0) {
+      console.log(`No recommendations available for product ${shopifyProductId}`);
+      return [];
     }
 
-    return products.slice(0, limit);
+    // Step 2: Fetch full product data from Shopify Storefront API
+    const products = await fetchProductsByHandles(recommendedHandles, limit);
+
+    return products;
   } catch (error) {
     console.error('Error fetching Shopify recommendations:', error);
-    // Fallback to category-based recommendations
-    return getFallbackRecommendationsByShopifyId(shopifyProductId, limit);
+    return [];
   }
 };
 
@@ -155,76 +193,131 @@ export const getCartRecommendations = async (
 };
 
 /**
- * Fallback recommendations when Shopify API is unavailable or returns empty results
- * Uses category, tags, and price range to find similar products
- *
- * @param shopifyProductId - Shopify product ID
- * @param limit - Number of recommendations
- * @param excludeIds - MongoDB IDs to exclude from results
+ * Fetch products from Shopify Storefront API by handles
+ * @param handles - Array of product handles
+ * @param limit - Maximum number of products to return
  */
-async function getFallbackRecommendationsByShopifyId(
-  shopifyProductId: string,
-  limit: number = 6,
-  excludeIds: string[] = []
-): Promise<any[]> {
+async function fetchProductsByHandles(handles: string[], limit: number): Promise<any[]> {
   try {
-    const product = await Product.findOne({ shopifyProductId }).lean();
-
-    if (!product) {
-      // Return featured products as last resort
-      return Product.find({
-        status: 'active',
-        'mobileDisplay.isFeatured': true,
-        _id: { $nin: excludeIds },
-      })
-        .limit(limit)
-        .lean();
+    if (handles.length === 0) {
+      return [];
     }
 
-    // Build fallback query based on product attributes
-    const fallbackQuery: any = {
-      status: 'active',
-      _id: { $ne: product._id, $nin: excludeIds },
-    };
+    // Build GraphQL query to fetch products by handle
+    const query = `
+      query getProductsByHandles($handles: [String!]!) {
+        products(first: ${Math.min(handles.length, limit)}, query: $handles) {
+          edges {
+            node {
+              id
+              title
+              handle
+              description
+              vendor
+              productType
+              tags
+              priceRange {
+                minVariantPrice {
+                  amount
+                  currencyCode
+                }
+              }
+              compareAtPriceRange {
+                minVariantPrice {
+                  amount
+                }
+              }
+              images(first: 5) {
+                edges {
+                  node {
+                    url
+                    altText
+                    width
+                    height
+                  }
+                }
+              }
+              variants(first: 20) {
+                edges {
+                  node {
+                    id
+                    title
+                    price {
+                      amount
+                    }
+                    compareAtPrice {
+                      amount
+                    }
+                    availableForSale
+                    quantityAvailable
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    `;
 
-    // Match by category or product type
-    if (product.productType) {
-      fallbackQuery.productType = product.productType;
+    // Create a query string for handles
+    const handleQuery = handles.map(h => `handle:${h}`).join(' OR ');
+
+    const response: any = await shopifyStorefront['query'](query, { handles: handleQuery });
+
+    if (!response.data?.products?.edges) {
+      console.warn('No products returned from Shopify Storefront');
+      return [];
     }
 
-    // Match by tags (at least one common tag)
-    if (product.tags && product.tags.length > 0) {
-      fallbackQuery.tags = { $in: product.tags };
-    }
+    // Transform Shopify products to our format
+    const products = response.data.products.edges.map((edge: any) => {
+      const product = edge.node;
+      return transformShopifyProduct(product);
+    });
 
-    // Similar price range (±30%)
-    const priceMin = product.price * 0.7;
-    const priceMax = product.price * 1.3;
-    fallbackQuery.price = { $gte: priceMin, $lte: priceMax };
-
-    const recommendations = await Product.find(fallbackQuery)
-      .sort({ 'analytics.engagementScore': -1, createdAt: -1 })
-      .limit(limit)
-      .lean();
-
-    // If still not enough, get most popular products
-    if (recommendations.length < limit) {
-      const popularProducts = await Product.find({
-        status: 'active',
-        _id: {
-          $nin: [...excludeIds, ...recommendations.map(p => p._id.toString())],
-        },
-      })
-        .sort({ 'analytics.engagementScore': -1 })
-        .limit(limit - recommendations.length)
-        .lean();
-
-      recommendations.push(...popularProducts);
-    }
-
-    return recommendations;
+    return products.slice(0, limit);
   } catch (error) {
-    console.error('Error in fallback recommendations:', error);
+    console.error('Error fetching products from Shopify Storefront:', error);
     return [];
   }
+}
+
+/**
+ * Transform Shopify product to our API format
+ */
+function transformShopifyProduct(product: ShopifyProduct): any {
+  const shopifyId = product.id.split('/').pop() || '';
+
+  return {
+    _id: shopifyId,
+    shopifyProductId: shopifyId,
+    title: product.title,
+    description: product.description,
+    handle: product.handle,
+    vendor: product.vendor,
+    productType: product.productType,
+    tags: product.tags,
+    status: 'active',
+    price: parseFloat(product.priceRange.minVariantPrice.amount),
+    compareAtPrice: product.compareAtPriceRange?.minVariantPrice?.amount
+      ? parseFloat(product.compareAtPriceRange.minVariantPrice.amount)
+      : undefined,
+    images: product.images.edges.map((edge, index) => ({
+      url: edge.node.url,
+      alt: edge.node.altText || product.title,
+      position: index + 1,
+      width: edge.node.width,
+      height: edge.node.height,
+    })),
+    variants: product.variants.edges.map((edge) => ({
+      id: edge.node.id.split('/').pop(),
+      title: edge.node.title,
+      price: parseFloat(edge.node.price.amount),
+      compareAtPrice: edge.node.compareAtPrice
+        ? parseFloat(edge.node.compareAtPrice.amount)
+        : undefined,
+      availableForSale: edge.node.availableForSale,
+      quantityAvailable: edge.node.quantityAvailable,
+    })),
+  };
 }
