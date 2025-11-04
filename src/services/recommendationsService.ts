@@ -98,27 +98,35 @@ export const getProductRecommendations = async (
       return [];
     }
 
-    // Step 1: Call Shopify Recommendations API (AJAX API)
-    // Docs: https://shopify.dev/docs/api/ajax/reference/product-recommendations
-    const shopDomain = storeUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
-
-    // Shopify limits recommendations to max 10, default locale is 'en'
-    const apiLimit = Math.min(limit, 10);
-    const recommendationsUrl = `https://${shopDomain}/recommendations/products.json?product_id=${shopifyProductId}&limit=${apiLimit}&intent=related`;
-
+    // Step 1: Try Shopify Storefront GraphQL productRecommendations query
+    // Docs: https://shopify.dev/docs/api/storefront/latest/queries/productrecommendations
     let recommendedHandles: string[] = [];
 
     try {
-      const response = await axios.get<ShopifyRecommendationsResponse>(recommendationsUrl, {
-        timeout: 5000,
-      });
+      const query = `
+        query getProductRecommendations($productId: ID!) {
+          productRecommendations(productId: $productId) {
+            id
+            handle
+          }
+        }
+      `;
 
-      const recommendedProducts = response.data.products || [];
-      recommendedHandles = recommendedProducts.map((p) => p.handle).filter(Boolean);
+      const gid = `gid://shopify/Product/${shopifyProductId}`;
+      const response: any = await shopifyStorefront['query'](query, { productId: gid });
 
-      console.log(`Shopify recommendations for ${shopifyProductId}: found ${recommendedHandles.length} products`);
+      if (response.data?.productRecommendations) {
+        recommendedHandles = response.data.productRecommendations
+          .map((p: any) => p.handle)
+          .filter(Boolean)
+          .slice(0, limit);
+
+        console.log(`Shopify GraphQL recommendations for ${shopifyProductId}: found ${recommendedHandles.length} products`);
+      } else {
+        console.log(`Shopify GraphQL productRecommendations returned no data for ${shopifyProductId}`);
+      }
     } catch (error: any) {
-      console.log(`Shopify Recommendations API returned empty or error for ${shopifyProductId}:`, error.response?.status, error.response?.data || error.message);
+      console.log(`Shopify GraphQL productRecommendations error for ${shopifyProductId}:`, error.message);
       // Continue to fallback logic
     }
 
