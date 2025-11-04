@@ -295,8 +295,8 @@ async function fetchProductsByHandles(handles: string[], limit: number): Promise
 
     // Build GraphQL query to fetch products by handle
     const query = `
-      query getProductsByHandles($handles: [String!]!) {
-        products(first: ${Math.min(handles.length, limit)}, query: $handles) {
+      query getProductsByHandles($queryString: String!) {
+        products(first: ${Math.min(handles.length, limit)}, query: $queryString) {
           edges {
             node {
               id
@@ -352,7 +352,7 @@ async function fetchProductsByHandles(handles: string[], limit: number): Promise
     // Create a query string for handles
     const handleQuery = handles.map(h => `handle:${h}`).join(' OR ');
 
-    const response: any = await shopifyStorefront['query'](query, { handles: handleQuery });
+    const response: any = await shopifyStorefront['query'](query, { queryString: handleQuery });
 
     if (!response.data?.products?.edges) {
       console.warn('No products returned from Shopify Storefront');
