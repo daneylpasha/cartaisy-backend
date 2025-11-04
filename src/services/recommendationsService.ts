@@ -120,13 +120,22 @@ export const getProductRecommendations = async (
 
     // Step 2: If no recommendations from Shopify, use fallback strategy
     if (recommendedHandles.length === 0) {
-      console.log(`No Shopify recommendations for ${shopifyProductId}, using collection-based fallback`);
-      return await getCollectionBasedRecommendations(shopifyProductId, limit);
+      console.log(`No Shopify recommendations for ${shopifyProductId}, using smart fallback`);
+      return await getSmartRecommendations(shopifyProductId, limit);
     }
 
     // Step 3: Fetch full product data from Shopify Storefront API
     const products = await fetchProductsByHandles(recommendedHandles, limit);
 
+    // Step 4: Validate if Shopify recommendations are relevant
+    const isRelevant = await validateRecommendations(shopifyProductId, products);
+
+    if (!isRelevant) {
+      console.log(`Shopify recommendations not relevant for ${shopifyProductId}, using smart fallback`);
+      return await getSmartRecommendations(shopifyProductId, limit);
+    }
+
+    console.log(`Using Shopify recommendations for ${shopifyProductId}`);
     return products;
   } catch (error) {
     console.error('Error fetching Shopify recommendations:', error);
@@ -193,8 +202,256 @@ export const getCartRecommendations = async (
 };
 
 /**
+ * Validate if Shopify recommendations are relevant to the source product
+ * Checks if recommended products have similar product type
+ */
+async function validateRecommendations(shopifyProductId: string, recommendedProducts: any[]): Promise<boolean> {
+  try {
+    if (recommendedProducts.length === 0) {
+      return false;
+    }
+
+    // Get source product details
+    const sourceQuery = `
+      query getProduct($id: ID!) {
+        product(id: $id) {
+          id
+          productType
+        }
+      }
+    `;
+
+    const gid = `gid://shopify/Product/${shopifyProductId}`;
+    const response: any = await shopifyStorefront['query'](sourceQuery, { id: gid });
+
+    if (!response.data?.product) {
+      console.log('Could not fetch source product for validation');
+      return true; // Assume valid if we can't validate
+    }
+
+    const sourceProductType = response.data.product.productType?.trim().toUpperCase() || '';
+
+    // If source has no product type, accept recommendations
+    if (!sourceProductType) {
+      console.log('Source product has no type, accepting Shopify recommendations');
+      return true;
+    }
+
+    // Check if at least 50% of recommendations match the source product type
+    const matchingProducts = recommendedProducts.filter(p => {
+      const recType = p.productType?.trim().toUpperCase() || '';
+      return recType === sourceProductType;
+    });
+
+    const matchPercentage = (matchingProducts.length / recommendedProducts.length) * 100;
+    console.log(`Recommendation relevance: ${matchPercentage.toFixed(0)}% match (${matchingProducts.length}/${recommendedProducts.length} products)`);
+
+    return matchPercentage >= 50; // At least 50% should match
+  } catch (error) {
+    console.error('Error validating recommendations:', error);
+    return true; // Assume valid on error
+  }
+}
+
+/**
+ * Get smart recommendations based on product attributes
+ * Uses product type, tags, and collection matching
+ */
+async function getSmartRecommendations(shopifyProductId: string, limit: number): Promise<any[]> {
+  try {
+    // Get source product details
+    const sourceQuery = `
+      query getProduct($id: ID!) {
+        product(id: $id) {
+          id
+          productType
+          tags
+          vendor
+          collections(first: 3) {
+            edges {
+              node {
+                id
+                handle
+              }
+            }
+          }
+        }
+      }
+    `;
+
+    const gid = `gid://shopify/Product/${shopifyProductId}`;
+    const response: any = await shopifyStorefront['query'](sourceQuery, { id: gid });
+
+    if (!response.data?.product) {
+      console.log('Could not fetch source product for smart recommendations');
+      return await getRandomProducts(limit);
+    }
+
+    const sourceProduct = response.data.product;
+    const productType = sourceProduct.productType?.trim() || '';
+    const tags = sourceProduct.tags || [];
+    const vendor = sourceProduct.vendor || '';
+
+    console.log(`Smart recommendations for: Type="${productType}", Tags=[${tags.join(', ')}], Vendor="${vendor}"`);
+
+    // Strategy 1: Match by product type (highest priority)
+    if (productType) {
+      const typeMatches = await findProductsByType(productType, shopifyProductId, limit);
+      if (typeMatches.length >= Math.min(3, limit)) {
+        console.log(`Found ${typeMatches.length} products by type matching`);
+        return typeMatches;
+      }
+    }
+
+    // Strategy 2: Match by tags (if type matching didn't work well)
+    if (tags.length > 0) {
+      const tagMatches = await findProductsByTags(tags, shopifyProductId, limit);
+      if (tagMatches.length >= Math.min(3, limit)) {
+        console.log(`Found ${tagMatches.length} products by tag matching`);
+        return tagMatches;
+      }
+    }
+
+    // Strategy 3: Collection-based fallback
+    if (sourceProduct.collections?.edges?.length > 0) {
+      const collectionId = sourceProduct.collections.edges[0].node.id;
+      const collectionMatches = await findProductsByCollection(collectionId, shopifyProductId, limit);
+      if (collectionMatches.length > 0) {
+        console.log(`Found ${collectionMatches.length} products from same collection`);
+        return collectionMatches;
+      }
+    }
+
+    // Strategy 4: Random products as last resort
+    console.log('Using random products as last resort');
+    return await getRandomProducts(limit);
+  } catch (error) {
+    console.error('Error in smart recommendations:', error);
+    return await getRandomProducts(limit);
+  }
+}
+
+/**
+ * Find products by matching product type
+ */
+async function findProductsByType(productType: string, excludeProductId: string, limit: number): Promise<any[]> {
+  try {
+    const query = `
+      query findByType($queryString: String!) {
+        products(first: ${limit + 5}, query: $queryString) {
+          edges {
+            node {
+              id
+              handle
+            }
+          }
+        }
+      }
+    `;
+
+    const queryString = `product_type:"${productType}"`;
+    const response: any = await shopifyStorefront['query'](query, { queryString });
+
+    if (!response.data?.products?.edges) {
+      return [];
+    }
+
+    const excludeGid = `gid://shopify/Product/${excludeProductId}`;
+    const handles = response.data.products.edges
+      .filter((edge: any) => edge.node.id !== excludeGid)
+      .map((edge: any) => edge.node.handle)
+      .slice(0, limit);
+
+    return await fetchProductsByHandles(handles, limit);
+  } catch (error) {
+    console.error('Error finding products by type:', error);
+    return [];
+  }
+}
+
+/**
+ * Find products by matching tags
+ */
+async function findProductsByTags(tags: string[], excludeProductId: string, limit: number): Promise<any[]> {
+  try {
+    // Use first 3 tags for matching
+    const searchTags = tags.slice(0, 3);
+    const query = `
+      query findByTags($queryString: String!) {
+        products(first: ${limit + 5}, query: $queryString) {
+          edges {
+            node {
+              id
+              handle
+            }
+          }
+        }
+      }
+    `;
+
+    const queryString = searchTags.map(tag => `tag:"${tag}"`).join(' OR ');
+    const response: any = await shopifyStorefront['query'](query, { queryString });
+
+    if (!response.data?.products?.edges) {
+      return [];
+    }
+
+    const excludeGid = `gid://shopify/Product/${excludeProductId}`;
+    const handles = response.data.products.edges
+      .filter((edge: any) => edge.node.id !== excludeGid)
+      .map((edge: any) => edge.node.handle)
+      .slice(0, limit);
+
+    return await fetchProductsByHandles(handles, limit);
+  } catch (error) {
+    console.error('Error finding products by tags:', error);
+    return [];
+  }
+}
+
+/**
+ * Find products from the same collection
+ */
+async function findProductsByCollection(collectionId: string, excludeProductId: string, limit: number): Promise<any[]> {
+  try {
+    const query = `
+      query getCollection($id: ID!) {
+        collection(id: $id) {
+          products(first: ${limit + 5}) {
+            edges {
+              node {
+                id
+                handle
+              }
+            }
+          }
+        }
+      }
+    `;
+
+    const response: any = await shopifyStorefront['query'](query, { id: collectionId });
+
+    if (!response.data?.collection?.products?.edges) {
+      return [];
+    }
+
+    const excludeGid = `gid://shopify/Product/${excludeProductId}`;
+    const handles = response.data.collection.products.edges
+      .filter((edge: any) => edge.node.id !== excludeGid)
+      .map((edge: any) => edge.node.handle)
+      .slice(0, limit);
+
+    return await fetchProductsByHandles(handles, limit);
+  } catch (error) {
+    console.error('Error finding products by collection:', error);
+    return [];
+  }
+}
+
+/**
  * Get collection-based recommendations as fallback
  * Fetches products from the same collection as the given product
+ * @deprecated Use getSmartRecommendations instead
  */
 async function getCollectionBasedRecommendations(shopifyProductId: string, limit: number): Promise<any[]> {
   try {
