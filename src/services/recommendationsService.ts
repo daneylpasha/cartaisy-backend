@@ -1,25 +1,19 @@
-import axios from 'axios';
-import { tenantConfig } from '../config/tenant';
 import shopifyStorefront from './shopifyStorefrontService';
 
 /**
  * Recommendations Service
  *
- * Integrates with Shopify's Recommendations API to provide:
- * - Product Detail Page (PDP) recommendations
- * - Cart-based recommendations
+ * Integrates with Shopify's Storefront GraphQL API to provide:
+ * - Product Detail Page (PDP) recommendations using Shopify's native algorithm
+ * - Cart-based recommendations aggregating results from cart items
  *
- * Uses Shopify Storefront API for accessing recommendations and product data
+ * Shopify's algorithm considers:
+ * - Purchase history and buying patterns
+ * - Product descriptions and attributes
+ * - Collection relationships
+ *
+ * Falls back to collection-based and random products when Shopify has no data
  */
-
-interface ShopifyRecommendation {
-  id: string;
-  handle: string;
-}
-
-interface ShopifyRecommendationsResponse {
-  products?: ShopifyRecommendation[];
-}
 
 interface ShopifyProduct {
   id: string;
@@ -89,12 +83,6 @@ export const getProductRecommendations = async (
     // Check if Shopify Storefront is configured
     if (!shopifyStorefront.isConfigured()) {
       console.warn('Shopify Storefront not configured');
-      return [];
-    }
-
-    const { storeUrl } = tenantConfig.shopify;
-    if (!storeUrl) {
-      console.warn('SHOPIFY_STORE_URL not configured');
       return [];
     }
 
