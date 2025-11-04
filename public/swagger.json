@@ -890,6 +890,41 @@
 				"type": "object",
 				"additionalProperties": false
 			},
+			"RecommendationProductImage": {
+				"description": "Product image information",
+				"properties": {
+					"url": {
+						"type": "string",
+						"description": "Image URL"
+					},
+					"alt": {
+						"type": "string",
+						"description": "Alt text"
+					},
+					"position": {
+						"type": "number",
+						"format": "double",
+						"description": "Position in gallery"
+					},
+					"width": {
+						"type": "number",
+						"format": "double",
+						"description": "Image width"
+					},
+					"height": {
+						"type": "number",
+						"format": "double",
+						"description": "Image height"
+					}
+				},
+				"required": [
+					"url",
+					"alt",
+					"position"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
 			"ProductOption": {
 				"description": "Product variant option (color, size, etc.)",
 				"properties": {
@@ -948,6 +983,215 @@
 					"availableForSale",
 					"quantityAvailable",
 					"selectedOptions"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"RecommendedProduct": {
+				"description": "Simplified product object for API responses",
+				"properties": {
+					"_id": {
+						"type": "string",
+						"description": "MongoDB ID"
+					},
+					"shopifyProductId": {
+						"type": "string",
+						"description": "Shopify product ID"
+					},
+					"title": {
+						"type": "string",
+						"description": "Product title"
+					},
+					"description": {
+						"type": "string",
+						"description": "Product description"
+					},
+					"handle": {
+						"type": "string",
+						"description": "URL handle"
+					},
+					"vendor": {
+						"type": "string",
+						"description": "Vendor/brand"
+					},
+					"productType": {
+						"type": "string",
+						"description": "Product type/category"
+					},
+					"tags": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"description": "Product tags"
+					},
+					"status": {
+						"type": "string",
+						"description": "Product status"
+					},
+					"price": {
+						"type": "number",
+						"format": "double",
+						"description": "Base price"
+					},
+					"compareAtPrice": {
+						"type": "number",
+						"format": "double",
+						"description": "Compare at price"
+					},
+					"images": {
+						"items": {
+							"$ref": "#/components/schemas/RecommendationProductImage"
+						},
+						"type": "array",
+						"description": "Product images"
+					},
+					"variants": {
+						"items": {
+							"$ref": "#/components/schemas/ProductVariant"
+						},
+						"type": "array",
+						"description": "Product variants"
+					}
+				},
+				"required": [
+					"_id",
+					"title",
+					"description",
+					"handle",
+					"vendor",
+					"productType",
+					"tags",
+					"status",
+					"price",
+					"images",
+					"variants"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"ProductRecommendationsResponse": {
+				"description": "Product recommendations response for PDP",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"description": "Indicates if the request was successful"
+					},
+					"error": {
+						"type": "string",
+						"description": "Error message if success is false"
+					},
+					"data": {
+						"properties": {
+							"count": {
+								"type": "number",
+								"format": "double",
+								"description": "Number of recommendations returned"
+							},
+							"sourceProductId": {
+								"type": "string",
+								"description": "The Shopify product ID that recommendations are based on"
+							},
+							"basedOn": {
+								"type": "string",
+								"enum": [
+									"product"
+								],
+								"nullable": false,
+								"description": "Source of recommendations (product or cart)"
+							},
+							"recommendedProducts": {
+								"items": {
+									"$ref": "#/components/schemas/RecommendedProduct"
+								},
+								"type": "array",
+								"description": "Array of recommended products with full product details"
+							}
+						},
+						"required": [
+							"count",
+							"sourceProductId",
+							"basedOn",
+							"recommendedProducts"
+						],
+						"type": "object"
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"CartRecommendationsResponse": {
+				"description": "Cart recommendations response",
+				"properties": {
+					"success": {
+						"type": "boolean",
+						"description": "Indicates if the request was successful"
+					},
+					"error": {
+						"type": "string",
+						"description": "Error message if success is false"
+					},
+					"data": {
+						"properties": {
+							"count": {
+								"type": "number",
+								"format": "double",
+								"description": "Number of recommendations returned"
+							},
+							"cartItemsCount": {
+								"type": "number",
+								"format": "double",
+								"description": "Number of items in the cart that recommendations are based on"
+							},
+							"basedOn": {
+								"type": "string",
+								"enum": [
+									"cart"
+								],
+								"nullable": false,
+								"description": "Source of recommendations (product or cart)"
+							},
+							"recommendedProducts": {
+								"items": {
+									"$ref": "#/components/schemas/RecommendedProduct"
+								},
+								"type": "array",
+								"description": "Array of recommended products with full product details"
+							}
+						},
+						"required": [
+							"count",
+							"cartItemsCount",
+							"basedOn",
+							"recommendedProducts"
+						],
+						"type": "object"
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"CartRecommendationsRequest": {
+				"description": "Recommendation request for cart items",
+				"properties": {
+					"cartItems": {
+						"items": {
+							"type": "string"
+						},
+						"type": "array",
+						"description": "Array of Shopify product IDs currently in the cart"
+					}
+				},
+				"required": [
+					"cartItems"
 				],
 				"type": "object",
 				"additionalProperties": false
@@ -5051,6 +5295,210 @@
 								],
 								"type": "object",
 								"description": "- Search details"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/recommendations/product/{shopifyProductId}": {
+			"get": {
+				"operationId": "GetProductRecommendations",
+				"responses": {
+					"200": {
+						"description": "Product recommendations with full product data",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/ProductRecommendationsResponse"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "Bad Request - Invalid parameters",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"error": {
+											"type": "string"
+										},
+										"success": {
+											"type": "boolean",
+											"enum": [
+												false
+											],
+											"nullable": false
+										}
+									},
+									"required": [
+										"error",
+										"success"
+									],
+									"type": "object"
+								}
+							}
+						}
+					},
+					"500": {
+						"description": "Internal Server Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"error": {
+											"type": "string"
+										},
+										"success": {
+											"type": "boolean",
+											"enum": [
+												false
+											],
+											"nullable": false
+										}
+									},
+									"required": [
+										"error",
+										"success"
+									],
+									"type": "object"
+								}
+							}
+						}
+					}
+				},
+				"description": "Get product recommendations for Product Detail Page (PDP)\n\nReturns recommended products based on a specific Shopify product ID.\nUses Shopify's native recommendations algorithm with smart fallback to\ncategory and tag-based matching when Shopify API is unavailable.",
+				"tags": [
+					"Recommendations"
+				],
+				"security": [],
+				"parameters": [
+					{
+						"description": "- Shopify product ID (e.g., \"14819881320820\")",
+						"in": "path",
+						"name": "shopifyProductId",
+						"required": true,
+						"schema": {
+							"type": "string"
+						},
+						"example": "14819881320820"
+					},
+					{
+						"description": "- Number of recommendations to return (default: 6, max: 50)",
+						"in": "query",
+						"name": "limit",
+						"required": false,
+						"schema": {
+							"default": 6,
+							"format": "double",
+							"type": "number"
+						},
+						"example": 6
+					}
+				]
+			}
+		},
+		"/recommendations/cart": {
+			"post": {
+				"operationId": "GetCartRecommendations",
+				"responses": {
+					"200": {
+						"description": "Cart recommendations with full product data",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CartRecommendationsResponse"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "Bad Request - Invalid cart items",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"error": {
+											"type": "string"
+										},
+										"success": {
+											"type": "boolean",
+											"enum": [
+												false
+											],
+											"nullable": false
+										}
+									},
+									"required": [
+										"error",
+										"success"
+									],
+									"type": "object"
+								}
+							}
+						}
+					},
+					"500": {
+						"description": "Internal Server Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"error": {
+											"type": "string"
+										},
+										"success": {
+											"type": "boolean",
+											"enum": [
+												false
+											],
+											"nullable": false
+										}
+									},
+									"required": [
+										"error",
+										"success"
+									],
+									"type": "object"
+								}
+							}
+						}
+					}
+				},
+				"description": "Get cart-based recommendations\n\nReturns recommended products based on items currently in the shopping cart.\nAggregates recommendations from multiple cart items and ranks them by frequency\nto show products that complement the entire cart contents.",
+				"tags": [
+					"Recommendations"
+				],
+				"security": [],
+				"parameters": [
+					{
+						"description": "- Number of recommendations to return (default: 6, max: 50)",
+						"in": "query",
+						"name": "limit",
+						"required": false,
+						"schema": {
+							"default": 6,
+							"format": "double",
+							"type": "number"
+						},
+						"example": 6
+					}
+				],
+				"requestBody": {
+					"description": "- Cart items with Shopify product IDs",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/CartRecommendationsRequest",
+								"description": "- Cart items with Shopify product IDs"
+							},
+							"example": {
+								"cartItems": [
+									"14819881320820",
+									"14819881320821"
+								]
 							}
 						}
 					}

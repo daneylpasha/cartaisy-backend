@@ -139,6 +139,7 @@ import carouselRoutes from './routes/carouselRoutes';
 import categoryGridRoutes from './routes/categoryGridRoutes';
 import calloutBannerRoutes from './routes/calloutBannerRoutes';
 import collectionDisplayRoutes from './routes/collectionDisplayRoutes';
+import recommendationsRoutes from './routes/recommendationsRoutes';
 
 // API Routes with versioning
 // Note: Auth routes are now handled by TSOA (see RegisterRoutes below)
@@ -151,6 +152,7 @@ app.use(`/api/${apiConfig.version}`, carouselRoutes);
 app.use(`/api/${apiConfig.version}`, categoryGridRoutes);
 app.use(`/api/${apiConfig.version}`, calloutBannerRoutes);
 app.use(`/api/${apiConfig.version}`, collectionDisplayRoutes);
+app.use(`/api/${apiConfig.version}/recommendations`, recommendationsRoutes);
 
 // tsoa generated routes (auto-generated, includes controllers with decorators)
 try {

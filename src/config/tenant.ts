@@ -71,6 +71,7 @@ export const tenantConfig = {
     apiKey: process.env.SHOPIFY_API_KEY || '',
     apiSecret: process.env.SHOPIFY_API_SECRET || '',
     accessToken: process.env.SHOPIFY_ACCESS_TOKEN || '',
+    storefrontAccessToken: process.env.SHOPIFY_STOREFRONT_ACCESS_TOKEN || '',
     webhookSecret: process.env.SHOPIFY_WEBHOOK_SECRET || '',
     scopes: process.env.SHOPIFY_SCOPES || 'read_products,read_orders,read_customers,write_products,write_orders,write_inventory',
     apiVersion: process.env.SHOPIFY_API_VERSION || '2024-01',
