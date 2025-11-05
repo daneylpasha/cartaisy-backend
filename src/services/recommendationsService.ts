@@ -237,7 +237,8 @@ async function validateRecommendations(shopifyProductId: string, recommendedProd
       return true;
     }
 
-    // Check if at least 50% of recommendations match the source product type
+    // Check if at least 70% of recommendations match the source product type
+    // This ensures better quality recommendations
     const matchingProducts = recommendedProducts.filter(p => {
       const recType = p.productType?.trim().toUpperCase() || '';
       return recType === sourceProductType;
@@ -246,7 +247,8 @@ async function validateRecommendations(shopifyProductId: string, recommendedProd
     const matchPercentage = (matchingProducts.length / recommendedProducts.length) * 100;
     console.log(`Recommendation relevance: ${matchPercentage.toFixed(0)}% match (${matchingProducts.length}/${recommendedProducts.length} products)`);
 
-    return matchPercentage >= 50; // At least 50% should match
+    // Require 70% match instead of 50% for better quality
+    return matchPercentage >= 70;
   } catch (error) {
     console.error('Error validating recommendations:', error);
     return true; // Assume valid on error
@@ -333,12 +335,16 @@ async function getSmartRecommendations(shopifyProductId: string, limit: number):
 
 /**
  * Find products by matching product type
+ * Adds randomization for variety in recommendations
  */
 async function findProductsByType(productType: string, excludeProductId: string, limit: number): Promise<any[]> {
   try {
+    // Fetch more products than needed to allow random selection
+    const fetchCount = Math.min(limit * 3, 50);
+
     const query = `
       query findByType($queryString: String!) {
-        products(first: ${limit + 5}, query: $queryString) {
+        products(first: ${fetchCount}, query: $queryString) {
           edges {
             node {
               id
@@ -358,12 +364,15 @@ async function findProductsByType(productType: string, excludeProductId: string,
     }
 
     const excludeGid = `gid://shopify/Product/${excludeProductId}`;
-    const handles = response.data.products.edges
+    const allHandles = response.data.products.edges
       .filter((edge: any) => edge.node.id !== excludeGid)
-      .map((edge: any) => edge.node.handle)
-      .slice(0, limit);
+      .map((edge: any) => edge.node.handle);
 
-    console.log(`Type matching - Found handles: [${handles.join(', ')}]`);
+    // Randomly shuffle for variety
+    const shuffled = allHandles.sort(() => Math.random() - 0.5);
+    const handles = shuffled.slice(0, limit);
+
+    console.log(`Type matching - Found ${allHandles.length} products, selected ${handles.length} randomly`);
     const products = await fetchProductsByHandles(handles, limit);
     console.log(`Type matching - Fetched ${products.length} products`);
     return products;
@@ -522,12 +531,16 @@ async function getCollectionBasedRecommendations(shopifyProductId: string, limit
 
 /**
  * Get random products as last resort fallback
+ * Fetches more products than needed and randomly selects to add variety
  */
 async function getRandomProducts(limit: number): Promise<any[]> {
   try {
+    // Fetch more products to allow for random selection
+    const fetchCount = Math.min(limit * 3, 50);
+
     const query = `
       query getRandomProducts {
-        products(first: ${limit}, sortKey: UPDATED_AT, reverse: true) {
+        products(first: ${fetchCount}, sortKey: UPDATED_AT, reverse: true) {
           edges {
             node {
               id
@@ -544,8 +557,13 @@ async function getRandomProducts(limit: number): Promise<any[]> {
       return [];
     }
 
-    const handles = response.data.products.edges.map((edge: any) => edge.node.handle);
-    return await fetchProductsByHandles(handles, limit);
+    const allHandles = response.data.products.edges.map((edge: any) => edge.node.handle);
+
+    // Randomly shuffle and select products for variety
+    const shuffled = allHandles.sort(() => Math.random() - 0.5);
+    const selectedHandles = shuffled.slice(0, limit);
+
+    return await fetchProductsByHandles(selectedHandles, limit);
   } catch (error) {
     console.error('Error fetching random products:', error);
     return [];
