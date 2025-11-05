@@ -8,6 +8,8 @@ import { ShopifySearchController } from './../controllers/shopifySearchControlle
 // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
 import { SearchController } from './../controllers/searchController';
 // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+import { RecommendationsController } from './../controllers/recommendationsTsoaController';
+// WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
 import { ProductDetailController } from './../controllers/productDetailController';
 // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
 import { PaymentMethodsController } from './../controllers/paymentMethodsController';
@@ -228,6 +230,18 @@ const models: TsoaRoute.Models = {
         "additionalProperties": false,
     },
     // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "RecommendationProductImage": {
+        "dataType": "refObject",
+        "properties": {
+            "url": {"dataType":"string","required":true},
+            "alt": {"dataType":"string","required":true},
+            "position": {"dataType":"double","required":true},
+            "width": {"dataType":"double"},
+            "height": {"dataType":"double"},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
     "ProductOption": {
         "dataType": "refObject",
         "properties": {
@@ -248,6 +262,54 @@ const models: TsoaRoute.Models = {
             "quantityAvailable": {"dataType":"double","required":true},
             "selectedOptions": {"dataType":"array","array":{"dataType":"refObject","ref":"ProductOption"},"required":true},
             "image": {"dataType":"string"},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "RecommendedProduct": {
+        "dataType": "refObject",
+        "properties": {
+            "_id": {"dataType":"string","required":true},
+            "shopifyProductId": {"dataType":"string"},
+            "title": {"dataType":"string","required":true},
+            "description": {"dataType":"string","required":true},
+            "handle": {"dataType":"string","required":true},
+            "vendor": {"dataType":"string","required":true},
+            "productType": {"dataType":"string","required":true},
+            "tags": {"dataType":"array","array":{"dataType":"string"},"required":true},
+            "status": {"dataType":"string","required":true},
+            "price": {"dataType":"double","required":true},
+            "compareAtPrice": {"dataType":"double"},
+            "images": {"dataType":"array","array":{"dataType":"refObject","ref":"RecommendationProductImage"},"required":true},
+            "variants": {"dataType":"array","array":{"dataType":"refObject","ref":"ProductVariant"},"required":true},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "ProductRecommendationsResponse": {
+        "dataType": "refObject",
+        "properties": {
+            "success": {"dataType":"boolean","required":true},
+            "error": {"dataType":"string"},
+            "data": {"dataType":"nestedObjectLiteral","nestedProperties":{"count":{"dataType":"double","required":true},"sourceProductId":{"dataType":"string","required":true},"basedOn":{"dataType":"enum","enums":["product"],"required":true},"recommendedProducts":{"dataType":"array","array":{"dataType":"refObject","ref":"RecommendedProduct"},"required":true}},"required":true},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "CartRecommendationsResponse": {
+        "dataType": "refObject",
+        "properties": {
+            "success": {"dataType":"boolean","required":true},
+            "error": {"dataType":"string"},
+            "data": {"dataType":"nestedObjectLiteral","nestedProperties":{"count":{"dataType":"double","required":true},"cartItemsCount":{"dataType":"double","required":true},"basedOn":{"dataType":"enum","enums":["cart"],"required":true},"recommendedProducts":{"dataType":"array","array":{"dataType":"refObject","ref":"RecommendedProduct"},"required":true}},"required":true},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "CartRecommendationsRequest": {
+        "dataType": "refObject",
+        "properties": {
+            "cartItems": {"dataType":"array","array":{"dataType":"string"},"required":true},
         },
         "additionalProperties": false,
     },
@@ -1838,6 +1900,68 @@ export function RegisterRoutes(app: Router) {
 
               await templateService.apiHandler({
                 methodName: 'logSearch',
+                controller,
+                response,
+                next,
+                validatedArgs,
+                successStatus: undefined,
+              });
+            } catch (err) {
+                return next(err);
+            }
+        });
+        // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+        const argsRecommendationsController_getProductRecommendations: Record<string, TsoaRoute.ParameterSchema> = {
+                shopifyProductId: {"in":"path","name":"shopifyProductId","required":true,"dataType":"string"},
+                limit: {"default":6,"in":"query","name":"limit","dataType":"double"},
+        };
+        app.get('/api/v1/recommendations/product/:shopifyProductId',
+            ...(fetchMiddlewares<RequestHandler>(RecommendationsController)),
+            ...(fetchMiddlewares<RequestHandler>(RecommendationsController.prototype.getProductRecommendations)),
+
+            async function RecommendationsController_getProductRecommendations(request: ExRequest, response: ExResponse, next: any) {
+
+            // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+
+            let validatedArgs: any[] = [];
+            try {
+                validatedArgs = templateService.getValidatedArgs({ args: argsRecommendationsController_getProductRecommendations, request, response });
+
+                const controller = new RecommendationsController();
+
+              await templateService.apiHandler({
+                methodName: 'getProductRecommendations',
+                controller,
+                response,
+                next,
+                validatedArgs,
+                successStatus: undefined,
+              });
+            } catch (err) {
+                return next(err);
+            }
+        });
+        // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+        const argsRecommendationsController_getCartRecommendations: Record<string, TsoaRoute.ParameterSchema> = {
+                requestBody: {"in":"body","name":"requestBody","required":true,"ref":"CartRecommendationsRequest"},
+                limit: {"default":6,"in":"query","name":"limit","dataType":"double"},
+        };
+        app.post('/api/v1/recommendations/cart',
+            ...(fetchMiddlewares<RequestHandler>(RecommendationsController)),
+            ...(fetchMiddlewares<RequestHandler>(RecommendationsController.prototype.getCartRecommendations)),
+
+            async function RecommendationsController_getCartRecommendations(request: ExRequest, response: ExResponse, next: any) {
+
+            // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+
+            let validatedArgs: any[] = [];
+            try {
+                validatedArgs = templateService.getValidatedArgs({ args: argsRecommendationsController_getCartRecommendations, request, response });
+
+                const controller = new RecommendationsController();
+
+              await templateService.apiHandler({
+                methodName: 'getCartRecommendations',
                 controller,
                 response,
                 next,
