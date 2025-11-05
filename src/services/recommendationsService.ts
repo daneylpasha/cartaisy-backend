@@ -295,48 +295,72 @@ async function getSmartRecommendations(shopifyProductId: string, limit: number):
     const tags = sourceProduct.tags || [];
     const vendor = sourceProduct.vendor || '';
 
-    console.log(`Smart recommendations for: Type="${productType}", Tags=[${tags.join(', ')}], Vendor="${vendor}"`);
+    console.log(`Smart recommendations for: Type="${productType}", Tags=[${tags.join(', ')}], Vendor="${vendor}", Collections=${sourceProduct.collections?.edges?.length || 0}`);
 
-    // Strategy 1: Match by product type (highest priority)
+    // Strategy 1: Match by product type (highest priority when available)
     if (productType) {
       const typeMatches = await findProductsByType(productType, shopifyProductId, limit);
       if (typeMatches.length >= Math.min(3, limit)) {
-        console.log(`Found ${typeMatches.length} products by type matching`);
+        console.log(`✅ Using type matching: found ${typeMatches.length} products`);
         return typeMatches;
       }
+      console.log(`⚠️ Type matching found only ${typeMatches.length} products, trying other strategies`);
     }
 
-    // Strategy 2: Match by tags (if type matching didn't work well)
+    // Strategy 2: Collection-based matching (most reliable for products without type)
+    if (sourceProduct.collections?.edges?.length > 0) {
+      const collectionId = sourceProduct.collections.edges[0].node.id;
+      const collectionHandle = sourceProduct.collections.edges[0].node.handle;
+      console.log(`Trying collection matching: ${collectionHandle}`);
+      const collectionMatches = await findProductsByCollection(collectionId, shopifyProductId, limit);
+      if (collectionMatches.length >= Math.min(3, limit)) {
+        console.log(`✅ Using collection matching: found ${collectionMatches.length} products`);
+        return collectionMatches;
+      }
+      console.log(`⚠️ Collection matching found only ${collectionMatches.length} products`);
+    }
+
+    // Strategy 3: Match by tags
     if (tags.length > 0) {
       const tagMatches = await findProductsByTags(tags, shopifyProductId, limit);
       if (tagMatches.length >= Math.min(3, limit)) {
-        console.log(`Found ${tagMatches.length} products by tag matching`);
+        console.log(`✅ Using tag matching: found ${tagMatches.length} products`);
         return tagMatches;
       }
+      console.log(`⚠️ Tag matching found only ${tagMatches.length} products`);
     }
 
-    // Strategy 3: Match by vendor (useful when type and tags are empty)
-    if (vendor) {
-      const vendorMatches = await findProductsByVendor(vendor, shopifyProductId, limit);
-      if (vendorMatches.length >= Math.min(3, limit)) {
-        console.log(`Found ${vendorMatches.length} products by vendor matching`);
-        return vendorMatches;
-      }
+    // If we reached here, return whatever we could find
+    // Try all strategies and return the best available results
+    console.log('⚠️ No strategy found enough products, returning best available');
+
+    // Collect all available products from different strategies
+    const allProducts: any[] = [];
+
+    if (productType) {
+      const typeMatches = await findProductsByType(productType, shopifyProductId, limit * 2);
+      allProducts.push(...typeMatches);
     }
 
-    // Strategy 4: Collection-based fallback
-    if (sourceProduct.collections?.edges?.length > 0) {
+    if (sourceProduct.collections?.edges?.length > 0 && allProducts.length < limit) {
       const collectionId = sourceProduct.collections.edges[0].node.id;
       const collectionMatches = await findProductsByCollection(collectionId, shopifyProductId, limit);
-      if (collectionMatches.length > 0) {
-        console.log(`Found ${collectionMatches.length} products from same collection`);
-        return collectionMatches;
-      }
+      allProducts.push(...collectionMatches);
     }
 
-    // Strategy 5: Random products as last resort
-    console.log('Using random products as last resort');
-    return await getRandomProducts(limit);
+    if (tags.length > 0 && allProducts.length < limit) {
+      const tagMatches = await findProductsByTags(tags, shopifyProductId, limit);
+      allProducts.push(...tagMatches);
+    }
+
+    // Remove duplicates based on shopifyProductId
+    const uniqueProducts = allProducts.filter((product, index, self) =>
+      index === self.findIndex((p) => p.shopifyProductId === product.shopifyProductId)
+    );
+
+    const finalProducts = uniqueProducts.slice(0, limit);
+    console.log(`Returning ${finalProducts.length} products from combined strategies`);
+    return finalProducts;
   } catch (error) {
     console.error('Error in smart recommendations:', error);
     return await getRandomProducts(limit);
