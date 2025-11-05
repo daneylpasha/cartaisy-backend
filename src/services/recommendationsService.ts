@@ -231,10 +231,11 @@ async function validateRecommendations(shopifyProductId: string, recommendedProd
 
     const sourceProductType = response.data.product.productType?.trim().toUpperCase() || '';
 
-    // If source has no product type, accept recommendations
+    // If source has no product type, reject Shopify recommendations and use smart fallback
+    // This ensures we don't get irrelevant products (like shoes for water bottles)
     if (!sourceProductType) {
-      console.log('Source product has no type, accepting Shopify recommendations');
-      return true;
+      console.log('Source product has no type, rejecting Shopify recommendations to use smart fallback');
+      return false;
     }
 
     // Check if at least 70% of recommendations match the source product type
@@ -314,7 +315,16 @@ async function getSmartRecommendations(shopifyProductId: string, limit: number):
       }
     }
 
-    // Strategy 3: Collection-based fallback
+    // Strategy 3: Match by vendor (useful when type and tags are empty)
+    if (vendor) {
+      const vendorMatches = await findProductsByVendor(vendor, shopifyProductId, limit);
+      if (vendorMatches.length >= Math.min(3, limit)) {
+        console.log(`Found ${vendorMatches.length} products by vendor matching`);
+        return vendorMatches;
+      }
+    }
+
+    // Strategy 4: Collection-based fallback
     if (sourceProduct.collections?.edges?.length > 0) {
       const collectionId = sourceProduct.collections.edges[0].node.id;
       const collectionMatches = await findProductsByCollection(collectionId, shopifyProductId, limit);
@@ -324,7 +334,7 @@ async function getSmartRecommendations(shopifyProductId: string, limit: number):
       }
     }
 
-    // Strategy 4: Random products as last resort
+    // Strategy 5: Random products as last resort
     console.log('Using random products as last resort');
     return await getRandomProducts(limit);
   } catch (error) {
@@ -378,6 +388,55 @@ async function findProductsByType(productType: string, excludeProductId: string,
     return products;
   } catch (error) {
     console.error('Error finding products by type:', error);
+    return [];
+  }
+}
+
+/**
+ * Find products by matching vendor
+ * Useful when product type and tags are not available
+ */
+async function findProductsByVendor(vendor: string, excludeProductId: string, limit: number): Promise<any[]> {
+  try {
+    // Fetch more products than needed to allow random selection
+    const fetchCount = Math.min(limit * 3, 50);
+
+    const query = `
+      query findByVendor($queryString: String!) {
+        products(first: ${fetchCount}, query: $queryString) {
+          edges {
+            node {
+              id
+              handle
+            }
+          }
+        }
+      }
+    `;
+
+    const queryString = `vendor:"${vendor}"`;
+    const response: any = await shopifyStorefront['query'](query, { queryString });
+
+    if (!response.data?.products?.edges) {
+      console.log(`No products found for vendor: ${vendor}`);
+      return [];
+    }
+
+    const excludeGid = `gid://shopify/Product/${excludeProductId}`;
+    const allHandles = response.data.products.edges
+      .filter((edge: any) => edge.node.id !== excludeGid)
+      .map((edge: any) => edge.node.handle);
+
+    // Randomly shuffle for variety
+    const shuffled = allHandles.sort(() => Math.random() - 0.5);
+    const handles = shuffled.slice(0, limit);
+
+    console.log(`Vendor matching - Found ${allHandles.length} products, selected ${handles.length} randomly`);
+    const products = await fetchProductsByHandles(handles, limit);
+    console.log(`Vendor matching - Fetched ${products.length} products`);
+    return products;
+  } catch (error) {
+    console.error('Error finding products by vendor:', error);
     return [];
   }
 }
