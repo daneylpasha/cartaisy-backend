@@ -231,11 +231,11 @@ async function validateRecommendations(shopifyProductId: string, recommendedProd
 
     const sourceProductType = response.data.product.productType?.trim().toUpperCase() || '';
 
-    // If source has no product type, reject Shopify recommendations and use smart fallback
-    // This ensures we don't get irrelevant products (like shoes for water bottles)
+    // If source has no product type, accept Shopify's recommendations
+    // Shopify's algorithm uses other signals (collections, tags, etc.) which are often good
     if (!sourceProductType) {
-      console.log('Source product has no type, rejecting Shopify recommendations to use smart fallback');
-      return false;
+      console.log('Source product has no type, accepting Shopify recommendations (trust algorithm)');
+      return true;
     }
 
     // Check if at least 70% of recommendations match the source product type
