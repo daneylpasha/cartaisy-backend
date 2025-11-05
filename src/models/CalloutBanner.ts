@@ -13,7 +13,7 @@ export interface ICalloutBanner extends Document {
   subTitle: string;
   buttonText: string;
   action: ICalloutAction;
-  collectionId?: string; // Collection ID for linking banners to collections
+  collectionId?: number; // Collection ID for linking banners to collections
   position: number;
   isActive: boolean;
   backgroundColor?: string;
@@ -68,8 +68,7 @@ const CalloutBannerSchema: Schema = new Schema(
       required: true
     },
     collectionId: {
-      type: String,
-      trim: true,
+      type: Number,
       default: null
     },
     position: {
