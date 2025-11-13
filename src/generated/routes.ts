@@ -983,6 +983,7 @@ const models: TsoaRoute.Models = {
             "compareAtPrice": {"dataType":"union","subSchemas":[{"dataType":"double"},{"dataType":"enum","enums":[null]}],"required":true},
             "quantity": {"dataType":"double","required":true},
             "quantityAvailable": {"dataType":"double","required":true},
+            "metafields": {"dataType":"array","array":{"dataType":"refObject","ref":"ProductMetafield"},"required":true},
         },
         "additionalProperties": false,
     },

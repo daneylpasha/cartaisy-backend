@@ -3398,6 +3398,12 @@
 					"quantityAvailable": {
 						"type": "number",
 						"format": "double"
+					},
+					"metafields": {
+						"items": {
+							"$ref": "#/components/schemas/ProductMetafield"
+						},
+						"type": "array"
 					}
 				},
 				"required": [
@@ -3410,7 +3416,8 @@
 					"price",
 					"compareAtPrice",
 					"quantity",
-					"quantityAvailable"
+					"quantityAvailable",
+					"metafields"
 				],
 				"type": "object",
 				"additionalProperties": false

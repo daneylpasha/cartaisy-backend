@@ -1,3 +1,5 @@
+import { ProductMetafield } from './productDetail';
+
 /**
  * Cart item input for adding to cart
  */
@@ -20,6 +22,7 @@ export interface CartLineItem {
   compareAtPrice: number | null;
   quantity: number;
   quantityAvailable: number;
+  metafields: ProductMetafield[];
 }
 
 /**

@@ -49,7 +49,7 @@ export class CartController extends Controller {
         throw new Error('Failed to create cart');
       }
 
-      const cartData = this.transformCart(cart);
+      const cartData = await this.transformCart(cart);
 
       return {
         success: true,
@@ -90,7 +90,7 @@ export class CartController extends Controller {
       }
 
       const cart = shopifyResponse.data.cart;
-      const cartData = this.transformCart(cart);
+      const cartData = await this.transformCart(cart);
 
       return {
         success: true,
@@ -146,7 +146,7 @@ export class CartController extends Controller {
         throw new Error('Failed to add items to cart');
       }
 
-      const cartData = this.transformCart(cart);
+      const cartData = await this.transformCart(cart);
 
       return {
         success: true,
@@ -207,7 +207,7 @@ export class CartController extends Controller {
         throw new Error('Failed to update item quantity');
       }
 
-      const cartData = this.transformCart(cart);
+      const cartData = await this.transformCart(cart);
 
       return {
         success: true,
@@ -260,7 +260,7 @@ export class CartController extends Controller {
         throw new Error('Failed to remove item from cart');
       }
 
-      const cartData = this.transformCart(cart);
+      const cartData = await this.transformCart(cart);
 
       return {
         success: true,
@@ -386,7 +386,7 @@ export class CartController extends Controller {
         throw new Error('Failed to associate cart with customer');
       }
 
-      const cartData = this.transformCart(cart);
+      const cartData = await this.transformCart(cart);
 
       return {
         success: true,
@@ -406,15 +406,46 @@ export class CartController extends Controller {
   /**
    * Transform Shopify cart response to API format
    */
-  private transformCart(cart: any): CartData {
+  private async transformCart(cart: any): Promise<CartData> {
+    // Extract unique product IDs from cart items
+    const productIds = [...new Set(
+      (cart.lines?.edges || [])
+        .map((edge: any) => edge.node.merchandise?.product?.id)
+        .filter((id: string) => id)
+    )];
+
+    // Fetch metafields for all products in parallel
+    const metafieldsMap = new Map<string, any[]>();
+
+    if (shopifyStorefront.isAdminConfigured() && productIds.length > 0) {
+      const metafieldsPromises = productIds.map(async (productId: string) => {
+        try {
+          const response = await shopifyStorefront.getProductMetafields(productId);
+          const metafields = this.transformMetafields(
+            response?.data?.product?.metafields?.edges || []
+          );
+          return { productId, metafields };
+        } catch (error) {
+          console.error(`Failed to fetch metafields for product ${productId}:`, error);
+          return { productId, metafields: [] };
+        }
+      });
+
+      const results = await Promise.all(metafieldsPromises);
+      results.forEach(({ productId, metafields }) => {
+        metafieldsMap.set(productId, metafields);
+      });
+    }
+
     const items: CartLineItem[] = (cart.lines?.edges || []).map((edge: any) => {
       const node = edge.node;
       const merchandise = node.merchandise;
+      const productId = merchandise.product?.id || '';
 
       return {
         id: node.id,
         merchandiseId: merchandise.id,
-        productId: merchandise.product?.id || '',
+        productId,
         title: merchandise.product?.title || '',
         variantTitle: merchandise.title || '',
         image: merchandise.image?.url || null,
@@ -424,6 +455,7 @@ export class CartController extends Controller {
           : null,
         quantity: node.quantity || 0,
         quantityAvailable: merchandise.quantityAvailable || 0,
+        metafields: metafieldsMap.get(productId) || [],
       };
     });
 
@@ -438,5 +470,43 @@ export class CartController extends Controller {
       subtotal,
       currency,
     };
+  }
+
+  /**
+   * Transform Shopify metafields to API format
+   * Same logic as ProductDetailController
+   */
+  private transformMetafields(metafieldEdges: any[]): any[] {
+    return metafieldEdges
+      .map((edge) => edge.node)
+      .filter((metafield) => metafield.namespace === 'custom' || metafield.namespace === 'shopify')
+      .map((metafield) => {
+        const isMetaobjectReference = metafield.type?.includes('metaobject_reference');
+
+        let displayKey = metafield.key;
+        let displayValue = metafield.value;
+
+        if (isMetaobjectReference && metafield.resolvedMetaobjects && metafield.resolvedMetaobjects.length > 0) {
+          displayKey = metafield.key
+            .split('-')
+            .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ');
+
+          const displayNames = metafield.resolvedMetaobjects
+            .map((mo: any) => mo.displayName)
+            .filter((name: string) => name)
+            .join(', ');
+
+          displayValue = displayNames || metafield.value;
+        }
+
+        return {
+          namespace: metafield.namespace,
+          key: displayKey,
+          value: displayValue,
+          type: metafield.type,
+          description: metafield.description,
+        };
+      });
   }
 }
