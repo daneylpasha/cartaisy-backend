@@ -25,9 +25,7 @@ export class CartController extends Controller {
   @Post('create')
   @Response(400, 'Bad Request')
   @Response(500, 'Internal Server Error')
-  public async createCart(
-    @Body() requestBody?: CartCreateRequest
-  ): Promise<CartResponse> {
+  public async createCart(@Body() requestBody?: CartCreateRequest): Promise<CartResponse> {
     try {
       if (!shopifyStorefront.isConfigured()) {
         this.setStatus(500);
@@ -56,7 +54,10 @@ export class CartController extends Controller {
         data: cartData,
       };
     } catch (error) {
-      console.error('Error creating cart:', error instanceof Error ? error.message : 'Unknown error');
+      console.error(
+        'Error creating cart:',
+        error instanceof Error ? error.message : 'Unknown error'
+      );
 
       if (error instanceof Error && error.message.includes('not configured')) {
         this.setStatus(500);
@@ -97,7 +98,10 @@ export class CartController extends Controller {
         data: cartData,
       };
     } catch (error) {
-      console.error('Error fetching cart:', error instanceof Error ? error.message : 'Unknown error');
+      console.error(
+        'Error fetching cart:',
+        error instanceof Error ? error.message : 'Unknown error'
+      );
 
       if (error instanceof Error && error.message === 'Cart not found') {
         this.setStatus(404);
@@ -153,7 +157,10 @@ export class CartController extends Controller {
         data: cartData,
       };
     } catch (error) {
-      console.error('Error adding items to cart:', error instanceof Error ? error.message : 'Unknown error');
+      console.error(
+        'Error adding items to cart:',
+        error instanceof Error ? error.message : 'Unknown error'
+      );
 
       if (!this.getStatus || this.getStatus() === 200) {
         this.setStatus(500);
@@ -214,7 +221,10 @@ export class CartController extends Controller {
         data: cartData,
       };
     } catch (error) {
-      console.error('Error updating item quantity:', error instanceof Error ? error.message : 'Unknown error');
+      console.error(
+        'Error updating item quantity:',
+        error instanceof Error ? error.message : 'Unknown error'
+      );
 
       if (!this.getStatus || this.getStatus() === 200) {
         this.setStatus(500);
@@ -267,7 +277,10 @@ export class CartController extends Controller {
         data: cartData,
       };
     } catch (error) {
-      console.error('Error removing item from cart:', error instanceof Error ? error.message : 'Unknown error');
+      console.error(
+        'Error removing item from cart:',
+        error instanceof Error ? error.message : 'Unknown error'
+      );
 
       if (!this.getStatus || this.getStatus() === 200) {
         this.setStatus(500);
@@ -291,7 +304,8 @@ export class CartController extends Controller {
         throw new Error('Shopify not configured');
       }
 
-      // First, get the cart to retrieve all line item IDs
+      // First, get the cart to retrieve all line item
+      //  IDs
       const cartResponse = await shopifyStorefront.getCart(cartId);
 
       if (!cartResponse?.data?.cart) {
@@ -323,7 +337,10 @@ export class CartController extends Controller {
         message: 'Cart cleared successfully',
       };
     } catch (error) {
-      console.error('Error clearing cart:', error instanceof Error ? error.message : 'Unknown error');
+      console.error(
+        'Error clearing cart:',
+        error instanceof Error ? error.message : 'Unknown error'
+      );
 
       if (error instanceof Error && error.message === 'Cart not found') {
         this.setStatus(404);
@@ -362,7 +379,9 @@ export class CartController extends Controller {
 
       if (!customerAccessToken) {
         this.setStatus(400);
-        throw new Error('Customer access token not found. User needs to authenticate with Shopify.');
+        throw new Error(
+          'Customer access token not found. User needs to authenticate with Shopify.'
+        );
       }
 
       const shopifyResponse = await shopifyStorefront.associateCartWithCustomer(
@@ -393,7 +412,10 @@ export class CartController extends Controller {
         data: cartData,
       };
     } catch (error) {
-      console.error('Error associating cart with customer:', error instanceof Error ? error.message : 'Unknown error');
+      console.error(
+        'Error associating cart with customer:',
+        error instanceof Error ? error.message : 'Unknown error'
+      );
 
       if (!this.getStatus || this.getStatus() === 200) {
         this.setStatus(500);
@@ -408,11 +430,13 @@ export class CartController extends Controller {
    */
   private async transformCart(cart: any): Promise<CartData> {
     // Extract unique product IDs from cart items
-    const productIds = [...new Set(
-      (cart.lines?.edges || [])
-        .map((edge: any) => edge.node.merchandise?.product?.id)
-        .filter((id: string) => id)
-    )];
+    const productIds = [
+      ...new Set(
+        (cart.lines?.edges || [])
+          .map((edge: any) => edge.node.merchandise?.product?.id)
+          .filter((id: string) => id)
+      ),
+    ];
 
     // Fetch metafields for all products in parallel
     const metafieldsMap = new Map<string, any[]>();
@@ -478,15 +502,19 @@ export class CartController extends Controller {
    */
   private transformMetafields(metafieldEdges: any[]): any[] {
     return metafieldEdges
-      .map((edge) => edge.node)
-      .filter((metafield) => metafield.namespace === 'custom' || metafield.namespace === 'shopify')
-      .map((metafield) => {
+      .map(edge => edge.node)
+      .filter(metafield => metafield.namespace === 'custom' || metafield.namespace === 'shopify')
+      .map(metafield => {
         const isMetaobjectReference = metafield.type?.includes('metaobject_reference');
 
         let displayKey = metafield.key;
         let displayValue = metafield.value;
 
-        if (isMetaobjectReference && metafield.resolvedMetaobjects && metafield.resolvedMetaobjects.length > 0) {
+        if (
+          isMetaobjectReference &&
+          metafield.resolvedMetaobjects &&
+          metafield.resolvedMetaobjects.length > 0
+        ) {
           displayKey = metafield.key
             .split('-')
             .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))

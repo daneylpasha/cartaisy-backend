@@ -3050,6 +3050,48 @@
 				"type": "object",
 				"additionalProperties": false
 			},
+			"RemovePromoResponse": {
+				"description": "Response for promo code removal",
+				"properties": {
+					"success": {
+						"type": "boolean"
+					},
+					"data": {
+						"properties": {
+							"pricing": {
+								"$ref": "#/components/schemas/PricingBreakdown"
+							}
+						},
+						"required": [
+							"pricing"
+						],
+						"type": "object"
+					},
+					"message": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"success",
+					"data",
+					"message"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"RemovePromoRequest": {
+				"description": "Request to remove promo code",
+				"properties": {
+					"sessionId": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"sessionId"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
 			"CheckoutSummaryResponse": {
 				"description": "Response for checkout summary",
 				"properties": {
@@ -6313,6 +6355,57 @@
 							"schema": {
 								"$ref": "#/components/schemas/ApplyPromoRequest",
 								"description": "- Promo code details"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/checkout/remove-promo": {
+			"delete": {
+				"operationId": "RemovePromoCode",
+				"responses": {
+					"200": {
+						"description": "Updated pricing without discount",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/RemovePromoResponse"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "Bad Request"
+					},
+					"401": {
+						"description": "Unauthorized"
+					},
+					"404": {
+						"description": "Session not found"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Remove promo code\n\nRemoves the applied promo code from the checkout session",
+				"tags": [
+					"Checkout"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [],
+				"requestBody": {
+					"description": "- Session ID",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/RemovePromoRequest",
+								"description": "- Session ID"
 							}
 						}
 					}

@@ -177,6 +177,24 @@ export interface ApplyPromoResponse {
 }
 
 /**
+ * Request to remove promo code
+ */
+export interface RemovePromoRequest {
+  sessionId: string;
+}
+
+/**
+ * Response for promo code removal
+ */
+export interface RemovePromoResponse {
+  success: boolean;
+  data: {
+    pricing: PricingBreakdown;
+  };
+  message: string;
+}
+
+/**
  * Response for checkout summary
  */
 export interface CheckoutSummaryResponse {

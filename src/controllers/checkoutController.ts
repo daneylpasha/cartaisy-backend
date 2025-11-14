@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Path, Post, Query, Request, Route, Security, Tags, Response } from 'tsoa';
+import { Body, Controller, Delete, Get, Path, Post, Query, Request, Route, Security, Tags, Response } from 'tsoa';
 import CheckoutSession, { ICheckoutSessionDocument } from '../models/CheckoutSession';
 import User from '../models/User';
 import Order from '../models/Order';
@@ -16,6 +16,8 @@ import {
   SaveStep2Response,
   ApplyPromoRequest,
   ApplyPromoResponse,
+  RemovePromoRequest,
+  RemovePromoResponse,
   CheckoutSummaryResponse,
   CompleteCheckoutRequest,
   CompleteCheckoutResponse,
@@ -764,6 +766,102 @@ export class CheckoutController extends Controller {
       };
     } catch (error) {
       console.error('Error applying promo code:', error);
+
+      if (!this.getStatus || this.getStatus() === 200) {
+        this.setStatus(500);
+      }
+
+      throw error;
+    }
+  }
+
+  /**
+   * Remove promo code
+   *
+   * Removes the applied promo code from the checkout session
+   *
+   * @param requestBody - Session ID
+   * @param request - Express request with authenticated user
+   * @returns Updated pricing without discount
+   */
+  @Delete('remove-promo')
+  @Security('jwt')
+  @Response(400, 'Bad Request')
+  @Response(401, 'Unauthorized')
+  @Response(404, 'Session not found')
+  @Response(500, 'Internal Server Error')
+  public async removePromoCode(
+    @Body() requestBody: RemovePromoRequest,
+    @Request() request: any
+  ): Promise<RemovePromoResponse> {
+    try {
+      const userId = request.user._id;
+      const { sessionId } = requestBody;
+
+      if (!sessionId) {
+        this.setStatus(400);
+        throw new Error('Session ID is required');
+      }
+
+      // Find session
+      const session = await CheckoutSession.findById(sessionId) as ICheckoutSessionDocument | null;
+      if (!session) {
+        this.setStatus(404);
+        throw new Error('Checkout session not found');
+      }
+
+      // Verify ownership
+      if (!session.belongsToUser(userId)) {
+        this.setStatus(403);
+        throw new Error('Unauthorized access to checkout session');
+      }
+
+      // Remove discount codes from Shopify cart
+      const shopifyResponse = await shopifyStorefront.applyDiscountCodes(session.shopifyCartId, []);
+
+      if (shopifyResponse?.data?.cartDiscountCodesUpdate?.userErrors?.length > 0) {
+        const error = shopifyResponse.data.cartDiscountCodesUpdate.userErrors[0];
+        console.error('Error removing discount codes from Shopify:', error);
+        // Continue anyway to remove from session
+      }
+
+      // Get fresh cart data to return current pricing
+      const cartResponse = await shopifyStorefront.getCart(session.shopifyCartId);
+      const cart = cartResponse?.data?.cart;
+
+      const currentSubtotal = parseFloat(cart?.estimatedCost?.subtotalAmount?.amount || session.subtotal);
+      const currentTax = parseFloat(cart?.estimatedCost?.totalTaxAmount?.amount || session.tax);
+      const shippingCost = session.shippingCost || 0;
+
+      // Clear promo code and discount from session
+      session.promoCode = undefined;
+      session.discount = undefined;
+      session.updatePricing({
+        subtotal: currentSubtotal,
+        discountAmount: 0,
+        tax: currentTax,
+        shippingCost: shippingCost
+      });
+
+      await session.save();
+
+      return {
+        success: true,
+        data: {
+          pricing: {
+            subtotal: session.subtotal,
+            shippingCost: session.shippingCost,
+            discountAmount: 0,
+            couponDiscount: 0,
+            tax: session.tax,
+            grandTotal: session.grandTotal,
+            currency: cart?.estimatedCost?.subtotalAmount?.currencyCode || session.currency,
+          },
+        },
+        message: 'Promo code removed successfully',
+      };
+    } catch (error) {
+      console.error('Error removing promo code:', error);
 
       if (!this.getStatus || this.getStatus() === 200) {
         this.setStatus(500);
