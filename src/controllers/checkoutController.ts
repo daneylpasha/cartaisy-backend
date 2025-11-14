@@ -1407,12 +1407,16 @@ export class CheckoutController extends Controller {
         };
       }));
 
-      const orderNumber = `ORD-${Date.now()}-${userId.toString().slice(-6).toUpperCase()}`;
+      // Generate unique order number with timestamp + random component
+      const timestamp = Date.now();
+      const randomComponent = Math.random().toString(36).substring(2, 8).toUpperCase();
+      const orderNumber = `ORD-${timestamp}-${randomComponent}`;
+      const confirmationNumber = `CONF-${timestamp}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
 
       const order = new Order({
         user: userId,
         orderNumber,
-        confirmationNumber: `CONF-${Date.now()}`,
+        confirmationNumber,
         email: user.email,
         phone: session.contactNumber,
         lineItems,
