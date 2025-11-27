@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
 
-// Load environment variables
-dotenv.config();
+// Load environment variables - override existing env vars with .env file values
+dotenv.config({ override: true });
 
 /**
  * Converts string environment variable to boolean

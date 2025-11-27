@@ -1,17 +1,26 @@
 import { Router } from 'express';
 import { carouselController } from '../controllers/carouselController';
-import { authenticateAdmin } from '../middleware/auth';
+import { requireStoreAdmin } from '../middleware/auth';
 
 const router = Router();
 
-router.get('/carousel', carouselController.getCarouselItems);
+// Public route to get carousel items
+router.get('/carousel', carouselController.getCarouselItems as any);
 
-router.post('/admin/carousel', authenticateAdmin, carouselController.createCarouselItems);
+// Admin routes for carousel management
+// Create single carousel item
+router.post('/admin/carousel/item', requireStoreAdmin as any, carouselController.createCarouselItem as any);
 
-router.put('/admin/carousel', authenticateAdmin, carouselController.updateCarouselItems);
+// Create multiple carousel items (bulk)
+router.post('/admin/carousel', requireStoreAdmin as any, carouselController.createCarouselItems as any);
 
-router.delete('/admin/carousel/:id', authenticateAdmin, carouselController.deleteCarouselItem);
+// Update all carousel items (replace all)
+router.put('/admin/carousel', requireStoreAdmin as any, carouselController.updateCarouselItems as any);
 
-router.patch('/admin/carousel/:id/status', authenticateAdmin, carouselController.updateCarouselItemStatus);
+// Delete a single carousel item
+router.delete('/admin/carousel/:id', requireStoreAdmin as any, carouselController.deleteCarouselItem as any);
+
+// Update carousel item status (isActive)
+router.patch('/admin/carousel/:id/status', requireStoreAdmin as any, carouselController.updateCarouselItemStatus as any);
 
 export default router;

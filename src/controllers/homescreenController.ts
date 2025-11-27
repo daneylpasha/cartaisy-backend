@@ -1,5 +1,3 @@
-import { Get, Route, Tags, Response } from 'tsoa';
-import { Controller } from '@tsoa/runtime';
 import CarouselItem from '../models/CarouselItem';
 import CategoryGrid from '../models/CategoryGrid';
 import CalloutBanner from '../models/CalloutBanner';
@@ -18,21 +16,43 @@ import {
   CollectionDisplay as CollectionDisplayType,
 } from '../types/api/homescreen';
 import { Collection } from '../types/api/products';
+import { getStoreIdFromRequest } from '../middleware/storeAuth';
+import { AuthenticatedRequest } from '../types';
 
 /**
  * Homescreen Controller
  * Provides all data needed for the mobile app homescreen
  */
-@Route('customer')
-@Tags('Homescreen')
-export class HomescreenController extends Controller {
+export class HomescreenController {
   /**
    * Get complete homescreen data
    * Returns all components needed to render the mobile app home screen
    */
-  @Get('homescreen')
-  @Response(500, 'Internal Server Error')
-  public async getHomescreenData(): Promise<HomescreenResponse> {
+  public async getHomescreenData(storeId: string): Promise<HomescreenResponse> {
+    if (!storeId) {
+      return {
+        success: false,
+        data: {
+          carousel: [],
+          categoryGrid: [],
+          calloutBanners: [],
+          promoBanners: [],
+          collectionDisplays: [],
+          categoryCollectionGrid: [],
+          collectionShowcases: [],
+          metadata: {
+            carouselItemsCount: 0,
+            categoryGridItemsCount: 0,
+            calloutBannersCount: 0,
+            promoBannersCount: 0,
+            collectionDisplaysCount: 0,
+            categoryCollectionGridCount: 0,
+            collectionShowcasesCount: 0,
+            lastUpdated: new Date().toISOString(),
+          },
+        },
+      };
+    }
     try {
       // Fetch MongoDB data in parallel
       const [
@@ -44,13 +64,13 @@ export class HomescreenController extends Controller {
         categoryCollectionGrid,
         collectionShowcases,
       ] = await Promise.all([
-        this.getCarouselData(),
-        this.getCategoryGrid(),
-        this.getCalloutBanners(),
-        this.getPromoBanners(),
-        this.getCollectionDisplaysRaw(),
-        this.getCategoryCollectionGrid(),
-        this.getCollectionShowcases(),
+        this.getCarouselData(storeId),
+        this.getCategoryGrid(storeId),
+        this.getCalloutBanners(storeId),
+        this.getPromoBanners(storeId),
+        this.getCollectionDisplaysRaw(storeId),
+        this.getCategoryCollectionGrid(storeId),
+        this.getCollectionShowcases(storeId),
       ]);
 
       // Fetch Shopify collections for collectionDisplays
@@ -82,7 +102,6 @@ export class HomescreenController extends Controller {
       };
     } catch (error) {
       console.error('Error fetching homescreen data:', error instanceof Error ? error.message : 'Unknown error');
-      this.setStatus(500);
       return {
         success: false,
         data: {
@@ -111,8 +130,8 @@ export class HomescreenController extends Controller {
   /**
    * Get carousel data
    */
-  private async getCarouselData() {
-    const items = await CarouselItem.find({ isActive: true })
+  private async getCarouselData(storeId: string) {
+    const items = await CarouselItem.find({ storeId, isActive: true })
       .sort({ position: 1 })
       .select('imageUrl label title subtitle ctaText collectionId endsAt promoTag isActive')
       .lean();
@@ -133,8 +152,8 @@ export class HomescreenController extends Controller {
   /**
    * Get category grid
    */
-  private async getCategoryGrid() {
-    return CategoryGrid.find({ isActive: true })
+  private async getCategoryGrid(storeId: string) {
+    return CategoryGrid.find({ storeId, isActive: true })
       .sort({ position: 1 })
       .select('imageUrl title collectionId')
       .lean();
@@ -143,8 +162,8 @@ export class HomescreenController extends Controller {
   /**
    * Get callout banners
    */
-  private async getCalloutBanners() {
-    return CalloutBanner.find({ isActive: true })
+  private async getCalloutBanners(storeId: string) {
+    return CalloutBanner.find({ storeId, isActive: true })
       .sort({ position: 1 })
       .select('imageUrl title subTitle buttonText action backgroundColor textColor buttonColor')
       .lean();
@@ -153,8 +172,8 @@ export class HomescreenController extends Controller {
   /**
    * Get promo banners
    */
-  private async getPromoBanners() {
-    return PromoBanner.find({ isActive: true })
+  private async getPromoBanners(storeId: string) {
+    return PromoBanner.find({ storeId, isActive: true })
       .sort({ position: 1 })
       .select('image title subtitle ctaText collectionId backgroundColor textColor buttonColor')
       .lean();
@@ -163,8 +182,8 @@ export class HomescreenController extends Controller {
   /**
    * Get raw collection displays (without Shopify data)
    */
-  private async getCollectionDisplaysRaw() {
-    return CollectionDisplay.find({ isActive: true })
+  private async getCollectionDisplaysRaw(storeId: string) {
+    return CollectionDisplay.find({ storeId, isActive: true })
       .sort({ order: 1 })
       .select('type collectionId order title')
       .lean();
@@ -173,8 +192,8 @@ export class HomescreenController extends Controller {
   /**
    * Get category collection grid
    */
-  private async getCategoryCollectionGrid() {
-    return CategoryCollectionGrid.find({ isActive: true })
+  private async getCategoryCollectionGrid(storeId: string) {
+    return CategoryCollectionGrid.find({ storeId, isActive: true })
       .sort({ position: 1 })
       .select('title subtitle collections')
       .lean();
@@ -183,8 +202,8 @@ export class HomescreenController extends Controller {
   /**
    * Get collection showcases
    */
-  private async getCollectionShowcases() {
-    return CollectionShowcase.find({ isActive: true })
+  private async getCollectionShowcases(storeId: string) {
+    return CollectionShowcase.find({ storeId, isActive: true })
       .sort({ position: 1 })
       .select('type title icon collections')
       .lean();
@@ -243,11 +262,28 @@ export class HomescreenController extends Controller {
   }
 }
 
-// Export instance for non-tsoa routes (backward compatibility)
+// Export instance for express routes
 export const homescreenController = {
   getHomescreenData: async (req: any, res: any) => {
-    const controller = new HomescreenController();
-    const result = await controller.getHomescreenData();
-    res.status(result.success ? 200 : 500).json(result);
+    try {
+      // Extract storeId from request context
+      const storeId = getStoreIdFromRequest(req as AuthenticatedRequest);
+
+      if (!storeId) {
+        return res.status(400).json({
+          success: false,
+          error: 'Store context required'
+        });
+      }
+
+      const controller = new HomescreenController();
+      const result = await controller.getHomescreenData(storeId);
+      res.status(result.success ? 200 : 500).json(result);
+    } catch (error: any) {
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Failed to fetch homescreen data'
+      });
+    }
   },
 };

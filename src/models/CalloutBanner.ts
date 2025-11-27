@@ -8,6 +8,7 @@ interface ICalloutAction {
 }
 
 export interface ICalloutBanner extends Document {
+  storeId: string;
   imageUrl: string;
   title: string;
   subTitle: string;
@@ -43,6 +44,11 @@ const CalloutActionSchema: Schema = new Schema({
 
 const CalloutBannerSchema: Schema = new Schema(
   {
+    storeId: {
+      type: String,
+      required: true,
+      index: true
+    },
     imageUrl: {
       type: String,
       required: true,
@@ -98,8 +104,8 @@ const CalloutBannerSchema: Schema = new Schema(
   }
 );
 
-CalloutBannerSchema.index({ position: 1 });
-CalloutBannerSchema.index({ isActive: 1 });
-CalloutBannerSchema.index({ 'action.type': 1 });
+CalloutBannerSchema.index({ storeId: 1, position: 1 });
+CalloutBannerSchema.index({ storeId: 1, isActive: 1 });
+CalloutBannerSchema.index({ storeId: 1, 'action.type': 1 });
 
 export default mongoose.model<ICalloutBanner>('CalloutBanner', CalloutBannerSchema);

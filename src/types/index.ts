@@ -93,6 +93,7 @@ export interface IMarketing {
 
 export interface IUser extends Document {
   _id: ObjectId;
+  storeId: ObjectId;
   shopifyCustomerId?: string;
   stripeCustomerId?: string;
   name: string;
@@ -101,7 +102,10 @@ export interface IUser extends Document {
   phone?: string;
   isVerified: boolean;
   isActive: boolean;
-  role: 'customer' | 'admin' | 'moderator' | 'premium_customer';
+  role: 'super_admin' | 'admin' | 'customer' | 'moderator' | 'premium_customer';
+  invitedBy?: ObjectId;
+  inviteToken?: string;
+  inviteExpiresAt?: Date;
   addresses: IAddress[];
   preferences: IUserPreferences;
   profile: IUserProfile;
@@ -111,6 +115,43 @@ export interface IUser extends Document {
   passwordResetExpires?: Date;
   emailVerificationToken?: string;
   emailVerificationExpires?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// =============================================================================
+// STORE & MULTI-TENANCY TYPES
+// =============================================================================
+
+export interface IShopifyConnection {
+  shop: string;
+  accessToken: string;
+  scope: string;
+  isConnected: boolean;
+  connectedAt?: Date;
+  lastSyncAt?: Date;
+}
+
+export interface IStorePlan {
+  type: 'free' | 'starter' | 'pro' | 'enterprise';
+  maxMembers: number;
+  expiresAt?: Date;
+}
+
+export interface IStoreSettings {
+  timezone: string;
+  currency: string;
+  language?: string;
+}
+
+export interface IStore extends Document {
+  _id: ObjectId;
+  name: string;
+  slug: string;
+  shopify: IShopifyConnection;
+  plan: IStorePlan;
+  settings: IStoreSettings;
+  isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -843,8 +884,9 @@ export interface AuthenticatedRequest<
   user?: {
     _id: ObjectId;
     id: string; // Convenience getter for _id.toString()
+    storeId: ObjectId;
     email: string;
-    role: 'customer' | 'admin' | 'moderator' | 'premium_customer';
+    role: 'super_admin' | 'admin' | 'customer' | 'moderator' | 'premium_customer';
     name: string;
     isActive: boolean;
     isVerified: boolean;

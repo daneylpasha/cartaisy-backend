@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { verifyToken } from '../utils/jwt';
 import User, { IUser } from '../models/User';
 import { AuthenticatedRequest } from '../types';
+import { storeAuth, storeAdmin, superAdmin } from './storeAuth';
 
 type AuthRequest = AuthenticatedRequest;
 
@@ -67,6 +68,7 @@ export const authenticate = async (
     req.user = {
       _id: user._id,
       id: user._id.toString(),
+      storeId: user.storeId,
       email: user.email,
       role: user.role,
       name: user.name,
@@ -118,6 +120,7 @@ export const optionalAuthenticate = async (
         req.user = {
           _id: user._id,
           id: user._id.toString(),
+          storeId: user.storeId,
           email: user.email,
           role: user.role,
           name: user.name,
@@ -176,3 +179,8 @@ export const optionalAuth = optionalAuthenticate;
 export const requireAdmin = [authenticate, authorize('admin')];
 export const requireModerator = [authenticate, authorize('admin', 'moderator')];
 export const authenticateAdmin = requireAdmin;
+
+// Multi-tenancy middleware combinations
+export const requireStoreAuth = [authenticate, storeAuth];
+export const requireStoreAdmin = [authenticate, storeAuth, storeAdmin];
+export const requireSuperAdmin = [authenticate, storeAuth, superAdmin];

@@ -1,6 +1,7 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
 export interface IPromoBanner extends Document {
+  storeId: string;
   image: string;
   title: string;
   subtitle: string;
@@ -17,6 +18,11 @@ export interface IPromoBanner extends Document {
 
 const PromoBannerSchema: Schema = new Schema(
   {
+    storeId: {
+      type: String,
+      required: true,
+      index: true
+    },
     image: {
       type: String,
       required: true,
@@ -69,8 +75,8 @@ const PromoBannerSchema: Schema = new Schema(
   }
 );
 
-PromoBannerSchema.index({ position: 1 });
-PromoBannerSchema.index({ isActive: 1 });
-PromoBannerSchema.index({ collectionId: 1 });
+PromoBannerSchema.index({ storeId: 1, position: 1 });
+PromoBannerSchema.index({ storeId: 1, isActive: 1 });
+PromoBannerSchema.index({ storeId: 1, collectionId: 1 });
 
 export default mongoose.model<IPromoBanner>('PromoBanner', PromoBannerSchema);

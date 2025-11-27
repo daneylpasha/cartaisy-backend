@@ -1,10 +1,18 @@
-import { Request, Response } from 'express';
-import CategoryGrid, { ICategoryGrid } from '../models/CategoryGrid';
+import { Response } from 'express';
+import CategoryGrid from '../models/CategoryGrid';
+import { AuthenticatedRequest } from '../types';
 
 export const categoryGridController = {
-  async createCategoryGridItems(req: Request, res: Response) {
+  async createCategoryGridItems(req: AuthenticatedRequest, res: Response) {
     try {
-      const items: ICategoryGrid[] = req.body;
+      if (!req.storeId) {
+        return res.status(401).json({
+          success: false,
+          error: 'Store authentication required'
+        });
+      }
+
+      const items = req.body as any[];
 
       if (!Array.isArray(items) || items.length === 0) {
         return res.status(400).json({
@@ -13,7 +21,8 @@ export const categoryGridController = {
         });
       }
 
-      const validatedItems = items.map((item, index) => ({
+      const validatedItems = items.map((item: any, index: number) => ({
+        storeId: req.storeId,
         imageUrl: item.imageUrl,
         title: item.title,
         collectionId: item.collectionId,
@@ -21,7 +30,7 @@ export const categoryGridController = {
         isActive: item.isActive !== undefined ? item.isActive : true
       }));
 
-      await CategoryGrid.deleteMany({});
+      await CategoryGrid.deleteMany({ storeId: req.storeId });
 
       const createdItems = await CategoryGrid.insertMany(validatedItems);
 
@@ -38,9 +47,16 @@ export const categoryGridController = {
     }
   },
 
-  async updateCategoryGridItems(req: Request, res: Response) {
+  async updateCategoryGridItems(req: AuthenticatedRequest, res: Response) {
     try {
-      const items: ICategoryGrid[] = req.body;
+      if (!req.storeId) {
+        return res.status(401).json({
+          success: false,
+          error: 'Store authentication required'
+        });
+      }
+
+      const items = req.body as any[];
 
       if (!Array.isArray(items) || items.length === 0) {
         return res.status(400).json({
@@ -49,7 +65,8 @@ export const categoryGridController = {
         });
       }
 
-      const validatedItems = items.map((item, index) => ({
+      const validatedItems = items.map((item: any, index: number) => ({
+        storeId: req.storeId,
         imageUrl: item.imageUrl,
         title: item.title,
         collectionId: item.collectionId,
@@ -57,7 +74,7 @@ export const categoryGridController = {
         isActive: item.isActive !== undefined ? item.isActive : true
       }));
 
-      await CategoryGrid.deleteMany({});
+      await CategoryGrid.deleteMany({ storeId: req.storeId });
 
       const updatedItems = await CategoryGrid.insertMany(validatedItems);
 
@@ -74,11 +91,15 @@ export const categoryGridController = {
     }
   },
 
-  async getCategoryGridItems(req: Request, res: Response) {
+  async getCategoryGridItems(req: AuthenticatedRequest, res: Response) {
     try {
-      const { active } = req.query;
+      const queryParams = req.query as any;
+      const active = queryParams?.active as string | undefined;
 
       const query: any = {};
+      if (req.storeId) {
+        query.storeId = req.storeId;
+      }
       if (active !== undefined) {
         query.isActive = active === 'true';
       }
@@ -99,11 +120,21 @@ export const categoryGridController = {
     }
   },
 
-  async deleteCategoryGridItem(req: Request, res: Response) {
+  async deleteCategoryGridItem(req: AuthenticatedRequest, res: Response) {
     try {
-      const { id } = req.params;
+      if (!req.storeId) {
+        return res.status(401).json({
+          success: false,
+          error: 'Store authentication required'
+        });
+      }
 
-      const deletedItem = await CategoryGrid.findByIdAndDelete(id);
+      const id = (req.params as any)?.id as string;
+
+      const deletedItem = await CategoryGrid.findOneAndDelete({
+        _id: id,
+        storeId: req.storeId
+      });
 
       if (!deletedItem) {
         return res.status(404).json({
@@ -125,13 +156,20 @@ export const categoryGridController = {
     }
   },
 
-  async updateCategoryGridItemStatus(req: Request, res: Response) {
+  async updateCategoryGridItemStatus(req: AuthenticatedRequest, res: Response) {
     try {
-      const { id } = req.params;
-      const { isActive } = req.body;
+      if (!req.storeId) {
+        return res.status(401).json({
+          success: false,
+          error: 'Store authentication required'
+        });
+      }
 
-      const updatedItem = await CategoryGrid.findByIdAndUpdate(
-        id,
+      const id = (req.params as any)?.id as string;
+      const isActive = (req.body as any)?.isActive;
+
+      const updatedItem = await CategoryGrid.findOneAndUpdate(
+        { _id: id, storeId: req.storeId },
         { isActive },
         { new: true }
       );

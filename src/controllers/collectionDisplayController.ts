@@ -1,12 +1,18 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import CollectionDisplay from '../models/CollectionDisplay';
+import { AuthenticatedRequest } from '../types';
 
 export const collectionDisplayController = {
-  async getCollectionDisplays(req: Request, res: Response) {
+  async getCollectionDisplays(req: AuthenticatedRequest, res: Response) {
     try {
-      const collectionDisplays = await CollectionDisplay.find({ isActive: true })
+      const query: any = { isActive: true };
+      if (req.storeId) {
+        query.storeId = req.storeId;
+      }
+
+      const collectionDisplays = await CollectionDisplay.find(query)
         .sort({ order: 1 })
-        .select('type collectionId order title')
+        .select('type collectionId order title storeId')
         .lean();
 
       res.status(200).json({
@@ -22,11 +28,19 @@ export const collectionDisplayController = {
     }
   },
 
-  async createCollectionDisplays(req: Request, res: Response) {
+  async createCollectionDisplays(req: AuthenticatedRequest, res: Response) {
     try {
-      const { collectionDisplays } = req.body;
+      if (!req.storeId) {
+        return res.status(401).json({
+          success: false,
+          error: 'Store authentication required'
+        });
+      }
 
-      if (!Array.isArray(collectionDisplays) || collectionDisplays.length === 0) {
+      const requestBody = req.body as any;
+      const displays = requestBody?.collectionDisplays as any[] || [];
+
+      if (!Array.isArray(displays) || displays.length === 0) {
         return res.status(400).json({
           success: false,
           error: 'collectionDisplays array is required and must not be empty'
@@ -34,7 +48,7 @@ export const collectionDisplayController = {
       }
 
       const validTypes = ['large_row', 'small_grid', 'medium_row'];
-      for (const display of collectionDisplays) {
+      for (const display of displays) {
         if (!validTypes.includes(display.type)) {
           return res.status(400).json({
             success: false,
@@ -49,7 +63,12 @@ export const collectionDisplayController = {
         }
       }
 
-      const createdDisplays = await CollectionDisplay.insertMany(collectionDisplays);
+      const validatedDisplays = displays.map((display: any) => ({
+        storeId: req.storeId,
+        ...display
+      }));
+
+      const createdDisplays = await CollectionDisplay.insertMany(validatedDisplays);
 
       res.status(201).json({
         success: true,
@@ -65,19 +84,32 @@ export const collectionDisplayController = {
     }
   },
 
-  async updateCollectionDisplays(req: Request, res: Response) {
+  async updateCollectionDisplays(req: AuthenticatedRequest, res: Response) {
     try {
-      const { collectionDisplays } = req.body;
+      if (!req.storeId) {
+        return res.status(401).json({
+          success: false,
+          error: 'Store authentication required'
+        });
+      }
 
-      if (!Array.isArray(collectionDisplays) || collectionDisplays.length === 0) {
+      const requestBody = req.body as any;
+      const displays = requestBody?.collectionDisplays as any[] || [];
+
+      if (!Array.isArray(displays) || displays.length === 0) {
         return res.status(400).json({
           success: false,
           error: 'collectionDisplays array is required and must not be empty'
         });
       }
 
-      await CollectionDisplay.deleteMany({});
-      const updatedDisplays = await CollectionDisplay.insertMany(collectionDisplays);
+      const validatedDisplays = displays.map((display: any) => ({
+        storeId: req.storeId,
+        ...display
+      }));
+
+      await CollectionDisplay.deleteMany({ storeId: req.storeId });
+      const updatedDisplays = await CollectionDisplay.insertMany(validatedDisplays);
 
       res.status(200).json({
         success: true,
@@ -93,10 +125,20 @@ export const collectionDisplayController = {
     }
   },
 
-  async deleteCollectionDisplay(req: Request, res: Response) {
+  async deleteCollectionDisplay(req: AuthenticatedRequest, res: Response) {
     try {
-      const { id } = req.params;
-      const deletedDisplay = await CollectionDisplay.findByIdAndDelete(id);
+      if (!req.storeId) {
+        return res.status(401).json({
+          success: false,
+          error: 'Store authentication required'
+        });
+      }
+
+      const id = (req.params as any)?.id as string;
+      const deletedDisplay = await CollectionDisplay.findOneAndDelete({
+        _id: id,
+        storeId: req.storeId
+      });
 
       if (!deletedDisplay) {
         return res.status(404).json({
@@ -118,13 +160,20 @@ export const collectionDisplayController = {
     }
   },
 
-  async updateCollectionDisplayStatus(req: Request, res: Response) {
+  async updateCollectionDisplayStatus(req: AuthenticatedRequest, res: Response) {
     try {
-      const { id } = req.params;
-      const { isActive } = req.body;
+      if (!req.storeId) {
+        return res.status(401).json({
+          success: false,
+          error: 'Store authentication required'
+        });
+      }
 
-      const updatedDisplay = await CollectionDisplay.findByIdAndUpdate(
-        id,
+      const id = (req.params as any)?.id as string;
+      const isActive = (req.body as any)?.isActive;
+
+      const updatedDisplay = await CollectionDisplay.findOneAndUpdate(
+        { _id: id, storeId: req.storeId },
         { isActive },
         { new: true }
       );

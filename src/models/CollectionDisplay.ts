@@ -1,6 +1,7 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
 export interface ICollectionDisplay extends Document {
+  storeId: string;
   type: 'large_row' | 'small_grid' | 'medium_row';
   collectionId: string;
   order: number;
@@ -11,6 +12,11 @@ export interface ICollectionDisplay extends Document {
 }
 
 const CollectionDisplaySchema: Schema = new mongoose.Schema({
+  storeId: {
+    type: String,
+    required: true,
+    index: true
+  },
   type: {
     type: String,
     required: true,
@@ -42,8 +48,8 @@ const CollectionDisplaySchema: Schema = new mongoose.Schema({
   versionKey: false
 });
 
-CollectionDisplaySchema.index({ order: 1, isActive: 1 });
-CollectionDisplaySchema.index({ type: 1, isActive: 1 });
+CollectionDisplaySchema.index({ storeId: 1, order: 1, isActive: 1 });
+CollectionDisplaySchema.index({ storeId: 1, type: 1, isActive: 1 });
 
 const CollectionDisplay = mongoose.model<ICollectionDisplay>('CollectionDisplay', CollectionDisplaySchema);
 

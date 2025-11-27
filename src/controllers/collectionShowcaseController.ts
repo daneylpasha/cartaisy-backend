@@ -1,9 +1,9 @@
 import { Response } from 'express';
-import CalloutBanner from '../models/CalloutBanner';
+import CollectionShowcase from '../models/CollectionShowcase';
 import { AuthenticatedRequest } from '../types';
 
-export const calloutBannerController = {
-  async createCalloutBanners(req: AuthenticatedRequest, res: Response) {
+export const collectionShowcaseController = {
+  async createCollectionShowcases(req: AuthenticatedRequest, res: Response) {
     try {
       if (!req.storeId) {
         return res.status(401).json({
@@ -17,42 +17,38 @@ export const calloutBannerController = {
       if (!Array.isArray(items) || items.length === 0) {
         return res.status(400).json({
           success: false,
-          error: 'Request body must be a non-empty array of callout banner items'
+          error: 'Request body must be a non-empty array of collection showcase items'
         });
       }
 
       const validatedItems = items.map((item: any, index: number) => ({
         storeId: req.storeId,
-        imageUrl: item.imageUrl,
+        type: item.type,
         title: item.title,
-        subTitle: item.subTitle,
-        buttonText: item.buttonText,
-        action: item.action,
+        icon: item.icon,
+        collections: item.collections,
         position: item.position !== undefined ? item.position : index,
-        isActive: item.isActive !== undefined ? item.isActive : true,
-        backgroundColor: item.backgroundColor || '#ffffff',
-        textColor: item.textColor || '#000000',
-        buttonColor: item.buttonColor || '#007bff'
+        isActive: item.isActive !== undefined ? item.isActive : true
       }));
 
-      await CalloutBanner.deleteMany({ storeId: req.storeId });
+      await CollectionShowcase.deleteMany({ storeId: req.storeId });
 
-      const createdItems = await CalloutBanner.insertMany(validatedItems);
+      const createdItems = await CollectionShowcase.insertMany(validatedItems);
 
       res.status(201).json({
         success: true,
-        message: 'Callout banners created successfully',
+        message: 'Collection showcases created successfully',
         data: createdItems
       });
     } catch (error: any) {
       res.status(500).json({
         success: false,
-        error: error.message || 'Failed to create callout banners'
+        error: error.message || 'Failed to create collection showcases'
       });
     }
   },
 
-  async updateCalloutBanners(req: AuthenticatedRequest, res: Response) {
+  async updateCollectionShowcases(req: AuthenticatedRequest, res: Response) {
     try {
       if (!req.storeId) {
         return res.status(401).json({
@@ -66,42 +62,38 @@ export const calloutBannerController = {
       if (!Array.isArray(items) || items.length === 0) {
         return res.status(400).json({
           success: false,
-          error: 'Request body must be a non-empty array of callout banner items'
+          error: 'Request body must be a non-empty array of collection showcase items'
         });
       }
 
       const validatedItems = items.map((item: any, index: number) => ({
         storeId: req.storeId,
-        imageUrl: item.imageUrl,
+        type: item.type,
         title: item.title,
-        subTitle: item.subTitle,
-        buttonText: item.buttonText,
-        action: item.action,
+        icon: item.icon,
+        collections: item.collections,
         position: item.position !== undefined ? item.position : index,
-        isActive: item.isActive !== undefined ? item.isActive : true,
-        backgroundColor: item.backgroundColor || '#ffffff',
-        textColor: item.textColor || '#000000',
-        buttonColor: item.buttonColor || '#007bff'
+        isActive: item.isActive !== undefined ? item.isActive : true
       }));
 
-      await CalloutBanner.deleteMany({ storeId: req.storeId });
+      await CollectionShowcase.deleteMany({ storeId: req.storeId });
 
-      const updatedItems = await CalloutBanner.insertMany(validatedItems);
+      const updatedItems = await CollectionShowcase.insertMany(validatedItems);
 
       res.status(200).json({
         success: true,
-        message: 'Callout banners updated successfully',
+        message: 'Collection showcases updated successfully',
         data: updatedItems
       });
     } catch (error: any) {
       res.status(500).json({
         success: false,
-        error: error.message || 'Failed to update callout banners'
+        error: error.message || 'Failed to update collection showcases'
       });
     }
   },
 
-  async getCalloutBanners(req: AuthenticatedRequest, res: Response) {
+  async getCollectionShowcases(req: AuthenticatedRequest, res: Response) {
     try {
       const queryParams = req.query as any;
       const active = queryParams?.active as string | undefined;
@@ -114,7 +106,7 @@ export const calloutBannerController = {
         query.isActive = active === 'true';
       }
 
-      const items = await CalloutBanner.find(query)
+      const items = await CollectionShowcase.find(query)
         .sort({ position: 1 })
         .lean();
 
@@ -125,12 +117,12 @@ export const calloutBannerController = {
     } catch (error: any) {
       res.status(500).json({
         success: false,
-        error: error.message || 'Failed to fetch callout banners'
+        error: error.message || 'Failed to fetch collection showcases'
       });
     }
   },
 
-  async deleteCalloutBanner(req: AuthenticatedRequest, res: Response) {
+  async deleteCollectionShowcase(req: AuthenticatedRequest, res: Response) {
     try {
       if (!req.storeId) {
         return res.status(401).json({
@@ -141,7 +133,7 @@ export const calloutBannerController = {
 
       const id = (req.params as any)?.id as string;
 
-      const deletedItem = await CalloutBanner.findOneAndDelete({
+      const deletedItem = await CollectionShowcase.findOneAndDelete({
         _id: id,
         storeId: req.storeId
       });
@@ -149,24 +141,24 @@ export const calloutBannerController = {
       if (!deletedItem) {
         return res.status(404).json({
           success: false,
-          error: 'Callout banner not found'
+          error: 'Collection showcase not found'
         });
       }
 
       res.status(200).json({
         success: true,
-        message: 'Callout banner deleted successfully',
+        message: 'Collection showcase deleted successfully',
         data: deletedItem
       });
     } catch (error: any) {
       res.status(500).json({
         success: false,
-        error: error.message || 'Failed to delete callout banner'
+        error: error.message || 'Failed to delete collection showcase'
       });
     }
   },
 
-  async updateCalloutBannerStatus(req: AuthenticatedRequest, res: Response) {
+  async updateCollectionShowcaseStatus(req: AuthenticatedRequest, res: Response) {
     try {
       if (!req.storeId) {
         return res.status(401).json({
@@ -178,7 +170,7 @@ export const calloutBannerController = {
       const id = (req.params as any)?.id as string;
       const isActive = (req.body as any)?.isActive;
 
-      const updatedItem = await CalloutBanner.findOneAndUpdate(
+      const updatedItem = await CollectionShowcase.findOneAndUpdate(
         { _id: id, storeId: req.storeId },
         { isActive },
         { new: true }
@@ -187,19 +179,19 @@ export const calloutBannerController = {
       if (!updatedItem) {
         return res.status(404).json({
           success: false,
-          error: 'Callout banner not found'
+          error: 'Collection showcase not found'
         });
       }
 
       res.status(200).json({
         success: true,
-        message: 'Callout banner status updated successfully',
+        message: 'Collection showcase status updated successfully',
         data: updatedItem
       });
     } catch (error: any) {
       res.status(500).json({
         success: false,
-        error: error.message || 'Failed to update callout banner status'
+        error: error.message || 'Failed to update collection showcase status'
       });
     }
   }

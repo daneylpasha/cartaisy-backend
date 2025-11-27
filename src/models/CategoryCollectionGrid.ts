@@ -8,6 +8,7 @@ interface ICollectionItem {
 }
 
 export interface ICategoryCollectionGrid extends Document {
+  storeId: string;
   title: string;
   subtitle: string;
   collections: ICollectionItem[];
@@ -37,6 +38,11 @@ const CollectionItemSchema: Schema = new Schema({
 
 const CategoryCollectionGridSchema: Schema = new Schema(
   {
+    storeId: {
+      type: String,
+      required: true,
+      index: true
+    },
     title: {
       type: String,
       required: true,
@@ -72,7 +78,7 @@ const CategoryCollectionGridSchema: Schema = new Schema(
   }
 );
 
-CategoryCollectionGridSchema.index({ position: 1 });
-CategoryCollectionGridSchema.index({ isActive: 1 });
+CategoryCollectionGridSchema.index({ storeId: 1, position: 1 });
+CategoryCollectionGridSchema.index({ storeId: 1, isActive: 1 });
 
 export default mongoose.model<ICategoryCollectionGrid>('CategoryCollectionGrid', CategoryCollectionGridSchema);

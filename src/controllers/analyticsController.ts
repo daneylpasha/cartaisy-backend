@@ -4,6 +4,8 @@ import ProductView from '../models/ProductView';
 import SearchHistory from '../models/SearchHistory';
 import Order from '../models/Order';
 import ProductReview from '../models/ProductReview';
+import shopifyAnalyticsService from '../services/shopifyAnalyticsService';
+import appAnalyticsService from '../services/appAnalyticsService';
 
 export const getDashboardAnalytics = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -801,5 +803,390 @@ export const getInventoryAnalytics = async (_req: Request, res: Response): Promi
       success: false,
       message: 'Failed to get inventory analytics'
     });
+  }
+};
+
+// ============================================
+// NEW: COMBINED ANALYTICS (Shopify + App)
+// ============================================
+
+/**
+ * Get complete analytics dashboard combining Shopify and App data
+ */
+export const getCombinedDashboard = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const storeId = (req as any).storeId;
+    const { startDate, endDate } = req.query;
+
+    const dateRange = startDate && endDate ? {
+      startDate: new Date(startDate as string),
+      endDate: new Date(endDate as string)
+    } : undefined;
+
+    const [shopifyDashboard, appDashboard] = await Promise.all([
+      shopifyAnalyticsService.getDashboardAnalytics(storeId, dateRange),
+      appAnalyticsService.getAppDashboard(storeId, dateRange),
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        // Shopify data (sales, revenue, orders)
+        sales: shopifyDashboard.overview,
+        topSellingProducts: shopifyDashboard.topProducts,
+        customers: shopifyDashboard.customerMetrics,
+        salesTrends: shopifyDashboard.salesTrends,
+        recentOrders: shopifyDashboard.recentOrders,
+        lowStockProducts: shopifyDashboard.lowStockProducts,
+
+        // App data (engagement, views, searches)
+        engagement: appDashboard.engagement,
+        topViewedProducts: appDashboard.topProducts,
+        topSearches: appDashboard.topSearches,
+        platformBreakdown: appDashboard.platformBreakdown,
+        eventCounts: appDashboard.eventCounts,
+        hourlyActivity: appDashboard.hourlyActivity,
+      },
+      metadata: {
+        dateRange: dateRange || { startDate: 'last 30 days', endDate: 'now' },
+        generatedAt: new Date().toISOString(),
+      },
+    });
+  } catch (error) {
+    console.error('Error getting combined dashboard:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get combined dashboard'
+    });
+  }
+};
+
+// ============================================
+// SHOPIFY ANALYTICS ENDPOINTS
+// ============================================
+
+export const getSalesOverview = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const storeId = (req as any).storeId;
+    const { startDate, endDate } = req.query;
+
+    const dateRange = startDate && endDate ? {
+      startDate: new Date(startDate as string),
+      endDate: new Date(endDate as string)
+    } : undefined;
+
+    const data = await shopifyAnalyticsService.getSalesOverview(storeId, dateRange);
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Error getting sales overview:', error);
+    res.status(500).json({ success: false, message: 'Failed to get sales overview' });
+  }
+};
+
+export const getTopSellingProducts = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const storeId = (req as any).storeId;
+    const { startDate, endDate, limit } = req.query;
+
+    const dateRange = startDate && endDate ? {
+      startDate: new Date(startDate as string),
+      endDate: new Date(endDate as string)
+    } : undefined;
+
+    const data = await shopifyAnalyticsService.getTopProducts(storeId, dateRange, Number(limit) || 10);
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Error getting top selling products:', error);
+    res.status(500).json({ success: false, message: 'Failed to get top selling products' });
+  }
+};
+
+export const getCustomerMetrics = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const storeId = (req as any).storeId;
+    const { startDate, endDate } = req.query;
+
+    const dateRange = startDate && endDate ? {
+      startDate: new Date(startDate as string),
+      endDate: new Date(endDate as string)
+    } : undefined;
+
+    const data = await shopifyAnalyticsService.getCustomerMetrics(storeId, dateRange);
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Error getting customer metrics:', error);
+    res.status(500).json({ success: false, message: 'Failed to get customer metrics' });
+  }
+};
+
+export const getSalesTrends = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const storeId = (req as any).storeId;
+    const { startDate, endDate } = req.query;
+
+    const dateRange = startDate && endDate ? {
+      startDate: new Date(startDate as string),
+      endDate: new Date(endDate as string)
+    } : undefined;
+
+    const data = await shopifyAnalyticsService.getSalesTrends(storeId, dateRange);
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Error getting sales trends:', error);
+    res.status(500).json({ success: false, message: 'Failed to get sales trends' });
+  }
+};
+
+export const getRevenueByCategory = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const storeId = (req as any).storeId;
+    const { startDate, endDate } = req.query;
+
+    const dateRange = startDate && endDate ? {
+      startDate: new Date(startDate as string),
+      endDate: new Date(endDate as string)
+    } : undefined;
+
+    const data = await shopifyAnalyticsService.getRevenueByCategory(storeId, dateRange);
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Error getting revenue by category:', error);
+    res.status(500).json({ success: false, message: 'Failed to get revenue by category' });
+  }
+};
+
+export const getFulfillmentStats = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const storeId = (req as any).storeId;
+    const { startDate, endDate } = req.query;
+
+    const dateRange = startDate && endDate ? {
+      startDate: new Date(startDate as string),
+      endDate: new Date(endDate as string)
+    } : undefined;
+
+    const data = await shopifyAnalyticsService.getFulfillmentStats(storeId, dateRange);
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Error getting fulfillment stats:', error);
+    res.status(500).json({ success: false, message: 'Failed to get fulfillment stats' });
+  }
+};
+
+export const getRecentOrders = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const storeId = (req as any).storeId;
+    const { limit } = req.query;
+
+    const data = await shopifyAnalyticsService.getRecentOrders(storeId, Number(limit) || 10);
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Error getting recent orders:', error);
+    res.status(500).json({ success: false, message: 'Failed to get recent orders' });
+  }
+};
+
+export const getLowStockProducts = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const storeId = (req as any).storeId;
+    const { limit } = req.query;
+
+    const data = await shopifyAnalyticsService.getLowStockProducts(storeId, Number(limit) || 10);
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Error getting low stock products:', error);
+    res.status(500).json({ success: false, message: 'Failed to get low stock products' });
+  }
+};
+
+// ============================================
+// APP ANALYTICS ENDPOINTS
+// ============================================
+
+/**
+ * Track a single event (public - for mobile app)
+ */
+export const trackEvent = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const storeId = (req as any).storeId;
+    const userId = (req as any).user?.id;
+
+    const event = await appAnalyticsService.trackEvent(storeId, {
+      ...req.body,
+      userId,
+    });
+
+    res.json({
+      success: true,
+      data: { eventId: event._id },
+    });
+  } catch (error) {
+    console.error('Error tracking event:', error);
+    res.status(500).json({ success: false, message: 'Failed to track event' });
+  }
+};
+
+/**
+ * Track multiple events in batch (public - for mobile app)
+ */
+export const trackEventsBatch = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const storeId = (req as any).storeId;
+    const userId = (req as any).user?.id;
+
+    const eventsWithUser = req.body.events.map((event: any) => ({
+      ...event,
+      userId,
+    }));
+
+    const count = await appAnalyticsService.trackEventsBatch(storeId, eventsWithUser);
+
+    res.json({
+      success: true,
+      data: { trackedCount: count },
+    });
+  } catch (error) {
+    console.error('Error tracking events batch:', error);
+    res.status(500).json({ success: false, message: 'Failed to track events batch' });
+  }
+};
+
+/**
+ * Get app engagement metrics
+ */
+export const getEngagementMetrics = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const storeId = (req as any).storeId;
+    const { startDate, endDate } = req.query;
+
+    const dateRange = startDate && endDate ? {
+      startDate: new Date(startDate as string),
+      endDate: new Date(endDate as string)
+    } : undefined;
+
+    const data = await appAnalyticsService.getEngagementMetrics(storeId, dateRange);
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Error getting engagement metrics:', error);
+    res.status(500).json({ success: false, message: 'Failed to get engagement metrics' });
+  }
+};
+
+/**
+ * Get top products by engagement
+ */
+export const getTopProductsByEngagement = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const storeId = (req as any).storeId;
+    const { startDate, endDate, limit } = req.query;
+
+    const dateRange = startDate && endDate ? {
+      startDate: new Date(startDate as string),
+      endDate: new Date(endDate as string)
+    } : undefined;
+
+    const data = await appAnalyticsService.getTopProductsByEngagement(storeId, dateRange, Number(limit) || 10);
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Error getting top products by engagement:', error);
+    res.status(500).json({ success: false, message: 'Failed to get top products by engagement' });
+  }
+};
+
+/**
+ * Get top search queries
+ */
+export const getTopSearches = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const storeId = (req as any).storeId;
+    const { startDate, endDate, limit } = req.query;
+
+    const dateRange = startDate && endDate ? {
+      startDate: new Date(startDate as string),
+      endDate: new Date(endDate as string)
+    } : undefined;
+
+    const data = await appAnalyticsService.getTopSearches(storeId, dateRange, Number(limit) || 20);
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Error getting top searches:', error);
+    res.status(500).json({ success: false, message: 'Failed to get top searches' });
+  }
+};
+
+/**
+ * Get platform breakdown
+ */
+export const getPlatformBreakdown = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const storeId = (req as any).storeId;
+    const { startDate, endDate } = req.query;
+
+    const dateRange = startDate && endDate ? {
+      startDate: new Date(startDate as string),
+      endDate: new Date(endDate as string)
+    } : undefined;
+
+    const data = await appAnalyticsService.getPlatformBreakdown(storeId, dateRange);
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Error getting platform breakdown:', error);
+    res.status(500).json({ success: false, message: 'Failed to get platform breakdown' });
+  }
+};
+
+/**
+ * Get funnel analysis
+ */
+export const getFunnelAnalysis = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const storeId = (req as any).storeId;
+    const { startDate, endDate } = req.query;
+
+    const dateRange = startDate && endDate ? {
+      startDate: new Date(startDate as string),
+      endDate: new Date(endDate as string)
+    } : undefined;
+
+    const data = await appAnalyticsService.getFunnelAnalysis(storeId, dateRange);
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Error getting funnel analysis:', error);
+    res.status(500).json({ success: false, message: 'Failed to get funnel analysis' });
+  }
+};
+
+/**
+ * Get hourly activity pattern
+ */
+export const getHourlyActivity = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const storeId = (req as any).storeId;
+    const { startDate, endDate } = req.query;
+
+    const dateRange = startDate && endDate ? {
+      startDate: new Date(startDate as string),
+      endDate: new Date(endDate as string)
+    } : undefined;
+
+    const data = await appAnalyticsService.getHourlyActivity(storeId, dateRange);
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Error getting hourly activity:', error);
+    res.status(500).json({ success: false, message: 'Failed to get hourly activity' });
+  }
+};
+
+/**
+ * Get user journey for a session
+ */
+export const getUserJourney = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { sessionId } = req.params;
+    const data = await appAnalyticsService.getUserJourney(sessionId);
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Error getting user journey:', error);
+    res.status(500).json({ success: false, message: 'Failed to get user journey' });
   }
 };

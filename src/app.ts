@@ -133,26 +133,42 @@ app.get('/api/health/detailed', async (_req: Request, res: Response) => {
 import productRoutes from './routes/productRoutes';
 import customerRoutes from './routes/customerRoutes';
 import shopifyRoutes from './routes/shopifyRoutes';
+import shopifyOAuthRoutes from './routes/shopifyOAuthRoutes';
 import webhookRoutes from './routes/webhookRoutes';
 import adminRoutes from './routes/adminRoutes';
 import carouselRoutes from './routes/carouselRoutes';
 import categoryGridRoutes from './routes/categoryGridRoutes';
 import calloutBannerRoutes from './routes/calloutBannerRoutes';
 import collectionDisplayRoutes from './routes/collectionDisplayRoutes';
+import promoBannerRoutes from './routes/promoBannerRoutes';
+import categoryCollectionGridRoutes from './routes/categoryCollectionGridRoutes';
+import collectionShowcaseRoutes from './routes/collectionShowcaseRoutes';
 import recommendationsRoutes from './routes/recommendationsRoutes';
+import authRoutes from './routes/authRoutes';
+import analyticsRoutes from './routes/analyticsRoutes';
 
 // API Routes with versioning
-// Note: Auth routes are now handled by TSOA (see RegisterRoutes below)
+app.use(`/api/${apiConfig.version}/auth`, authRoutes);
 app.use(`/api/${apiConfig.version}/products`, productRoutes);
 app.use(`/api/${apiConfig.version}/customer`, customerRoutes);
+// IMPORTANT: shopifyOAuthRoutes MUST come before shopifyRoutes
+// because shopifyRoutes has router.use(authenticate) which would block the OAuth callback
+app.use(`/api/${apiConfig.version}/shopify`, shopifyOAuthRoutes);
 app.use(`/api/${apiConfig.version}/shopify`, shopifyRoutes);
+// Shopify OAuth callback route (matches Shopify Partner Dashboard redirect URL)
+app.use('/api/auth/shopify', shopifyOAuthRoutes);
 app.use(`/api/webhooks`, webhookRoutes);
 app.use(`/api/${apiConfig.version}/admin`, adminRoutes);
 app.use(`/api/${apiConfig.version}`, carouselRoutes);
 app.use(`/api/${apiConfig.version}`, categoryGridRoutes);
 app.use(`/api/${apiConfig.version}`, calloutBannerRoutes);
 app.use(`/api/${apiConfig.version}`, collectionDisplayRoutes);
+app.use(`/api/${apiConfig.version}`, promoBannerRoutes);
+app.use(`/api/${apiConfig.version}`, categoryCollectionGridRoutes);
+app.use(`/api/${apiConfig.version}`, collectionShowcaseRoutes);
 app.use(`/api/${apiConfig.version}/recommendations`, recommendationsRoutes);
+app.use(`/api/${apiConfig.version}/analytics`, analyticsRoutes);
+app.use('/api/analytics', analyticsRoutes); // Also support without version
 
 // tsoa generated routes (auto-generated, includes controllers with decorators)
 try {

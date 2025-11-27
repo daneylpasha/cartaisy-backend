@@ -1,6 +1,7 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
 export interface ICategoryGrid extends Document {
+  storeId: string;
   imageUrl: string;
   title: string;
   collectionId: string;
@@ -12,6 +13,11 @@ export interface ICategoryGrid extends Document {
 
 const CategoryGridSchema: Schema = new Schema(
   {
+    storeId: {
+      type: String,
+      required: true,
+      index: true
+    },
     imageUrl: {
       type: String,
       required: true,
@@ -42,8 +48,8 @@ const CategoryGridSchema: Schema = new Schema(
   }
 );
 
-CategoryGridSchema.index({ position: 1 });
-CategoryGridSchema.index({ isActive: 1 });
-CategoryGridSchema.index({ collectionId: 1 });
+CategoryGridSchema.index({ storeId: 1, position: 1 });
+CategoryGridSchema.index({ storeId: 1, isActive: 1 });
+CategoryGridSchema.index({ storeId: 1, collectionId: 1 });
 
 export default mongoose.model<ICategoryGrid>('CategoryGrid', CategoryGridSchema);

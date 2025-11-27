@@ -1,9 +1,9 @@
 import { Response } from 'express';
-import CalloutBanner from '../models/CalloutBanner';
+import CategoryCollectionGrid from '../models/CategoryCollectionGrid';
 import { AuthenticatedRequest } from '../types';
 
-export const calloutBannerController = {
-  async createCalloutBanners(req: AuthenticatedRequest, res: Response) {
+export const categoryCollectionGridController = {
+  async createCategoryCollectionGrids(req: AuthenticatedRequest, res: Response) {
     try {
       if (!req.storeId) {
         return res.status(401).json({
@@ -17,42 +17,37 @@ export const calloutBannerController = {
       if (!Array.isArray(items) || items.length === 0) {
         return res.status(400).json({
           success: false,
-          error: 'Request body must be a non-empty array of callout banner items'
+          error: 'Request body must be a non-empty array of category collection grid items'
         });
       }
 
       const validatedItems = items.map((item: any, index: number) => ({
         storeId: req.storeId,
-        imageUrl: item.imageUrl,
         title: item.title,
-        subTitle: item.subTitle,
-        buttonText: item.buttonText,
-        action: item.action,
+        subtitle: item.subtitle,
+        collections: item.collections,
         position: item.position !== undefined ? item.position : index,
-        isActive: item.isActive !== undefined ? item.isActive : true,
-        backgroundColor: item.backgroundColor || '#ffffff',
-        textColor: item.textColor || '#000000',
-        buttonColor: item.buttonColor || '#007bff'
+        isActive: item.isActive !== undefined ? item.isActive : true
       }));
 
-      await CalloutBanner.deleteMany({ storeId: req.storeId });
+      await CategoryCollectionGrid.deleteMany({ storeId: req.storeId });
 
-      const createdItems = await CalloutBanner.insertMany(validatedItems);
+      const createdItems = await CategoryCollectionGrid.insertMany(validatedItems);
 
       res.status(201).json({
         success: true,
-        message: 'Callout banners created successfully',
+        message: 'Category collection grids created successfully',
         data: createdItems
       });
     } catch (error: any) {
       res.status(500).json({
         success: false,
-        error: error.message || 'Failed to create callout banners'
+        error: error.message || 'Failed to create category collection grids'
       });
     }
   },
 
-  async updateCalloutBanners(req: AuthenticatedRequest, res: Response) {
+  async updateCategoryCollectionGrids(req: AuthenticatedRequest, res: Response) {
     try {
       if (!req.storeId) {
         return res.status(401).json({
@@ -66,42 +61,37 @@ export const calloutBannerController = {
       if (!Array.isArray(items) || items.length === 0) {
         return res.status(400).json({
           success: false,
-          error: 'Request body must be a non-empty array of callout banner items'
+          error: 'Request body must be a non-empty array of category collection grid items'
         });
       }
 
       const validatedItems = items.map((item: any, index: number) => ({
         storeId: req.storeId,
-        imageUrl: item.imageUrl,
         title: item.title,
-        subTitle: item.subTitle,
-        buttonText: item.buttonText,
-        action: item.action,
+        subtitle: item.subtitle,
+        collections: item.collections,
         position: item.position !== undefined ? item.position : index,
-        isActive: item.isActive !== undefined ? item.isActive : true,
-        backgroundColor: item.backgroundColor || '#ffffff',
-        textColor: item.textColor || '#000000',
-        buttonColor: item.buttonColor || '#007bff'
+        isActive: item.isActive !== undefined ? item.isActive : true
       }));
 
-      await CalloutBanner.deleteMany({ storeId: req.storeId });
+      await CategoryCollectionGrid.deleteMany({ storeId: req.storeId });
 
-      const updatedItems = await CalloutBanner.insertMany(validatedItems);
+      const updatedItems = await CategoryCollectionGrid.insertMany(validatedItems);
 
       res.status(200).json({
         success: true,
-        message: 'Callout banners updated successfully',
+        message: 'Category collection grids updated successfully',
         data: updatedItems
       });
     } catch (error: any) {
       res.status(500).json({
         success: false,
-        error: error.message || 'Failed to update callout banners'
+        error: error.message || 'Failed to update category collection grids'
       });
     }
   },
 
-  async getCalloutBanners(req: AuthenticatedRequest, res: Response) {
+  async getCategoryCollectionGrids(req: AuthenticatedRequest, res: Response) {
     try {
       const queryParams = req.query as any;
       const active = queryParams?.active as string | undefined;
@@ -114,7 +104,7 @@ export const calloutBannerController = {
         query.isActive = active === 'true';
       }
 
-      const items = await CalloutBanner.find(query)
+      const items = await CategoryCollectionGrid.find(query)
         .sort({ position: 1 })
         .lean();
 
@@ -125,12 +115,12 @@ export const calloutBannerController = {
     } catch (error: any) {
       res.status(500).json({
         success: false,
-        error: error.message || 'Failed to fetch callout banners'
+        error: error.message || 'Failed to fetch category collection grids'
       });
     }
   },
 
-  async deleteCalloutBanner(req: AuthenticatedRequest, res: Response) {
+  async deleteCategoryCollectionGrid(req: AuthenticatedRequest, res: Response) {
     try {
       if (!req.storeId) {
         return res.status(401).json({
@@ -141,7 +131,7 @@ export const calloutBannerController = {
 
       const id = (req.params as any)?.id as string;
 
-      const deletedItem = await CalloutBanner.findOneAndDelete({
+      const deletedItem = await CategoryCollectionGrid.findOneAndDelete({
         _id: id,
         storeId: req.storeId
       });
@@ -149,24 +139,24 @@ export const calloutBannerController = {
       if (!deletedItem) {
         return res.status(404).json({
           success: false,
-          error: 'Callout banner not found'
+          error: 'Category collection grid not found'
         });
       }
 
       res.status(200).json({
         success: true,
-        message: 'Callout banner deleted successfully',
+        message: 'Category collection grid deleted successfully',
         data: deletedItem
       });
     } catch (error: any) {
       res.status(500).json({
         success: false,
-        error: error.message || 'Failed to delete callout banner'
+        error: error.message || 'Failed to delete category collection grid'
       });
     }
   },
 
-  async updateCalloutBannerStatus(req: AuthenticatedRequest, res: Response) {
+  async updateCategoryCollectionGridStatus(req: AuthenticatedRequest, res: Response) {
     try {
       if (!req.storeId) {
         return res.status(401).json({
@@ -178,7 +168,7 @@ export const calloutBannerController = {
       const id = (req.params as any)?.id as string;
       const isActive = (req.body as any)?.isActive;
 
-      const updatedItem = await CalloutBanner.findOneAndUpdate(
+      const updatedItem = await CategoryCollectionGrid.findOneAndUpdate(
         { _id: id, storeId: req.storeId },
         { isActive },
         { new: true }
@@ -187,19 +177,19 @@ export const calloutBannerController = {
       if (!updatedItem) {
         return res.status(404).json({
           success: false,
-          error: 'Callout banner not found'
+          error: 'Category collection grid not found'
         });
       }
 
       res.status(200).json({
         success: true,
-        message: 'Callout banner status updated successfully',
+        message: 'Category collection grid status updated successfully',
         data: updatedItem
       });
     } catch (error: any) {
       res.status(500).json({
         success: false,
-        error: error.message || 'Failed to update callout banner status'
+        error: error.message || 'Failed to update category collection grid status'
       });
     }
   }

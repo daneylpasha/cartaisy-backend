@@ -149,6 +149,7 @@ server.use(app);
       minPoolSize: databaseConfig.minPoolSize,
       connectTimeoutMS: databaseConfig.connectionTimeout,
       serverSelectionTimeoutMS: databaseConfig.connectionTimeout,
+      family: 4,
     });
     console.log('🟢 Mongo connected');
 

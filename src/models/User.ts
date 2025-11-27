@@ -229,11 +229,18 @@ const MarketingSchema = new Schema(
 
 const UserSchema = new Schema<IUser>(
   {
+    // Store & Multi-tenancy (optional for single-tenant mode)
+    storeId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Store',
+      required: false,
+      index: true,
+    },
+
     // Shopify Integration
     shopifyCustomerId: {
       type: String,
       sparse: true,
-      unique: true,
       index: true,
     },
 
@@ -241,7 +248,6 @@ const UserSchema = new Schema<IUser>(
     stripeCustomerId: {
       type: String,
       sparse: true,
-      unique: true,
       index: true,
     },
 
@@ -256,7 +262,6 @@ const UserSchema = new Schema<IUser>(
     email: {
       type: String,
       required: [true, 'Email is required'],
-      unique: true,
       lowercase: true,
       trim: true,
       index: true,
@@ -302,11 +307,28 @@ const UserSchema = new Schema<IUser>(
     role: {
       type: String,
       enum: {
-        values: ['customer', 'admin', 'moderator', 'premium_customer'],
-        message: 'Role must be customer, admin, moderator, or premium_customer',
+        values: ['super_admin', 'admin', 'customer', 'moderator', 'premium_customer'],
+        message: 'Role must be super_admin, admin, customer, moderator, or premium_customer',
       },
       default: 'customer',
       index: true,
+    },
+
+    // Store Membership & Invitations
+    invitedBy: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+      sparse: true,
+    },
+    inviteToken: {
+      type: String,
+      sparse: true,
+      select: false,
+    },
+    inviteExpiresAt: {
+      type: Date,
+      sparse: true,
+      select: false,
     },
 
     // User Data
@@ -381,6 +403,7 @@ const UserSchema = new Schema<IUser>(
 // INDEXES
 // =============================================================================
 
+UserSchema.index({ storeId: 1 });
 UserSchema.index({ email: 1 });
 UserSchema.index({ shopifyCustomerId: 1 });
 UserSchema.index({ role: 1, isActive: 1 });
@@ -391,6 +414,8 @@ UserSchema.index({ createdAt: -1 });
 // Compound indexes
 UserSchema.index({ isActive: 1, role: 1 });
 UserSchema.index({ email: 1, isVerified: 1 });
+UserSchema.index({ storeId: 1, email: 1 }, { unique: true }); // Unique email per store
+UserSchema.index({ storeId: 1, role: 1 });
 
 // =============================================================================
 // VIRTUALS

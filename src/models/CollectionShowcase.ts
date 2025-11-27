@@ -8,6 +8,7 @@ interface IShowcaseCollectionItem {
 }
 
 export interface ICollectionShowcase extends Document {
+  storeId: string;
   type: 'grid' | 'circular';  // Different UI layouts
   title: string;
   icon?: string;  // Optional icon for the showcase section
@@ -38,6 +39,11 @@ const ShowcaseCollectionItemSchema: Schema = new Schema({
 
 const CollectionShowcaseSchema: Schema = new Schema(
   {
+    storeId: {
+      type: String,
+      required: true,
+      index: true
+    },
     type: {
       type: String,
       required: true,
@@ -79,8 +85,8 @@ const CollectionShowcaseSchema: Schema = new Schema(
   }
 );
 
-CollectionShowcaseSchema.index({ position: 1 });
-CollectionShowcaseSchema.index({ isActive: 1 });
-CollectionShowcaseSchema.index({ type: 1, isActive: 1 });
+CollectionShowcaseSchema.index({ storeId: 1, position: 1 });
+CollectionShowcaseSchema.index({ storeId: 1, isActive: 1 });
+CollectionShowcaseSchema.index({ storeId: 1, type: 1, isActive: 1 });
 
 export default mongoose.model<ICollectionShowcase>('CollectionShowcase', CollectionShowcaseSchema);
