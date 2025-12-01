@@ -36,11 +36,11 @@ export const registerCustomer = async (
     const { email, password, name, phone } = req.body;
     const storeId = req.storeId;
 
-    // Validate required fields
-    if (!email || !password || !name) {
+    // Validate required fields (name is optional, can be added later via profile update)
+    if (!email || !password) {
       res.status(400).json({
         status: 'error',
-        message: 'Email, password, and name are required.',
+        message: 'Email and password are required.',
       });
       return;
     }

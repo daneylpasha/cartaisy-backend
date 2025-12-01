@@ -59,6 +59,7 @@ import {
 import { requireAuth, optionalAuth, requireAdmin } from '../middleware/auth';
 import { validateObjectId } from '../middleware/validation';
 import { storeAuth } from '../middleware/storeAuth';
+import { authenticateCustomer } from '../middleware/customerAuth';
 
 const router = express.Router();
 
@@ -70,7 +71,7 @@ const router = express.Router();
  * GET /api/v1/customer/homescreen
  * Get all homescreen data including carousel items
  */
-router.get('/homescreen', requireAuth, storeAuth, homescreenController.getHomescreenData);
+router.get('/homescreen', authenticateCustomer, homescreenController.getHomescreenData);
 
 // Individual homescreen component endpoints for selective updates
 // These can be uncommented and implemented as needed:
