@@ -56,14 +56,17 @@ export const addAddress = async (
     const customerId = req.customer?.id;
     const {
       label,
-      fullName,
+      firstName,
+      lastName,
       phone,
-      addressLine1,
-      addressLine2,
+      address1,
+      address2,
       city,
-      state,
-      postalCode,
+      province,
+      zip,
       country,
+      countryCode,
+      type,
       isDefault,
     } = req.body;
 
@@ -76,10 +79,10 @@ export const addAddress = async (
     }
 
     // Validate required fields
-    if (!label || !fullName || !phone || !addressLine1 || !city || !state || !postalCode || !country) {
+    if (!address1 || !province || !country) {
       res.status(400).json({
         status: 'error',
-        message: 'Missing required fields: label, fullName, phone, addressLine1, city, state, postalCode, country.',
+        message: 'Missing required fields: address1, province, country.',
       });
       return;
     }
@@ -108,14 +111,17 @@ export const addAddress = async (
     const newAddress = {
       _id: new mongoose.Types.ObjectId(),
       label,
-      fullName,
+      type: type || 'both',
+      firstName,
+      lastName,
       phone,
-      addressLine1,
-      addressLine2,
+      address1,
+      address2,
       city,
-      state,
-      postalCode,
+      province,
       country,
+      countryCode,
+      zip,
       isDefault: shouldBeDefault,
     };
 
@@ -149,14 +155,17 @@ export const updateAddress = async (
     const { addressId } = req.params;
     const {
       label,
-      fullName,
+      type,
+      firstName,
+      lastName,
       phone,
-      addressLine1,
-      addressLine2,
+      address1,
+      address2,
       city,
-      state,
-      postalCode,
+      province,
       country,
+      countryCode,
+      zip,
       isDefault,
     } = req.body;
 
@@ -209,14 +218,17 @@ export const updateAddress = async (
     // Update only provided fields
     const address = customer.addresses[addressIndex];
     if (label !== undefined) address.label = label;
-    if (fullName !== undefined) address.fullName = fullName;
+    if (type !== undefined) address.type = type;
+    if (firstName !== undefined) address.firstName = firstName;
+    if (lastName !== undefined) address.lastName = lastName;
     if (phone !== undefined) address.phone = phone;
-    if (addressLine1 !== undefined) address.addressLine1 = addressLine1;
-    if (addressLine2 !== undefined) address.addressLine2 = addressLine2;
+    if (address1 !== undefined) address.address1 = address1;
+    if (address2 !== undefined) address.address2 = address2;
     if (city !== undefined) address.city = city;
-    if (state !== undefined) address.state = state;
-    if (postalCode !== undefined) address.postalCode = postalCode;
+    if (province !== undefined) address.province = province;
     if (country !== undefined) address.country = country;
+    if (countryCode !== undefined) address.countryCode = countryCode;
+    if (zip !== undefined) address.zip = zip;
     if (isDefault !== undefined) address.isDefault = isDefault;
 
     await customer.save();

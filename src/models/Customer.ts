@@ -2,15 +2,18 @@ import mongoose, { Document, Schema } from 'mongoose';
 import bcrypt from 'bcryptjs';
 
 export interface IAddress {
-  label: string;
-  fullName: string;
-  phone: string;
-  addressLine1: string;
-  addressLine2?: string;
-  city: string;
-  state: string;
-  postalCode: string;
+  label?: string;
+  type?: 'billing' | 'shipping' | 'both';
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+  address1: string;
+  address2?: string;
+  city?: string;
+  province: string;
   country: string;
+  countryCode?: string;
+  zip?: string;
   isDefault: boolean;
 }
 
@@ -72,18 +75,21 @@ export interface ICustomer extends Document {
 
 const addressSchema = new Schema<IAddress>(
   {
-    label: { type: String, required: true },
-    fullName: { type: String, required: true },
-    phone: { type: String, required: true },
-    addressLine1: { type: String, required: true },
-    addressLine2: { type: String },
-    city: { type: String, required: true },
-    state: { type: String, required: true },
-    postalCode: { type: String, required: true },
+    label: { type: String },
+    type: { type: String, enum: ['billing', 'shipping', 'both'], default: 'both' },
+    firstName: { type: String },
+    lastName: { type: String },
+    phone: { type: String },
+    address1: { type: String, required: true },
+    address2: { type: String },
+    city: { type: String },
+    province: { type: String, required: true },
     country: { type: String, required: true },
+    countryCode: { type: String },
+    zip: { type: String },
     isDefault: { type: Boolean, default: false },
   },
-  { _id: false }
+  { _id: true }
 );
 
 const cartItemSchema = new Schema<ICartItem>(
