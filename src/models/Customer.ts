@@ -50,7 +50,7 @@ export interface ICustomer extends Document {
   storeId: mongoose.Types.ObjectId;
   email: string;
   password: string;
-  name: string;
+  name?: string;
   phone?: string;
   avatar?: string;
   addresses: IAddress[];
@@ -126,7 +126,7 @@ const customerSchema = new Schema<ICustomer>(
     },
     name: {
       type: String,
-      required: true,
+      required: false,
     },
     phone: {
       type: String,
