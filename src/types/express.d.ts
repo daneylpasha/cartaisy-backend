@@ -11,8 +11,13 @@ declare global {
         name: string;
         isActive: boolean;
       };
+      customer?: {
+        id: string;
+        storeId: string;
+        email: string;
+      };
       sessionID?: string;
-      storeId?: ObjectId;
+      storeId?: ObjectId | string;
       userRole?: string;
     }
   }
@@ -28,8 +33,13 @@ declare module 'express-serve-static-core' {
       name: string;
       isActive: boolean;
     };
+    customer?: {
+      id: string;
+      storeId: string;
+      email: string;
+    };
     sessionID?: string;
-    storeId?: ObjectId;
+    storeId?: ObjectId | string;
     userRole?: string;
   }
 }

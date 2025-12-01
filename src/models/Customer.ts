@@ -1,0 +1,217 @@
+import mongoose, { Document, Schema } from 'mongoose';
+import bcrypt from 'bcryptjs';
+
+export interface IAddress {
+  label: string;
+  fullName: string;
+  phone: string;
+  addressLine1: string;
+  addressLine2?: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  country: string;
+  isDefault: boolean;
+}
+
+export interface ICartItem {
+  productId: mongoose.Types.ObjectId;
+  variantId?: string;
+  quantity: number;
+  addedAt: Date;
+}
+
+export interface ICart {
+  items: ICartItem[];
+  updatedAt: Date;
+}
+
+export interface INotificationPreferences {
+  email: boolean;
+  push: boolean;
+  sms: boolean;
+  promotions: boolean;
+  orderUpdates: boolean;
+}
+
+export interface IPreferences {
+  currency?: string;
+  language?: string;
+  notifications: INotificationPreferences;
+}
+
+export interface IDeviceToken {
+  token: string;
+  platform: 'ios' | 'android';
+  createdAt: Date;
+}
+
+export interface ICustomer extends Document {
+  storeId: mongoose.Types.ObjectId;
+  email: string;
+  password: string;
+  name: string;
+  phone?: string;
+  avatar?: string;
+  addresses: IAddress[];
+  wishlist: mongoose.Types.ObjectId[];
+  cart: ICart;
+  preferences: IPreferences;
+  deviceTokens: IDeviceToken[];
+  isActive: boolean;
+  isVerified: boolean;
+  verificationToken?: string;
+  verificationExpires?: Date;
+  resetPasswordToken?: string;
+  resetPasswordExpires?: Date;
+  lastLoginAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+  comparePassword(candidatePassword: string): Promise<boolean>;
+}
+
+const addressSchema = new Schema<IAddress>(
+  {
+    label: { type: String, required: true },
+    fullName: { type: String, required: true },
+    phone: { type: String, required: true },
+    addressLine1: { type: String, required: true },
+    addressLine2: { type: String },
+    city: { type: String, required: true },
+    state: { type: String, required: true },
+    postalCode: { type: String, required: true },
+    country: { type: String, required: true },
+    isDefault: { type: Boolean, default: false },
+  },
+  { _id: false }
+);
+
+const cartItemSchema = new Schema<ICartItem>(
+  {
+    productId: { type: Schema.Types.ObjectId, ref: 'Product', required: true },
+    variantId: { type: String },
+    quantity: { type: Number, required: true, min: 1 },
+    addedAt: { type: Date, default: Date.now },
+  },
+  { _id: false }
+);
+
+const deviceTokenSchema = new Schema<IDeviceToken>(
+  {
+    token: { type: String, required: true },
+    platform: { type: String, enum: ['ios', 'android'], required: true },
+    createdAt: { type: Date, default: Date.now },
+  },
+  { _id: false }
+);
+
+const customerSchema = new Schema<ICustomer>(
+  {
+    storeId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Store',
+      required: true,
+      index: true,
+    },
+    email: {
+      type: String,
+      required: true,
+      lowercase: true,
+      trim: true,
+    },
+    password: {
+      type: String,
+      required: true,
+      select: false,
+    },
+    name: {
+      type: String,
+      required: true,
+    },
+    phone: {
+      type: String,
+    },
+    avatar: {
+      type: String,
+    },
+    addresses: [addressSchema],
+    wishlist: [{ type: Schema.Types.ObjectId, ref: 'Product' }],
+    cart: {
+      items: [cartItemSchema],
+      updatedAt: { type: Date, default: Date.now },
+    },
+    preferences: {
+      currency: { type: String },
+      language: { type: String },
+      notifications: {
+        email: { type: Boolean, default: true },
+        push: { type: Boolean, default: true },
+        sms: { type: Boolean, default: false },
+        promotions: { type: Boolean, default: true },
+        orderUpdates: { type: Boolean, default: true },
+      },
+    },
+    deviceTokens: [deviceTokenSchema],
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
+    isVerified: {
+      type: Boolean,
+      default: false,
+    },
+    verificationToken: {
+      type: String,
+    },
+    verificationExpires: {
+      type: Date,
+    },
+    resetPasswordToken: {
+      type: String,
+    },
+    resetPasswordExpires: {
+      type: Date,
+    },
+    lastLoginAt: {
+      type: Date,
+    },
+  },
+  {
+    timestamps: true,
+  }
+);
+
+// Compound unique index on storeId and email
+customerSchema.index({ storeId: 1, email: 1 }, { unique: true });
+
+// Index for querying active customers by store
+customerSchema.index({ storeId: 1, isActive: 1 });
+
+// Index for querying customers by store and creation date
+customerSchema.index({ storeId: 1, createdAt: -1 });
+
+// Pre-save hook to hash password
+customerSchema.pre('save', async function (next) {
+  if (!this.isModified('password')) {
+    return next();
+  }
+
+  try {
+    const salt = await bcrypt.genSalt(12);
+    this.password = await bcrypt.hash(this.password, salt);
+    next();
+  } catch (error) {
+    next(error as Error);
+  }
+});
+
+// Method to compare password
+customerSchema.methods.comparePassword = async function (
+  candidatePassword: string
+): Promise<boolean> {
+  return bcrypt.compare(candidatePassword, this.password);
+};
+
+const Customer = mongoose.model<ICustomer>('Customer', customerSchema);
+
+export default Customer;

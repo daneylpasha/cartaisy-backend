@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import User from '../models/User';
 import { generateToken, generateRefreshToken } from '../utils/jwt';
 import { sendWelcomeEmail, sendPasswordResetEmail } from '../utils/email';
-import { SUCCESS_MESSAGES, ERROR_MESSAGES } from '../utils/constants';
+import { SUCCESS_MESSAGES } from '../utils/constants';
 import { AuthenticatedRequest } from '../types';
 
 // Use AuthenticatedRequest for consistency
@@ -11,48 +11,143 @@ type AuthRequest = AuthenticatedRequest;
 
 /**
  * Register a new user
+ *
+ * Supports two scenarios:
+ * 1. New Store Creation (no inviteToken): Creates a new store and super_admin user
+ *    Requires: email, password, name, storeName
+ * 2. Invited User (with inviteToken): Accepts invitation and sets password
+ *    Requires: email, password, inviteToken
  */
 export const register = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { email, password } = req.body;
+    const { email, password, name, storeName, inviteToken } = req.body;
 
-    // Check if user already exists
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      res.status(400).json({
-        status: 'error',
-        message: ERROR_MESSAGES.EMAIL_ALREADY_EXISTS
+    // Scenario 2: Invited user registration
+    if (inviteToken) {
+      // Find user with matching invite token that hasn't expired
+      const invitedUser = await User.findOne({
+        inviteToken,
+        inviteExpiresAt: { $gt: new Date() },
+        isActive: false // Invited users are initially inactive until they set password
+      });
+
+      if (!invitedUser) {
+        res.status(400).json({
+          status: 'error',
+          message: 'Invalid or expired invitation. Please contact your administrator for a new invite.'
+        });
+        return;
+      }
+
+      // Verify email matches the invited email
+      if (invitedUser.email.toLowerCase() !== email.toLowerCase()) {
+        res.status(400).json({
+          status: 'error',
+          message: 'Email does not match the invitation. Please use the email address that received the invite.'
+        });
+        return;
+      }
+
+      // Activate the invited user and set their password
+      invitedUser.password = password;
+      invitedUser.isActive = true;
+      invitedUser.isVerified = true;
+      invitedUser.inviteToken = undefined;
+      invitedUser.inviteExpiresAt = undefined;
+      await invitedUser.save();
+
+      // Generate JWT token
+      const token = generateToken((invitedUser._id as any).toString());
+      const refreshToken = generateRefreshToken((invitedUser._id as any).toString());
+
+      // Send welcome email (don't wait for it)
+      sendWelcomeEmail(email, invitedUser.name || email).catch(err =>
+        console.error('Failed to send welcome email:', err)
+      );
+
+      // Prepare user data (exclude sensitive fields)
+      const userData = {
+        id: invitedUser._id,
+        name: invitedUser.name,
+        email: invitedUser.email,
+        role: invitedUser.role,
+        storeId: invitedUser.storeId,
+        isEmailVerified: invitedUser.isVerified,
+        isActive: invitedUser.isActive,
+        createdAt: invitedUser.createdAt
+      };
+
+      res.status(201).json({
+        status: 'success',
+        message: SUCCESS_MESSAGES.REGISTRATION_SUCCESS,
+        data: {
+          user: userData,
+          token,
+          refreshToken
+        }
       });
       return;
     }
 
-    // Create new user (name will be added later via updateProfile)
-    const user = new User({
-      email,
+    // Scenario 1: New Store Creation
+    // Validate required fields for new store creation
+    if (!email || !password || !name || !storeName) {
+      res.status(400).json({
+        status: 'error',
+        message: 'Missing required fields: email, password, name, and storeName are required for new store creation.'
+      });
+      return;
+    }
+
+    // Check if email already exists
+    const existingUser = await User.findOne({ email: email.toLowerCase() });
+    if (existingUser) {
+      res.status(400).json({
+        status: 'error',
+        message: 'An account with this email already exists.'
+      });
+      return;
+    }
+
+    // Generate a unique storeId (using storeName slug + timestamp)
+    const storeSlug = storeName.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+    const storeId = `${storeSlug}-${Date.now()}`;
+
+    // Create new user with super_admin role
+    const newUser = new User({
+      email: email.toLowerCase(),
       password,
-      role: 'customer' // Default role for new registrations
+      name,
+      storeId,
+      role: 'super_admin',
+      isActive: true,
+      isVerified: true, // Auto-verify for store creators
+      profile: {
+        storeName
+      }
     });
 
-    await user.save();
+    await newUser.save();
 
     // Generate JWT token
-    const token = generateToken((user._id as any).toString());
-    const refreshToken = generateRefreshToken((user._id as any).toString());
+    const token = generateToken((newUser._id as any).toString());
+    const refreshToken = generateRefreshToken((newUser._id as any).toString());
 
     // Send welcome email (don't wait for it)
-    sendWelcomeEmail(email, email).catch(err =>
+    sendWelcomeEmail(email, name).catch(err =>
       console.error('Failed to send welcome email:', err)
     );
 
     // Prepare user data (exclude sensitive fields)
     const userData = {
-      id: user._id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      isEmailVerified: user.isVerified,
-      isActive: user.isActive,
-      createdAt: user.createdAt
+      id: newUser._id,
+      name: newUser.name,
+      email: newUser.email,
+      role: newUser.role,
+      storeId: newUser.storeId,
+      isEmailVerified: newUser.isVerified,
+      isActive: newUser.isActive,
+      createdAt: newUser.createdAt
     };
 
     res.status(201).json({
@@ -75,14 +170,15 @@ export const register = async (req: Request, res: Response): Promise<void> => {
 
 /**
  * Login user
+ * Allows any valid user in the users collection to login.
  */
 export const login = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, password } = req.body;
 
-    // Find user by email (include password field)
-    const user = await User.findOne({ email }).select('+password');
-    
+    // Find user by email
+    const user = await User.findOne({ email: email.toLowerCase() }).select('+password');
+
     if (!user) {
       res.status(401).json({
         status: 'error',
@@ -95,14 +191,14 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     if (!user.isActive) {
       res.status(403).json({
         status: 'error',
-        message: 'Your account has been deactivated. Please contact support.'
+        message: 'Account is inactive. Please contact your administrator.'
       });
       return;
     }
 
     // Check password
     const isPasswordCorrect = await user.comparePassword(password);
-    
+
     if (!isPasswordCorrect) {
       res.status(401).json({
         status: 'error',
@@ -127,7 +223,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       storeId: user.storeId,
       isEmailVerified: user.isVerified,
       isActive: user.isActive,
-      avatar: user.profile.avatar,
+      avatar: user.profile?.avatar,
       lastLoginAt: user.lastLoginAt
     };
 

@@ -146,11 +146,15 @@ import collectionShowcaseRoutes from './routes/collectionShowcaseRoutes';
 import recommendationsRoutes from './routes/recommendationsRoutes';
 import authRoutes from './routes/authRoutes';
 import analyticsRoutes from './routes/analyticsRoutes';
+import customerAuthRoutes from './routes/customerAuthRoutes';
+import customerAddressRoutes from './routes/customerAddressRoutes';
 
 // API Routes with versioning
 app.use(`/api/${apiConfig.version}/auth`, authRoutes);
 app.use(`/api/${apiConfig.version}/products`, productRoutes);
 app.use(`/api/${apiConfig.version}/customer`, customerRoutes);
+app.use(`/api/${apiConfig.version}/customer/auth`, customerAuthRoutes);
+app.use(`/api/${apiConfig.version}/customer/addresses`, customerAddressRoutes);
 // IMPORTANT: shopifyOAuthRoutes MUST come before shopifyRoutes
 // because shopifyRoutes has router.use(authenticate) which would block the OAuth callback
 app.use(`/api/${apiConfig.version}/shopify`, shopifyOAuthRoutes);
