@@ -289,7 +289,10 @@ export const updateCustomerProfile = async (
 ): Promise<void> => {
   try {
     const customerId = req.customer?.id;
-    const { name, phone, avatar, preferences } = req.body;
+    // Support both field name formats (name/fullName, phone/phoneNumber)
+    const { name, fullName, phone, phoneNumber, avatar, preferences } = req.body;
+    const actualName = name || fullName;
+    const actualPhone = phone || phoneNumber;
 
     if (!customerId) {
       res.status(401).json({
@@ -310,11 +313,11 @@ export const updateCustomerProfile = async (
     }
 
     // Update only provided fields
-    if (name !== undefined) {
-      customer.name = name;
+    if (actualName !== undefined) {
+      customer.name = actualName;
     }
-    if (phone !== undefined) {
-      customer.phone = phone;
+    if (actualPhone !== undefined) {
+      customer.phone = actualPhone;
     }
     if (avatar !== undefined) {
       customer.avatar = avatar;
