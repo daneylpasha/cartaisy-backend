@@ -61,6 +61,7 @@ export interface ICustomer extends Document {
   cart: ICart;
   preferences: IPreferences;
   deviceTokens: IDeviceToken[];
+  stripeCustomerId?: string;
   isActive: boolean;
   isVerified: boolean;
   verificationToken?: string;
@@ -158,6 +159,10 @@ const customerSchema = new Schema<ICustomer>(
       },
     },
     deviceTokens: [deviceTokenSchema],
+    stripeCustomerId: {
+      type: String,
+      sparse: true,
+    },
     isActive: {
       type: Boolean,
       default: true,

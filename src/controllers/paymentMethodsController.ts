@@ -44,7 +44,7 @@ async function findUserOrCustomer(userId: string) {
       _id: customer._id,
       email: customer.email,
       name: customer.name,
-      stripeCustomerId: (customer as any).stripeCustomerId,
+      stripeCustomerId: customer.stripeCustomerId,
       isUser: false,
       save: async function() {
         await Customer.findByIdAndUpdate(userId, { stripeCustomerId: this.stripeCustomerId });

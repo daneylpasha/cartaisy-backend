@@ -36,7 +36,7 @@ async function findUserOrCustomer(userId: string) {
       name: customer.name,
       phone: customer.phone,
       addresses: customer.addresses,
-      stripeCustomerId: (customer as any).stripeCustomerId,
+      stripeCustomerId: customer.stripeCustomerId,
       isUser: false
     };
   }
