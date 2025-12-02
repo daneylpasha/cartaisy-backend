@@ -18,9 +18,10 @@ export interface IWishlistShare {
 }
 
 export interface IWishlist extends Document {
-  // Owner
-  user: mongoose.Types.ObjectId;
-  
+  // Owner (either user or customer must be present)
+  user?: mongoose.Types.ObjectId;
+  customer?: mongoose.Types.ObjectId;
+
   // Wishlist info
   name: string;
   description?: string;
@@ -105,14 +106,20 @@ const WishlistShareSchema = new Schema({
 }, { _id: false });
 
 const WishlistSchema = new Schema({
-  // Owner
-  user: { 
-    type: Schema.Types.ObjectId, 
-    ref: 'User', 
-    required: true,
+  // Owner (either user or customer must be present)
+  user: {
+    type: Schema.Types.ObjectId,
+    ref: 'User',
+    required: false,  // Made optional - either user or customer must be present
     index: true
   },
-  
+  customer: {
+    type: Schema.Types.ObjectId,
+    ref: 'Customer',
+    required: false,  // Either user or customer must be present
+    index: true
+  },
+
   // Wishlist info
   name: { 
     type: String, 
@@ -166,6 +173,8 @@ const WishlistSchema = new Schema({
 // Indexes
 WishlistSchema.index({ user: 1, name: 1 });
 WishlistSchema.index({ user: 1, isDefault: 1 });
+WishlistSchema.index({ customer: 1, name: 1 });  // Index for customer queries
+WishlistSchema.index({ customer: 1, isDefault: 1 });  // Index for customer default wishlist
 WishlistSchema.index({ 'sharing.token': 1 });
 WishlistSchema.index({ 'sharing.isPublic': 1 });
 WishlistSchema.index({ updatedAt: -1 });
@@ -175,12 +184,31 @@ WishlistSchema.index({ 'items.product': 1, 'items.variant': 1 });
 
 // Ensure only one default wishlist per user
 WishlistSchema.index(
-  { user: 1, isDefault: 1 }, 
-  { 
-    unique: true, 
-    partialFilterExpression: { isDefault: true } 
+  { user: 1, isDefault: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { isDefault: true, user: { $exists: true } }
   }
 );
+
+// Ensure only one default wishlist per customer
+WishlistSchema.index(
+  { customer: 1, isDefault: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { isDefault: true, customer: { $exists: true } }
+  }
+);
+
+// Pre-validate hook - Ensure user or customer is present
+WishlistSchema.pre('validate', function(next) {
+  const doc = this as any;
+  if (!doc.user && !doc.customer) {
+    next(new Error('Wishlist must have either user or customer'));
+  } else {
+    next();
+  }
+});
 
 // Virtual for total value (requires population)
 WishlistSchema.virtual('totalValue').get(function() {

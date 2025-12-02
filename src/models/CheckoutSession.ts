@@ -35,7 +35,8 @@ export interface IDiscount {
 }
 
 export interface ICheckoutSession extends Document {
-  userId: mongoose.Types.ObjectId;
+  userId?: mongoose.Types.ObjectId;  // For dashboard users
+  customerId?: mongoose.Types.ObjectId;  // For mobile app customers
   shopifyCartId: string;
 
   // Step 1: Shipping Information
@@ -159,7 +160,13 @@ const CheckoutSessionSchema = new Schema<ICheckoutSession>(
     userId: {
       type: Schema.Types.ObjectId,
       ref: 'User',
-      required: [true, 'User ID is required'],
+      required: false,  // Made optional - either userId or customerId must be present
+      index: true,
+    },
+    customerId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Customer',
+      required: false,  // Either userId or customerId must be present
       index: true,
     },
     shopifyCartId: {
@@ -401,8 +408,20 @@ CheckoutSessionSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 // Compound indexes for querying
 CheckoutSessionSchema.index({ userId: 1, status: 1 });
 CheckoutSessionSchema.index({ userId: 1, createdAt: -1 });
+CheckoutSessionSchema.index({ customerId: 1, status: 1 });  // Index for customer checkout sessions
+CheckoutSessionSchema.index({ customerId: 1, createdAt: -1 });  // Index for customer checkout history
 CheckoutSessionSchema.index({ shopifyCartId: 1 });
 CheckoutSessionSchema.index({ stripePaymentIntentId: 1 });
+
+// Pre-validate hook - Ensure userId or customerId is present
+CheckoutSessionSchema.pre('validate', function(next) {
+  const doc = this as any;
+  if (!doc.userId && !doc.customerId) {
+    next(new Error('CheckoutSession must have either userId or customerId'));
+  } else {
+    next();
+  }
+});
 
 // =============================================================================
 // VIRTUALS

@@ -24,7 +24,8 @@ export interface ISearchFilters {
 }
 
 export interface ISearchHistory {
-  userId?: mongoose.Types.ObjectId; // Optional - supports guest searches
+  userId?: mongoose.Types.ObjectId; // Optional - supports guest searches (dashboard users)
+  customerId?: mongoose.Types.ObjectId; // Optional - for mobile app customers
   query: string; // The search query text
   searchType?: 'text' | 'product' | 'collection'; // Type of search performed
   resultsCount: number; // Number of results returned
@@ -78,6 +79,12 @@ const SearchHistorySchema = new Schema<ISearchHistory>(
       ref: 'User',
       index: true,
       sparse: true, // Allow null for guest searches
+    },
+    customerId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Customer',
+      index: true,
+      sparse: true, // Allow null for guest/user searches
     },
     query: {
       type: String,
@@ -147,9 +154,11 @@ const SearchHistorySchema = new Schema<ISearchHistory>(
 // Compound indexes for common queries
 SearchHistorySchema.index({ query: 1, createdAt: -1 });
 SearchHistorySchema.index({ userId: 1, createdAt: -1 });
+SearchHistorySchema.index({ customerId: 1, createdAt: -1 });  // Index for customer search history
 SearchHistorySchema.index({ hasResults: 1, createdAt: -1 });
 SearchHistorySchema.index({ query: 1, hasResults: 1 });
 SearchHistorySchema.index({ userId: 1, searchType: 1, createdAt: -1 }); // For enriched searches
+SearchHistorySchema.index({ customerId: 1, searchType: 1, createdAt: -1 }); // For customer enriched searches
 SearchHistorySchema.index({ searchType: 1, createdAt: -1 }); // For trending by type
 
 // TTL index - auto-delete records older than 90 days (GDPR compliance)

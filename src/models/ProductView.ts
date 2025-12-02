@@ -36,6 +36,7 @@ export interface ISessionData {
 export interface IProductView extends Document {
   // User reference (optional for anonymous tracking)
   user?: mongoose.Types.ObjectId;
+  customer?: mongoose.Types.ObjectId;  // For mobile app customers
   anonymousId?: string; // For anonymous users
   
   // Product reference
@@ -126,14 +127,20 @@ const InteractionsSchema = new Schema({
 }, { _id: false });
 
 const ProductViewSchema = new Schema({
-  // User identification
-  user: { 
-    type: Schema.Types.ObjectId, 
+  // User identification (optional - can be user, customer, or anonymous)
+  user: {
+    type: Schema.Types.ObjectId,
     ref: 'User',
     sparse: true,
     index: true
   },
-  anonymousId: { 
+  customer: {
+    type: Schema.Types.ObjectId,
+    ref: 'Customer',
+    sparse: true,
+    index: true
+  },
+  anonymousId: {
     type: String,
     sparse: true,
     index: true
@@ -199,6 +206,7 @@ const ProductViewSchema = new Schema({
 // Indexes for analytics queries
 ProductViewSchema.index({ product: 1, viewedAt: -1 });
 ProductViewSchema.index({ user: 1, viewedAt: -1 });
+ProductViewSchema.index({ customer: 1, viewedAt: -1 });  // Index for customer view queries
 ProductViewSchema.index({ 'session.sessionId': 1, viewedAt: 1 });
 ProductViewSchema.index({ viewedAt: -1 }); // For time-based analytics
 ProductViewSchema.index({ 'device.platform': 1, viewedAt: -1 });

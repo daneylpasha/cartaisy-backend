@@ -431,7 +431,13 @@ const OrderSchema = new Schema<IOrder>({
   user: {
     type: Schema.Types.ObjectId,
     ref: 'User',
-    required: [true, 'User is required'],
+    required: false,  // Made optional - either user or customer must be present
+    index: true
+  },
+  customer: {
+    type: Schema.Types.ObjectId,
+    ref: 'Customer',
+    required: false,  // Either user or customer must be present
     index: true
   },
   email: {
@@ -681,6 +687,7 @@ const OrderSchema = new Schema<IOrder>({
 // =============================================================================
 
 OrderSchema.index({ user: 1, placedAt: -1 });
+OrderSchema.index({ customer: 1, placedAt: -1 });  // Index for customer queries
 OrderSchema.index({ email: 1, placedAt: -1 });
 OrderSchema.index({ orderNumber: 1 });
 OrderSchema.index({ 'shipping.trackingNumber': 1 });
@@ -691,7 +698,21 @@ OrderSchema.index({ shopifyOrderId: 1 });
 
 // Compound indexes for complex queries
 OrderSchema.index({ user: 1, 'mobileStatus.current': 1, placedAt: -1 });
+OrderSchema.index({ customer: 1, 'mobileStatus.current': 1, placedAt: -1 });  // For customer order queries
 OrderSchema.index({ financialStatus: 1, placedAt: -1 });
+
+// =============================================================================
+// PRE-VALIDATE HOOK - Ensure user or customer is present
+// =============================================================================
+
+OrderSchema.pre('validate', function(next) {
+  const doc = this as any;
+  if (!doc.user && !doc.customer) {
+    next(new Error('Order must have either user or customer'));
+  } else {
+    next();
+  }
+});
 
 // =============================================================================
 // VIRTUALS

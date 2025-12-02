@@ -13,8 +13,9 @@ export interface IAdminResponse {
 }
 
 export interface IProductReview extends Document {
-  // Core review data
-  user: mongoose.Types.ObjectId;
+  // Core review data (either user or customer must be present)
+  user?: mongoose.Types.ObjectId;
+  customer?: mongoose.Types.ObjectId;
   product: mongoose.Types.ObjectId;
   orderId?: string; // Shopify order ID for verified purchases
   
@@ -73,11 +74,17 @@ const AdminResponseSchema = new Schema({
 }, { _id: false });
 
 const ProductReviewSchema = new Schema({
-  // Core references
-  user: { 
-    type: Schema.Types.ObjectId, 
-    ref: 'User', 
-    required: true,
+  // Core references (either user or customer must be present)
+  user: {
+    type: Schema.Types.ObjectId,
+    ref: 'User',
+    required: false,  // Made optional - either user or customer must be present
+    index: true
+  },
+  customer: {
+    type: Schema.Types.ObjectId,
+    ref: 'Customer',
+    required: false,  // Either user or customer must be present
     index: true
   },
   product: { 
@@ -157,12 +164,26 @@ const ProductReviewSchema = new Schema({
 // Compound indexes
 ProductReviewSchema.index({ product: 1, status: 1, createdAt: -1 });
 ProductReviewSchema.index({ user: 1, createdAt: -1 });
+ProductReviewSchema.index({ customer: 1, createdAt: -1 });  // Index for customer reviews
 ProductReviewSchema.index({ status: 1, moderatedAt: 1 });
 ProductReviewSchema.index({ rating: 1, verifiedPurchase: 1 });
 ProductReviewSchema.index({ helpfulCount: -1 });
 
 // Ensure one review per user per product (unless multiple orders)
-ProductReviewSchema.index({ user: 1, product: 1, orderId: 1 }, { unique: true });
+ProductReviewSchema.index({ user: 1, product: 1, orderId: 1 }, { unique: true, sparse: true });
+
+// Ensure one review per customer per product (unless multiple orders)
+ProductReviewSchema.index({ customer: 1, product: 1, orderId: 1 }, { unique: true, sparse: true });
+
+// Pre-validate hook - Ensure user or customer is present
+ProductReviewSchema.pre('validate', function(next) {
+  const doc = this as any;
+  if (!doc.user && !doc.customer) {
+    next(new Error('ProductReview must have either user or customer'));
+  } else {
+    next();
+  }
+});
 
 // Virtual for net helpful votes
 ProductReviewSchema.virtual('netHelpfulVotes').get(function() {

@@ -1,47 +1,63 @@
 import express from 'express';
 import { homescreenController } from '../controllers/homescreenController';
 
-// Wishlist controllers
+// Customer Wishlist controllers (uses Customer model, not User)
 import {
-  getUserWishlists,
-  getWishlist,
-  createWishlist,
-  updateWishlist,
-  deleteWishlist,
-  addToWishlist,
-  removeFromWishlist,
-  checkWishlistStatus,
-  shareWishlist,
-  getSharedWishlist,
-  moveItemBetweenWishlists
-} from '../controllers/wishlistController';
+  getWishlists as getCustomerWishlists,
+  getWishlist as getCustomerWishlist,
+  createWishlist as createCustomerWishlist,
+  updateWishlist as updateCustomerWishlist,
+  deleteWishlist as deleteCustomerWishlist,
+  addItemToWishlist,
+  removeItemFromWishlist,
+  checkProductInWishlist,
+  shareWishlist as shareCustomerWishlist,
+  moveItemsBetweenWishlists
+} from '../controllers/customerWishlistController';
 
-// Review controllers
+// User Wishlist controllers (for shared wishlist - public endpoint)
+import { getSharedWishlist } from '../controllers/wishlistController';
+
+// Customer Review controllers (uses Customer model, not User)
 import {
-  createReview,
-  getReview,
-  updateReview,
-  deleteReview,
-  voteOnReview,
-  getUserReviews,
-  reportReview,
+  createReview as createCustomerReview,
+  getReviews as getCustomerReviews,
+  getReview as getCustomerReview,
+  updateReview as updateCustomerReview,
+  deleteReview as deleteCustomerReview,
+  voteReview as voteCustomerReview,
+  reportReview as reportCustomerReview
+} from '../controllers/customerReviewController';
+
+// Admin Review controllers (for moderation - uses User/Admin model)
+import {
   getReviewAnalytics,
   moderateReview
 } from '../controllers/reviewController';
 
-// Order controllers
+// Customer Product controllers (uses Customer model, not User)
 import {
-  getUserOrders,
-  getOrder,
-  createOrder,
-  updateOrderStatus,
-  cancelOrder,
-  requestReturn,
-  getOrderTracking,
-  rateOrder,
-  createSupportTicket,
-  getOrderAnalytics
-} from '../controllers/orderController';
+  getRecommendations as getCustomerRecommendations,
+  trackProductView as trackCustomerProductView,
+  getRecentlyViewed as getCustomerRecentlyViewed,
+  clearViewHistory as clearCustomerViewHistory
+} from '../controllers/customerProductController';
+
+// Customer Order controllers (uses Customer model, not User)
+import {
+  getOrders as getCustomerOrders,
+  getOrder as getCustomerOrder,
+  createOrder as createCustomerOrder,
+  cancelOrder as cancelCustomerOrder,
+  returnOrder as returnCustomerOrder,
+  getOrderTracking as getCustomerOrderTracking,
+  rateOrder as rateCustomerOrder,
+  createSupportTicket as createCustomerSupportTicket,
+  getOrderAnalytics as getCustomerOrderAnalytics
+} from '../controllers/customerOrderController';
+
+// User Order controller (for admin operations)
+import { updateOrderStatus } from '../controllers/orderController';
 
 // NOTE: Search routes are now handled by TSOA auto-generated routes
 // See src/controllers/searchController.ts (TSOA controller)
@@ -80,39 +96,52 @@ router.get('/homescreen', authenticateCustomer, homescreenController.getHomescre
 // router.get('/homescreen/categories', homescreenController.getCategoriesOnly);
 
 // =============================================================================
-// WISHLIST ROUTES
+// WISHLIST ROUTES (Customer - uses authenticateCustomer middleware)
 // =============================================================================
 
 /**
  * @route GET /api/v1/customer/wishlists
- * @desc Get user's wishlists
- * @access Private
+ * @desc Get customer's wishlists
+ * @access Private (Customer)
  */
-router.get('/wishlists', requireAuth, getUserWishlists);
+router.get('/wishlists', authenticateCustomer, getCustomerWishlists as any);
 
 /**
  * @route POST /api/v1/customer/wishlists
  * @desc Create a new wishlist
- * @access Private
+ * @access Private (Customer)
  * @body {string} name - Wishlist name (required)
  * @body {string} description - Wishlist description (optional)
  * @body {boolean} isPrivate - Privacy setting (default: true)
  * @body {string} color - Theme color (default: #E91E63)
  */
-router.post('/wishlists', requireAuth, createWishlist);
+router.post('/wishlists', authenticateCustomer, createCustomerWishlist as any);
+
+/**
+ * @route GET /api/v1/customer/wishlists/check/:productId
+ * @desc Check if product is in any wishlist
+ * @access Private (Customer)
+ * @param {string} productId - Product ID
+ * @query {string} variantId - Product variant ID (optional)
+ */
+router.get('/wishlists/check/:productId',
+  validateObjectId('productId'),
+  authenticateCustomer,
+  checkProductInWishlist as any
+);
 
 /**
  * @route GET /api/v1/customer/wishlists/:wishlistId
  * @desc Get specific wishlist with items
- * @access Private
+ * @access Private (Customer)
  * @param {string} wishlistId - Wishlist ID
  */
-router.get('/wishlists/:wishlistId', validateObjectId('wishlistId'), requireAuth, getWishlist);
+router.get('/wishlists/:wishlistId', validateObjectId('wishlistId'), authenticateCustomer, getCustomerWishlist as any);
 
 /**
  * @route PUT /api/v1/customer/wishlists/:wishlistId
  * @desc Update wishlist details
- * @access Private
+ * @access Private (Customer)
  * @param {string} wishlistId - Wishlist ID
  * @body {string} name - Wishlist name
  * @body {string} description - Wishlist description
@@ -120,265 +149,291 @@ router.get('/wishlists/:wishlistId', validateObjectId('wishlistId'), requireAuth
  * @body {string} color - Theme color
  * @body {boolean} isDefault - Default wishlist flag
  */
-router.put('/wishlists/:wishlistId', validateObjectId('wishlistId'), requireAuth, updateWishlist);
+router.put('/wishlists/:wishlistId', validateObjectId('wishlistId'), authenticateCustomer, updateCustomerWishlist as any);
 
 /**
  * @route DELETE /api/v1/customer/wishlists/:wishlistId
  * @desc Delete a wishlist
- * @access Private
+ * @access Private (Customer)
  * @param {string} wishlistId - Wishlist ID
  */
-router.delete('/wishlists/:wishlistId', validateObjectId('wishlistId'), requireAuth, deleteWishlist);
+router.delete('/wishlists/:wishlistId', validateObjectId('wishlistId'), authenticateCustomer, deleteCustomerWishlist as any);
 
 /**
  * @route POST /api/v1/customer/wishlists/:wishlistId/items
  * @desc Add product to wishlist
- * @access Private
+ * @access Private (Customer)
  * @param {string} wishlistId - Wishlist ID (or 'default' for default wishlist)
  * @body {string} productId - Product ID (required)
  * @body {string} variantId - Product variant ID (optional)
  * @body {string} notes - Personal notes (optional)
  * @body {number} priority - Priority level 1-5 (default: 3)
  */
-router.post('/wishlists/:wishlistId/items', requireAuth, addToWishlist);
+router.post('/wishlists/:wishlistId/items', authenticateCustomer, addItemToWishlist as any);
 
 /**
  * @route DELETE /api/v1/customer/wishlists/:wishlistId/items/:productId
  * @desc Remove product from wishlist
- * @access Private
+ * @access Private (Customer)
  * @param {string} wishlistId - Wishlist ID
  * @param {string} productId - Product ID
  * @query {string} variantId - Product variant ID (optional)
  */
-router.delete('/wishlists/:wishlistId/items/:productId', 
-  validateObjectId('wishlistId'), 
-  validateObjectId('productId'), 
-  requireAuth, 
-  removeFromWishlist
-);
-
-/**
- * @route GET /api/v1/customer/wishlists/check/:productId
- * @desc Check if product is in any wishlist
- * @access Private
- * @param {string} productId - Product ID
- * @query {string} variantId - Product variant ID (optional)
- */
-router.get('/wishlists/check/:productId', 
-  validateObjectId('productId'), 
-  requireAuth, 
-  checkWishlistStatus
+router.delete('/wishlists/:wishlistId/items/:productId',
+  validateObjectId('wishlistId'),
+  validateObjectId('productId'),
+  authenticateCustomer,
+  removeItemFromWishlist as any
 );
 
 /**
  * @route POST /api/v1/customer/wishlists/:wishlistId/share
  * @desc Share wishlist with others
- * @access Private
+ * @access Private (Customer)
  * @param {string} wishlistId - Wishlist ID
  * @body {boolean} isPublic - Make publicly accessible (default: false)
  * @body {string[]} emails - Email addresses to share with (optional)
  * @body {number} expiresInDays - Expiration in days (optional)
  */
-router.post('/wishlists/:wishlistId/share', 
-  validateObjectId('wishlistId'), 
-  requireAuth, 
-  shareWishlist
+router.post('/wishlists/:wishlistId/share',
+  validateObjectId('wishlistId'),
+  authenticateCustomer,
+  shareCustomerWishlist as any
 );
 
 /**
  * @route POST /api/v1/customer/wishlists/:sourceWishlistId/move/:targetWishlistId
- * @desc Move item between wishlists
- * @access Private
+ * @desc Move items between wishlists
+ * @access Private (Customer)
  * @param {string} sourceWishlistId - Source wishlist ID
  * @param {string} targetWishlistId - Target wishlist ID
- * @body {string} productId - Product ID (required)
+ * @body {string} productId - Product ID (required) or {string[]} productIds - Array of product IDs
  * @body {string} variantId - Product variant ID (optional)
  */
 router.post('/wishlists/:sourceWishlistId/move/:targetWishlistId',
   validateObjectId('sourceWishlistId'),
   validateObjectId('targetWishlistId'),
-  requireAuth,
-  moveItemBetweenWishlists
+  authenticateCustomer,
+  moveItemsBetweenWishlists as any
 );
 
 // =============================================================================
-// REVIEW ROUTES
+// REVIEW ROUTES (Customer - uses authenticateCustomer middleware)
 // =============================================================================
 
 /**
  * @route POST /api/v1/customer/reviews
  * @desc Create a product review
- * @access Private
+ * @access Private (Customer)
  * @body {string} productId - Product ID (required)
  * @body {number} rating - Rating 1-5 (required)
- * @body {string} reviewText - Review text (required)
+ * @body {string} comment - Review text (required) - also accepts 'reviewText'
  * @body {string} title - Review title (optional)
  * @body {string[]} images - Review images (optional)
- * @body {string[]} pros - Product pros (optional)
- * @body {string[]} cons - Product cons (optional)
  * @body {boolean} wouldRecommend - Recommendation flag (optional)
  */
-router.post('/reviews', requireAuth, createReview);
+router.post('/reviews', authenticateCustomer, createCustomerReview as any);
 
 /**
  * @route GET /api/v1/customer/reviews
- * @desc Get user's reviews
- * @access Private
+ * @desc Get customer's reviews
+ * @access Private (Customer)
  * @query {string} page - Page number (default: 1)
- * @query {string} limit - Items per page (default: 10)
+ * @query {string} limit - Items per page (default: 20)
  * @query {string} status - Filter by status (all, pending, approved, rejected)
  */
-router.get('/reviews', requireAuth, getUserReviews);
+router.get('/reviews', authenticateCustomer, getCustomerReviews as any);
 
 /**
  * @route GET /api/v1/customer/reviews/:reviewId
  * @desc Get specific review
- * @access Private
+ * @access Private (Customer)
  * @param {string} reviewId - Review ID
  */
-router.get('/reviews/:reviewId', validateObjectId('reviewId'), requireAuth, getReview);
+router.get('/reviews/:reviewId', validateObjectId('reviewId'), authenticateCustomer, getCustomerReview as any);
 
 /**
  * @route PUT /api/v1/customer/reviews/:reviewId
- * @desc Update a review
- * @access Private
+ * @desc Update a review (within 30-day edit window)
+ * @access Private (Customer)
  * @param {string} reviewId - Review ID
  * @body {number} rating - Rating 1-5
- * @body {string} reviewText - Review text
+ * @body {string} comment - Review text (also accepts 'reviewText')
  * @body {string} title - Review title
  * @body {string[]} images - Review images
- * @body {string[]} pros - Product pros
- * @body {string[]} cons - Product cons
- * @body {boolean} wouldRecommend - Recommendation flag
  */
-router.put('/reviews/:reviewId', validateObjectId('reviewId'), requireAuth, updateReview);
+router.put('/reviews/:reviewId', validateObjectId('reviewId'), authenticateCustomer, updateCustomerReview as any);
 
 /**
  * @route DELETE /api/v1/customer/reviews/:reviewId
  * @desc Delete a review
- * @access Private
+ * @access Private (Customer)
  * @param {string} reviewId - Review ID
  */
-router.delete('/reviews/:reviewId', validateObjectId('reviewId'), requireAuth, deleteReview);
+router.delete('/reviews/:reviewId', validateObjectId('reviewId'), authenticateCustomer, deleteCustomerReview as any);
 
 /**
  * @route POST /api/v1/customer/reviews/:reviewId/vote
  * @desc Vote on a review (helpful/not helpful)
- * @access Private
+ * @access Private (Customer)
  * @param {string} reviewId - Review ID
- * @body {string} voteType - Vote type ('helpful' or 'not_helpful')
+ * @body {string} voteType - Vote type ('helpful' or 'not-helpful')
  */
-router.post('/reviews/:reviewId/vote', validateObjectId('reviewId'), requireAuth, voteOnReview);
+router.post('/reviews/:reviewId/vote', validateObjectId('reviewId'), authenticateCustomer, voteCustomerReview as any);
 
 /**
  * @route POST /api/v1/customer/reviews/:reviewId/report
  * @desc Report a review
- * @access Private
+ * @access Private (Customer)
  * @param {string} reviewId - Review ID
- * @body {string} reason - Report reason (required)
- * @body {string} description - Additional description (optional)
+ * @body {string} reason - Report reason (spam, offensive, fake, inappropriate, other)
+ * @body {string} details - Additional details (optional)
  */
-router.post('/reviews/:reviewId/report', validateObjectId('reviewId'), requireAuth, reportReview);
+router.post('/reviews/:reviewId/report', validateObjectId('reviewId'), authenticateCustomer, reportCustomerReview as any);
 
 // =============================================================================
-// ORDER ROUTES
+// ORDER ROUTES (Customer - uses authenticateCustomer middleware)
 // =============================================================================
 
 /**
+ * @route GET /api/v1/customer/orders/analytics
+ * @desc Get customer's order analytics
+ * @access Private (Customer)
+ * @query {string} timeframe - Timeframe in days (default: 365)
+ */
+router.get('/orders/analytics', authenticateCustomer, getCustomerOrderAnalytics as any);
+
+/**
  * @route GET /api/v1/customer/orders
- * @desc Get user's orders
- * @access Private
+ * @desc Get customer's orders
+ * @access Private (Customer)
  * @query {string} page - Page number (default: 1)
- * @query {string} limit - Items per page (default: 10)
+ * @query {string} limit - Items per page (default: 20)
  * @query {string} status - Filter by status
  * @query {string} startDate - Start date filter (ISO string)
  * @query {string} endDate - End date filter (ISO string)
  */
-router.get('/orders', requireAuth, getUserOrders);
+router.get('/orders', authenticateCustomer, getCustomerOrders as any);
 
 /**
  * @route POST /api/v1/customer/orders
  * @desc Create a new order
- * @access Private
+ * @access Private (Customer)
  * @body {object[]} lineItems - Order items (required)
- * @body {object} billingAddress - Billing address (required)
- * @body {object} shippingAddress - Shipping address (required)
+ * @body {number} shippingAddressId - Index of shipping address in customer's addresses
+ * @body {number} billingAddressId - Index of billing address (optional, defaults to shipping)
  * @body {object} shipping - Shipping method and cost (required)
- * @body {string} specialInstructions - Special delivery instructions (optional)
- * @body {object} deliveryPreferences - Delivery preferences (optional)
+ * @body {string} notes - Special instructions (optional)
  * @body {string} source - Order source (default: 'mobile')
  * @body {string} channel - Order channel (default: 'app')
- * @body {string} campaignId - Marketing campaign ID (optional)
  */
-router.post('/orders', requireAuth, createOrder);
+router.post('/orders', authenticateCustomer, createCustomerOrder as any);
 
 /**
  * @route GET /api/v1/customer/orders/:orderId
  * @desc Get specific order details
- * @access Private
+ * @access Private (Customer)
  * @param {string} orderId - Order ID
  */
-router.get('/orders/:orderId', validateObjectId('orderId'), requireAuth, getOrder);
+router.get('/orders/:orderId', validateObjectId('orderId'), authenticateCustomer, getCustomerOrder as any);
 
 /**
  * @route POST /api/v1/customer/orders/:orderId/cancel
  * @desc Cancel an order
- * @access Private
+ * @access Private (Customer)
  * @param {string} orderId - Order ID
  * @body {string} reason - Cancellation reason (optional)
  */
-router.post('/orders/:orderId/cancel', validateObjectId('orderId'), requireAuth, cancelOrder);
+router.post('/orders/:orderId/cancel', validateObjectId('orderId'), authenticateCustomer, cancelCustomerOrder as any);
 
 /**
  * @route POST /api/v1/customer/orders/:orderId/return
  * @desc Request order return/exchange
- * @access Private
+ * @access Private (Customer)
  * @param {string} orderId - Order ID
  * @body {string} type - Return type ('return' or 'exchange')
  * @body {string} reason - Return reason (required)
  * @body {object[]} items - Items to return (required)
  */
-router.post('/orders/:orderId/return', validateObjectId('orderId'), requireAuth, requestReturn);
+router.post('/orders/:orderId/return', validateObjectId('orderId'), authenticateCustomer, returnCustomerOrder as any);
 
 /**
  * @route GET /api/v1/customer/orders/:orderId/tracking
  * @desc Get order tracking information
- * @access Private
+ * @access Private (Customer)
  * @param {string} orderId - Order ID
  */
-router.get('/orders/:orderId/tracking', validateObjectId('orderId'), requireAuth, getOrderTracking);
+router.get('/orders/:orderId/tracking', validateObjectId('orderId'), authenticateCustomer, getCustomerOrderTracking as any);
 
 /**
  * @route POST /api/v1/customer/orders/:orderId/rate
  * @desc Rate a delivered order
- * @access Private
+ * @access Private (Customer)
  * @param {string} orderId - Order ID
- * @body {number} overallRating - Overall rating 1-5 (required)
+ * @body {number} rating - Overall rating 1-5 (required)
+ * @body {string} review - Review comment (optional)
  * @body {number} deliveryRating - Delivery rating 1-5 (optional)
  * @body {number} packagingRating - Packaging rating 1-5 (optional)
  * @body {number} productQualityRating - Product quality rating 1-5 (optional)
  * @body {number} customerServiceRating - Customer service rating 1-5 (optional)
- * @body {string} comment - Rating comment (optional)
  */
-router.post('/orders/:orderId/rate', validateObjectId('orderId'), requireAuth, rateOrder);
+router.post('/orders/:orderId/rate', validateObjectId('orderId'), authenticateCustomer, rateCustomerOrder as any);
 
 /**
  * @route POST /api/v1/customer/orders/:orderId/support
  * @desc Create support ticket for order
- * @access Private
+ * @access Private (Customer)
  * @param {string} orderId - Order ID
  * @body {string} subject - Ticket subject (required)
+ * @body {string} message - Ticket message (optional)
  * @body {string} priority - Ticket priority (low, medium, high, urgent)
  */
-router.post('/orders/:orderId/support', validateObjectId('orderId'), requireAuth, createSupportTicket);
+router.post('/orders/:orderId/support', validateObjectId('orderId'), authenticateCustomer, createCustomerSupportTicket as any);
+
+// =============================================================================
+// PRODUCT INTERACTION ROUTES (Customer - uses authenticateCustomer middleware)
+// =============================================================================
 
 /**
- * @route GET /api/v1/customer/orders/analytics
- * @desc Get user's order analytics
- * @access Private
- * @query {string} timeframe - Timeframe in days (default: 30)
+ * @route GET /api/v1/customer/products/recommendations
+ * @desc Get personalized product recommendations
+ * @access Private (Customer)
+ * @query {string} limit - Number of products (default: 10, max: 50)
+ * @query {string} type - Recommendation type (general, similar, trending, for_you)
  */
-router.get('/orders/analytics', requireAuth, getOrderAnalytics);
+router.get('/products/recommendations', authenticateCustomer, getCustomerRecommendations as any);
+
+/**
+ * @route GET /api/v1/customer/products/recently-viewed
+ * @desc Get customer's recently viewed products
+ * @access Private (Customer)
+ * @query {string} limit - Number of products (default: 10, max: 50)
+ */
+router.get('/products/recently-viewed', authenticateCustomer, getCustomerRecentlyViewed as any);
+
+/**
+ * @route DELETE /api/v1/customer/products/view-history
+ * @desc Clear customer's view history
+ * @access Private (Customer)
+ */
+router.delete('/products/view-history', authenticateCustomer, clearCustomerViewHistory as any);
+
+/**
+ * @route POST /api/v1/customer/products/:productId/track-view
+ * @desc Track product view for analytics
+ * @access Private (Customer)
+ * @param {string} productId - Product ID
+ * @body {string} from - View context (search, category, recommendation, direct, related, featured)
+ * @body {string} searchQuery - Search query if viewed from search (optional)
+ * @body {string} categoryId - Category ID if viewed from category (optional)
+ * @body {number} duration - View duration in seconds (optional)
+ * @body {number} scrollDepth - Scroll depth percentage (optional)
+ */
+router.post('/products/:productId/track-view',
+  validateObjectId('productId'),
+  authenticateCustomer,
+  trackCustomerProductView as any
+);
 
 // =============================================================================
 // SEARCH ROUTES
