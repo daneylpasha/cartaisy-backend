@@ -1,11 +1,48 @@
 import { Body, Controller, Delete, Get, Path, Post, Query, Request, Route, Security, Tags, Response } from 'tsoa';
 import CheckoutSession, { ICheckoutSessionDocument } from '../models/CheckoutSession';
 import User from '../models/User';
+import Customer from '../models/Customer';
 import Order from '../models/Order';
 import Product from '../models/Product';
 import shopifyStorefront from '../services/shopifyStorefrontService';
 import stripeService from '../services/stripeService';
 import { normalizeAddressForShopify } from '../utils/addressHelper';
+
+/**
+ * Helper function to find user by ID in both User and Customer collections
+ * Supports both admin/web users (User model) and mobile app users (Customer model)
+ */
+async function findUserOrCustomer(userId: string) {
+  // First try User model
+  let user = await User.findById(userId);
+  if (user) {
+    return {
+      _id: user._id,
+      email: user.email,
+      name: user.name,
+      phone: user.phone,
+      addresses: user.addresses,
+      stripeCustomerId: user.stripeCustomerId,
+      isUser: true
+    };
+  }
+
+  // Fallback to Customer model
+  const customer = await Customer.findById(userId);
+  if (customer) {
+    return {
+      _id: customer._id,
+      email: customer.email,
+      name: customer.name,
+      phone: customer.phone,
+      addresses: customer.addresses,
+      stripeCustomerId: (customer as any).stripeCustomerId,
+      isUser: false
+    };
+  }
+
+  return null;
+}
 import {
   InitCheckoutRequest,
   InitCheckoutResponse,
@@ -198,8 +235,8 @@ export class CheckoutController extends Controller {
         throw new Error('Checkout session has expired');
       }
 
-      // Get user and address
-      const user = await User.findById(userId);
+      // Get user and address (supports both User and Customer models)
+      const user = await findUserOrCustomer(userId);
       if (!user) {
         console.error('User not found:', userId);
         this.setStatus(404);
@@ -213,7 +250,7 @@ export class CheckoutController extends Controller {
         throw new Error('Address not found');
       }
 
-      const address = user.addresses[addressId];
+      const address = user.addresses[addressId] as any;
       console.log('Address retrieved:', {
         addressId,
         country: address.country,
@@ -363,15 +400,15 @@ export class CheckoutController extends Controller {
         throw new Error('Unauthorized access to checkout session');
       }
 
-      // Get user to validate address
-      const user = await User.findById(userId);
+      // Get user to validate address (supports both User and Customer models)
+      const user = await findUserOrCustomer(userId);
       if (!user || !user.addresses || !user.addresses[shippingAddressId]) {
         this.setStatus(404);
         throw new Error('Address not found');
       }
 
       // Get shipping rate details from Shopify
-      const address = user.addresses[shippingAddressId];
+      const address = user.addresses[shippingAddressId] as any;
       const normalizedAddress = normalizeAddressForShopify({
         country: address.country,
         countryCode: address.countryCode,
@@ -501,8 +538,8 @@ export class CheckoutController extends Controller {
         throw new Error('Please complete shipping information first');
       }
 
-      // Fetch user to get Stripe customer ID
-      const user = await User.findById(userId);
+      // Fetch user to get Stripe customer ID (supports both User and Customer models)
+      const user = await findUserOrCustomer(userId);
       if (!user || !user.stripeCustomerId) {
         this.setStatus(400);
         throw new Error('User does not have a Stripe customer account');
@@ -906,8 +943,8 @@ export class CheckoutController extends Controller {
         throw new Error('Unauthorized access to checkout session');
       }
 
-      // Get user for address
-      const user = await User.findById(userId);
+      // Get user for address (supports both User and Customer models)
+      const user = await findUserOrCustomer(userId);
       if (!user) {
         this.setStatus(404);
         throw new Error('User not found');
@@ -1149,8 +1186,8 @@ export class CheckoutController extends Controller {
         session.paymentError = undefined;
       }
 
-      // Get user
-      const user = await User.findById(userId);
+      // Get user (supports both User and Customer models)
+      const user = await findUserOrCustomer(userId);
       if (!user) {
         this.setStatus(404);
         throw new Error('User not found');
@@ -1271,8 +1308,13 @@ export class CheckoutController extends Controller {
           name: user.name || '',
         });
         stripeCustomerId = stripeCustomer.id;
-        user.stripeCustomerId = stripeCustomerId;
-        await user.save();
+
+        // Save stripeCustomerId to the appropriate model
+        if (user.isUser) {
+          await User.findByIdAndUpdate(userId, { stripeCustomerId });
+        } else {
+          await Customer.findByIdAndUpdate(userId, { stripeCustomerId });
+        }
       }
 
       // Create payment intent
