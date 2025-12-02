@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Delete, Put, Body, Path, Request, Route, Tags, Security, Response, SuccessResponse } from 'tsoa';
 import { AuthenticatedRequest } from '../types';
 import User from '../models/User';
+import Customer from '../models/Customer';
 import Stripe from 'stripe';
 import {
   StorePaymentMethodRequest,
@@ -15,6 +16,44 @@ import {
 
 // Import Stripe service
 import stripeService from '../services/stripeService';
+
+/**
+ * Helper function to find user by ID in both User and Customer collections
+ * Supports both admin/web users (User model) and mobile app users (Customer model)
+ */
+async function findUserOrCustomer(userId: string) {
+  // First try User model
+  let user = await User.findById(userId);
+  if (user) {
+    return {
+      _id: user._id,
+      email: user.email,
+      name: user.name,
+      stripeCustomerId: user.stripeCustomerId,
+      isUser: true,
+      save: async () => {
+        await User.findByIdAndUpdate(userId, { stripeCustomerId: user!.stripeCustomerId });
+      }
+    };
+  }
+
+  // Fallback to Customer model
+  const customer = await Customer.findById(userId);
+  if (customer) {
+    return {
+      _id: customer._id,
+      email: customer.email,
+      name: customer.name,
+      stripeCustomerId: (customer as any).stripeCustomerId,
+      isUser: false,
+      save: async function() {
+        await Customer.findByIdAndUpdate(userId, { stripeCustomerId: this.stripeCustomerId });
+      }
+    };
+  }
+
+  return null;
+}
 
 /**
  * Payment Methods Controller
@@ -95,8 +134,8 @@ export class PaymentMethodsController extends Controller {
         };
       }
 
-      // Get user from database
-      const user = await User.findById(request.user._id);
+      // Get user from database (supports both User and Customer models)
+      const user = await findUserOrCustomer(request.user._id.toString());
       if (!user) {
         this.setStatus(404);
         throw new Error('User not found');
@@ -114,8 +153,8 @@ export class PaymentMethodsController extends Controller {
       }
 
       // Get customer to find default payment method
-      const customer = await stripeService.getCustomer(user.stripeCustomerId);
-      const defaultPmId = (customer as Stripe.Customer).invoice_settings?.default_payment_method as string | undefined;
+      const stripeCustomer = await stripeService.getCustomer(user.stripeCustomerId);
+      const defaultPmId = (stripeCustomer as Stripe.Customer).invoice_settings?.default_payment_method as string | undefined;
 
       // List payment methods from Stripe
       const paymentMethods = await stripeService.listPaymentMethods(user.stripeCustomerId, 'card');
@@ -176,8 +215,8 @@ export class PaymentMethodsController extends Controller {
         };
       }
 
-      // Get user from database
-      const user = await User.findById(request.user._id);
+      // Get user from database (supports both User and Customer models)
+      const user = await findUserOrCustomer(request.user._id.toString());
       if (!user) {
         this.setStatus(404);
         return {
@@ -245,8 +284,8 @@ export class PaymentMethodsController extends Controller {
         };
       }
 
-      // Get user from database
-      const user = await User.findById(request.user._id);
+      // Get user from database (supports both User and Customer models)
+      const user = await findUserOrCustomer(request.user._id.toString());
       if (!user || !user.stripeCustomerId) {
         this.setStatus(404);
         return {
@@ -320,8 +359,8 @@ export class PaymentMethodsController extends Controller {
         };
       }
 
-      // Get user from database
-      const user = await User.findById(request.user._id);
+      // Get user from database (supports both User and Customer models)
+      const user = await findUserOrCustomer(request.user._id.toString());
       if (!user || !user.stripeCustomerId) {
         this.setStatus(404);
         return {
@@ -387,8 +426,8 @@ export class PaymentMethodsController extends Controller {
         };
       }
 
-      // Get user from database
-      const user = await User.findById(request.user._id);
+      // Get user from database (supports both User and Customer models)
+      const user = await findUserOrCustomer(request.user._id.toString());
       if (!user || !user.stripeCustomerId) {
         this.setStatus(404);
         return {
@@ -398,8 +437,8 @@ export class PaymentMethodsController extends Controller {
       }
 
       // Get customer
-      const customer = await stripeService.getCustomer(user.stripeCustomerId);
-      const defaultPmId = (customer as Stripe.Customer).invoice_settings?.default_payment_method as string | undefined;
+      const stripeCustomer = await stripeService.getCustomer(user.stripeCustomerId);
+      const defaultPmId = (stripeCustomer as Stripe.Customer).invoice_settings?.default_payment_method as string | undefined;
 
       if (!defaultPmId) {
         this.setStatus(404);
