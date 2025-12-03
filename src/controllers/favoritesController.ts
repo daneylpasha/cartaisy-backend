@@ -27,6 +27,7 @@ export class FavoritesController extends Controller {
   public async getFavorites(@Request() request: any): Promise<FavoritesResponse> {
     try {
       const userId = request.user?.id || request.user?._id;
+      const isCustomer = request.user?.role === 'customer';
 
       if (!userId) {
         this.setStatus(401);
@@ -36,7 +37,9 @@ export class FavoritesController extends Controller {
         };
       }
 
-      const favorites = await Favorite.find({ userId })
+      // Query by customerId for customers, userId for users
+      const query = isCustomer ? { customerId: userId } : { userId };
+      const favorites = await Favorite.find(query)
         .select('productId')
         .lean();
 
@@ -70,6 +73,7 @@ export class FavoritesController extends Controller {
   ): Promise<FavoriteOperationResponse> {
     try {
       const userId = request.user?.id || request.user?._id;
+      const isCustomer = request.user?.role === 'customer';
 
       if (!userId) {
         this.setStatus(401);
@@ -100,11 +104,11 @@ export class FavoritesController extends Controller {
         };
       }
 
-      // Check if already favorited
-      const existing = await Favorite.findOne({
-        userId,
-        productId: sanitizedProductId,
-      });
+      // Check if already favorited - query by customerId for customers, userId for users
+      const query = isCustomer
+        ? { customerId: userId, productId: sanitizedProductId }
+        : { userId, productId: sanitizedProductId };
+      const existing = await Favorite.findOne(query);
 
       if (existing) {
         return {
@@ -113,11 +117,11 @@ export class FavoritesController extends Controller {
         };
       }
 
-      // Add to favorites
-      await Favorite.create({
-        userId,
-        productId: sanitizedProductId,
-      });
+      // Add to favorites - set customerId for customers, userId for users
+      const favoriteData = isCustomer
+        ? { customerId: userId, productId: sanitizedProductId }
+        : { userId, productId: sanitizedProductId };
+      await Favorite.create(favoriteData);
 
       return {
         success: true,
@@ -147,6 +151,7 @@ export class FavoritesController extends Controller {
   ): Promise<FavoriteOperationResponse> {
     try {
       const userId = request.user?.id || request.user?._id;
+      const isCustomer = request.user?.role === 'customer';
 
       if (!userId) {
         this.setStatus(401);
@@ -156,10 +161,11 @@ export class FavoritesController extends Controller {
         };
       }
 
-      const result = await Favorite.deleteOne({
-        userId,
-        productId,
-      });
+      // Delete by customerId for customers, userId for users
+      const query = isCustomer
+        ? { customerId: userId, productId }
+        : { userId, productId };
+      const result = await Favorite.deleteOne(query);
 
       if (result.deletedCount === 0) {
         this.setStatus(404);
@@ -199,6 +205,7 @@ export class FavoritesController extends Controller {
   ): Promise<DetailedFavoritesResponse> {
     try {
       const userId = request.user?.id || request.user?._id;
+      const isCustomer = request.user?.role === 'customer';
 
       if (!userId) {
         this.setStatus(401);
@@ -236,11 +243,14 @@ export class FavoritesController extends Controller {
 
       const skip = (pageNum - 1) * limitNum;
 
+      // Query by customerId for customers, userId for users
+      const query = isCustomer ? { customerId: userId } : { userId };
+
       // Get total count of favorites for pagination
-      const totalFavorites = await Favorite.countDocuments({ userId });
+      const totalFavorites = await Favorite.countDocuments(query);
 
       // Get paginated favorite product IDs, sorted by most recently added
-      const favorites = await Favorite.find({ userId })
+      const favorites = await Favorite.find(query)
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limitNum)
