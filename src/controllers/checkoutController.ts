@@ -1456,7 +1456,8 @@ export class CheckoutController extends Controller {
       const confirmationNumber = `CONF-${timestamp}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
 
       const order = new Order({
-        user: userId,
+        // Set user or customer based on which model the account is from
+        ...(user.isUser ? { user: userId } : { customer: userId }),
         orderNumber,
         confirmationNumber,
         email: user.email,

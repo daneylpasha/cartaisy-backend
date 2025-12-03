@@ -60,8 +60,8 @@ export const getOrders = async (req: CustomerRequest, res: Response): Promise<vo
     const limitNum = parseInt(limit as string);
     const skip = (pageNum - 1) * limitNum;
 
-    // Build filter
-    const filter: any = { customer: customerId };
+    // Build filter - query by either customer or user field for backwards compatibility
+    const filter: any = { $or: [{ customer: customerId }, { user: customerId }] };
 
     if (status) {
       filter['mobileStatus.current'] = status;
@@ -299,7 +299,7 @@ export const createOrder = async (req: CustomerRequest, res: Response): Promise<
           shipping: shippingCost,
           total: totalPrice,
           currency: 'USD',
-          itemCount: order.totalItems,
+          itemCount: (order as any).totalItems || order.lineItems?.length || 0,
           placedAt: order.placedAt
         }
       }
@@ -322,7 +322,7 @@ export const getOrder = async (req: CustomerRequest, res: Response): Promise<voi
     const { orderId } = req.params;
 
     // Fetch order and verify ownership
-    const order = await Order.findOne({ _id: orderId, customer: customerId }).lean();
+    const order = await Order.findOne({ _id: orderId, $or: [{ customer: customerId }, { user: customerId }] }).lean();
 
     if (!order) {
       res.status(404).json({
@@ -394,7 +394,7 @@ export const cancelOrder = async (req: CustomerRequest, res: Response): Promise<
     const { orderId } = req.params;
     const { reason } = req.body;
 
-    const order = await Order.findOne({ _id: orderId, customer: customerId });
+    const order = await Order.findOne({ _id: orderId, $or: [{ customer: customerId }, { user: customerId }] });
 
     if (!order) {
       res.status(404).json({
@@ -481,7 +481,7 @@ export const returnOrder = async (req: CustomerRequest, res: Response): Promise<
       return;
     }
 
-    const order = await Order.findOne({ _id: orderId, customer: customerId });
+    const order = await Order.findOne({ _id: orderId, $or: [{ customer: customerId }, { user: customerId }] });
 
     if (!order) {
       res.status(404).json({
@@ -575,7 +575,7 @@ export const getOrderTracking = async (req: CustomerRequest, res: Response): Pro
     const customerId = req.customer.id;
     const { orderId } = req.params;
 
-    const order = await Order.findOne({ _id: orderId, customer: customerId })
+    const order = await Order.findOne({ _id: orderId, $or: [{ customer: customerId }, { user: customerId }] })
       .select('orderNumber shipping mobileStatus')
       .lean();
 
@@ -597,7 +597,7 @@ export const getOrderTracking = async (req: CustomerRequest, res: Response): Pro
         tracking = {
           carrier: trackingDoc.carrier || order.shipping.carrier,
           trackingNumber: trackingDoc.trackingNumber,
-          trackingUrl: trackingDoc.trackingUrl || order.shipping.trackingUrl,
+          trackingUrl: (trackingDoc as any).trackingUrl || (order.shipping as any).trackingUrl,
           estimatedDelivery: trackingDoc.estimatedDelivery || order.shipping.estimatedDelivery,
           currentStatus: trackingDoc.currentStatus,
           events: trackingDoc.events || []
@@ -658,7 +658,7 @@ export const rateOrder = async (req: CustomerRequest, res: Response): Promise<vo
       return;
     }
 
-    const order = await Order.findOne({ _id: orderId, customer: customerId });
+    const order = await Order.findOne({ _id: orderId, $or: [{ customer: customerId }, { user: customerId }] });
 
     if (!order) {
       res.status(404).json({
@@ -731,7 +731,7 @@ export const createSupportTicket = async (req: CustomerRequest, res: Response): 
       return;
     }
 
-    const order = await Order.findOne({ _id: orderId, customer: customerId });
+    const order = await Order.findOne({ _id: orderId, $or: [{ customer: customerId }, { user: customerId }] });
 
     if (!order) {
       res.status(404).json({
@@ -800,10 +800,11 @@ export const getOrderAnalytics = async (req: CustomerRequest, res: Response): Pr
     const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
     // Get customer's order statistics
+    const customerObjectId = new mongoose.Types.ObjectId(customerId);
     const orderStats = await Order.aggregate([
       {
         $match: {
-          customer: new mongoose.Types.ObjectId(customerId),
+          $or: [{ customer: customerObjectId }, { user: customerObjectId }],
           placedAt: { $gte: startDate }
         }
       },
@@ -822,7 +823,7 @@ export const getOrderAnalytics = async (req: CustomerRequest, res: Response): Pr
     const statusDistribution = await Order.aggregate([
       {
         $match: {
-          customer: new mongoose.Types.ObjectId(customerId)
+          $or: [{ customer: customerObjectId }, { user: customerObjectId }]
         }
       },
       {
@@ -840,7 +841,7 @@ export const getOrderAnalytics = async (req: CustomerRequest, res: Response): Pr
     });
 
     // Get recent orders
-    const recentOrders = await Order.find({ customer: customerId })
+    const recentOrders = await Order.find({ $or: [{ customer: customerId }, { user: customerId }] })
       .sort({ placedAt: -1 })
       .limit(5)
       .select('orderNumber totalPrice mobileStatus.current placedAt')
@@ -850,7 +851,7 @@ export const getOrderAnalytics = async (req: CustomerRequest, res: Response): Pr
     const favoriteProducts = await Order.aggregate([
       {
         $match: {
-          customer: new mongoose.Types.ObjectId(customerId)
+          $or: [{ customer: customerObjectId }, { user: customerObjectId }]
         }
       },
       { $unwind: '$lineItems' },
