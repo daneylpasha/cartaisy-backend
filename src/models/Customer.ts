@@ -56,6 +56,9 @@ export interface ICustomer extends Document {
   name?: string;
   phone?: string;
   avatar?: string;
+  gender?: 'male' | 'female' | 'other' | 'prefer_not_to_say';
+  dateOfBirth?: Date;
+  country?: string;
   addresses: IAddress[];
   wishlist: mongoose.Types.ObjectId[];
   cart: ICart;
@@ -139,6 +142,16 @@ const customerSchema = new Schema<ICustomer>(
       type: String,
     },
     avatar: {
+      type: String,
+    },
+    gender: {
+      type: String,
+      enum: ['male', 'female', 'other', 'prefer_not_to_say'],
+    },
+    dateOfBirth: {
+      type: Date,
+    },
+    country: {
       type: String,
     },
     addresses: [addressSchema],

@@ -14,6 +14,9 @@ const formatCustomerResponse = (customer: ICustomer) => {
     name: customer.name,
     phone: customer.phone,
     avatar: customer.avatar,
+    gender: customer.gender,
+    dateOfBirth: customer.dateOfBirth,
+    country: customer.country,
     storeId: customer.storeId.toString(),
     addresses: customer.addresses,
     preferences: customer.preferences,
@@ -290,7 +293,7 @@ export const updateCustomerProfile = async (
   try {
     const customerId = req.customer?.id;
     // Support both field name formats (name/fullName, phone/phoneNumber)
-    const { name, fullName, phone, phoneNumber, avatar, preferences } = req.body;
+    const { name, fullName, phone, phoneNumber, avatar, gender, dateOfBirth, country, preferences } = req.body;
     const actualName = name || fullName;
     const actualPhone = phone || phoneNumber;
 
@@ -321,6 +324,15 @@ export const updateCustomerProfile = async (
     }
     if (avatar !== undefined) {
       customer.avatar = avatar;
+    }
+    if (gender !== undefined) {
+      customer.gender = gender;
+    }
+    if (dateOfBirth !== undefined) {
+      customer.dateOfBirth = new Date(dateOfBirth);
+    }
+    if (country !== undefined) {
+      customer.country = country;
     }
     if (preferences !== undefined) {
       // Merge preferences to allow partial updates
