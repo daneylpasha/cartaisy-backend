@@ -550,7 +550,7 @@ export interface IOrderLineItem {
 
 export interface IOrderAddress {
   firstName: string;
-  lastName: string;
+  lastName?: string;
   company?: string;
   address1: string;
   address2?: string;
@@ -629,7 +629,8 @@ export interface IOrder extends Document {
   shopifyOrderNumber?: string;
   orderNumber: string;
   confirmationNumber?: string;
-  user: ObjectId;
+  user?: ObjectId;
+  customer?: ObjectId;
   email: string;
   lineItems: IOrderLineItem[];
   subtotalPrice: number;
