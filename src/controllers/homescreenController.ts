@@ -5,6 +5,7 @@ import PromoBanner from '../models/PromoBanner';
 import CollectionDisplay from '../models/CollectionDisplay';
 import CategoryCollectionGrid from '../models/CategoryCollectionGrid';
 import CollectionShowcase from '../models/CollectionShowcase';
+import HomeLayout, { DEFAULT_HOME_SECTIONS, IHomeLayoutSection } from '../models/HomeLayout';
 
 import shopifyStorefront from '../services/shopifyStorefrontService';
 import productEnrichment from '../services/productEnrichmentService';
@@ -14,6 +15,7 @@ import {
   HomescreenResponse,
   HomescreenData,
   CollectionDisplay as CollectionDisplayType,
+  LayoutSection,
 } from '../types/api/homescreen';
 import { Collection } from '../types/api/products';
 import { getStoreIdFromRequest } from '../middleware/storeAuth';
@@ -27,6 +29,7 @@ export class HomescreenController {
   /**
    * Get complete homescreen data
    * Returns all components needed to render the mobile app home screen
+   * Includes layout array indicating the display order from dashboard configuration
    */
   public async getHomescreenData(storeId: string): Promise<HomescreenResponse> {
     if (!storeId) {
@@ -40,6 +43,11 @@ export class HomescreenController {
           collectionDisplays: [],
           categoryCollectionGrid: [],
           collectionShowcases: [],
+          layout: DEFAULT_HOME_SECTIONS.map((s) => ({
+            type: s.type,
+            position: s.position,
+            isVisible: s.isVisible,
+          })),
           metadata: {
             carouselItemsCount: 0,
             categoryGridItemsCount: 0,
@@ -54,7 +62,7 @@ export class HomescreenController {
       };
     }
     try {
-      // Fetch MongoDB data in parallel
+      // Fetch MongoDB data and layout in parallel
       const [
         carousel,
         categoryGrid,
@@ -63,6 +71,7 @@ export class HomescreenController {
         collectionDisplaysRaw,
         categoryCollectionGrid,
         collectionShowcases,
+        homeLayout,
       ] = await Promise.all([
         this.getCarouselData(storeId),
         this.getCategoryGrid(storeId),
@@ -71,10 +80,23 @@ export class HomescreenController {
         this.getCollectionDisplaysRaw(storeId),
         this.getCategoryCollectionGrid(storeId),
         this.getCollectionShowcases(storeId),
+        HomeLayout.findOne({ storeId }).lean(),
       ]);
 
       // Fetch Shopify collections for collectionDisplays
       const collectionDisplays = await this.enrichCollectionDisplays(collectionDisplaysRaw);
+
+      // Get layout sections from database or use defaults
+      const sections: IHomeLayoutSection[] = homeLayout?.sections || DEFAULT_HOME_SECTIONS;
+
+      // Sort by position and convert to response format
+      const layout: LayoutSection[] = [...sections]
+        .sort((a, b) => a.position - b.position)
+        .map((s) => ({
+          type: s.type,
+          position: s.position,
+          isVisible: s.isVisible,
+        }));
 
       const data: HomescreenData = {
         carousel,
@@ -84,6 +106,7 @@ export class HomescreenController {
         collectionDisplays,
         categoryCollectionGrid,
         collectionShowcases,
+        layout,
         metadata: {
           carouselItemsCount: carousel.length,
           categoryGridItemsCount: categoryGrid.length,
@@ -112,6 +135,11 @@ export class HomescreenController {
           collectionDisplays: [],
           categoryCollectionGrid: [],
           collectionShowcases: [],
+          layout: DEFAULT_HOME_SECTIONS.map((s) => ({
+            type: s.type,
+            position: s.position,
+            isVisible: s.isVisible,
+          })),
           metadata: {
             carouselItemsCount: 0,
             categoryGridItemsCount: 0,

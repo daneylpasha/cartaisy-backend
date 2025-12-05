@@ -86,6 +86,7 @@ const router = express.Router();
 /**
  * GET /api/v1/customer/homescreen
  * Get all homescreen data including carousel items
+ * Includes layout array indicating display order from dashboard configuration
  */
 router.get('/homescreen', authenticateCustomer, homescreenController.getHomescreenData);
 

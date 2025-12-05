@@ -108,6 +108,27 @@ export interface CollectionShowcaseItem {
 }
 
 /**
+ * Section types for home layout ordering
+ */
+export type HomeSectionType =
+  | 'carousel'
+  | 'promo_banners'
+  | 'callout_banners'
+  | 'category_grid'
+  | 'collection_displays'
+  | 'collection_showcases'
+  | 'category_collection_grid';
+
+/**
+ * Layout section info indicating display order and visibility
+ */
+export interface LayoutSection {
+  type: HomeSectionType;
+  position: number;
+  isVisible: boolean;
+}
+
+/**
  * Homescreen metadata
  */
 export interface HomescreenMetadata {
@@ -132,6 +153,8 @@ export interface HomescreenData {
   collectionDisplays: CollectionDisplay[];
   categoryCollectionGrid: CategoryCollectionGridItem[];
   collectionShowcases: CollectionShowcaseItem[];
+  /** Layout order from dashboard - tells mobile app which component to render first */
+  layout: LayoutSection[];
   metadata: HomescreenMetadata;
 }
 
