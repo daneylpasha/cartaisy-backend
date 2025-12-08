@@ -1,4 +1,20 @@
 import { ObjectId } from 'mongoose';
+import { IGuestSession } from '../models/GuestSession';
+
+/**
+ * Unified cart user info - supports both customers and guests
+ */
+interface UnifiedCartUser {
+  userType: 'customer' | 'guest';
+  userId: string; // customerId or sessionId
+  storeId: string;
+  customer?: {
+    id: string;
+    email: string;
+    storeId: string;
+  };
+  guestSession?: IGuestSession;
+}
 
 declare global {
   namespace Express {
@@ -19,6 +35,8 @@ declare global {
       sessionID?: string;
       storeId?: ObjectId | string;
       userRole?: string;
+      // Unified cart user for guest checkout support
+      cartUser?: UnifiedCartUser;
     }
   }
 }
@@ -41,6 +59,8 @@ declare module 'express-serve-static-core' {
     sessionID?: string;
     storeId?: ObjectId | string;
     userRole?: string;
+    // Unified cart user for guest checkout support
+    cartUser?: UnifiedCartUser;
   }
 }
 

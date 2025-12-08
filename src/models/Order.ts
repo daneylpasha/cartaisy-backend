@@ -436,9 +436,37 @@ const OrderSchema = new Schema<IOrder>({
   customer: {
     type: Schema.Types.ObjectId,
     ref: 'Customer',
-    required: false,  // Either user or customer must be present
+    required: false,  // Either user, customer, or isGuestOrder must be present
     index: true
   },
+
+  // Guest order fields
+  isGuestOrder: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  guestSessionId: {
+    type: String,
+    sparse: true,
+    index: true
+  },
+  guestContact: {
+    email: {
+      type: String,
+      lowercase: true,
+      trim: true
+    },
+    phone: {
+      type: String,
+      trim: true
+    },
+    fullName: {
+      type: String,
+      trim: true
+    }
+  },
+
   email: {
     type: String,
     required: [true, 'Email is required'],
@@ -700,14 +728,20 @@ OrderSchema.index({ user: 1, 'mobileStatus.current': 1, placedAt: -1 });
 OrderSchema.index({ customer: 1, 'mobileStatus.current': 1, placedAt: -1 });  // For customer order queries
 OrderSchema.index({ financialStatus: 1, placedAt: -1 });
 
+// Guest order indexes
+OrderSchema.index({ isGuestOrder: 1, 'guestContact.email': 1 });
+OrderSchema.index({ guestSessionId: 1 });
+
 // =============================================================================
-// PRE-VALIDATE HOOK - Ensure user or customer is present
+// PRE-VALIDATE HOOK - Ensure user, customer, or guest order is present
 // =============================================================================
 
 OrderSchema.pre('validate', function(next) {
   const doc = this as any;
-  if (!doc.user && !doc.customer) {
-    next(new Error('Order must have either user or customer'));
+  if (!doc.user && !doc.customer && !doc.isGuestOrder) {
+    next(new Error('Order must have either user, customer, or be a guest order'));
+  } else if (doc.isGuestOrder && (!doc.guestContact?.email || !doc.guestContact?.fullName)) {
+    next(new Error('Guest orders require email and full name'));
   } else {
     next();
   }
