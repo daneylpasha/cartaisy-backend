@@ -292,15 +292,21 @@ export class HomescreenController {
 
 // Export instance for express routes
 export const homescreenController = {
+  /**
+   * Get homescreen data
+   * PUBLIC ENDPOINT - No authentication required
+   * Requires X-Store-ID header or storeId query parameter
+   */
   getHomescreenData: async (req: any, res: any) => {
     try {
-      // Extract storeId from request context
+      // Extract storeId from header, query param, or authenticated user
+      // This works for both authenticated and guest users
       const storeId = getStoreIdFromRequest(req as AuthenticatedRequest);
 
       if (!storeId) {
         return res.status(400).json({
           success: false,
-          error: 'Store context required'
+          error: 'Store ID required. Provide X-Store-ID header or storeId query parameter.'
         });
       }
 

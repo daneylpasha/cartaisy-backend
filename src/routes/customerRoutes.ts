@@ -87,8 +87,11 @@ const router = express.Router();
  * GET /api/v1/customer/homescreen
  * Get all homescreen data including carousel items
  * Includes layout array indicating display order from dashboard configuration
+ *
+ * PUBLIC ENDPOINT - No authentication required
+ * Requires X-Store-ID header or storeId query parameter
  */
-router.get('/homescreen', authenticateCustomer, homescreenController.getHomescreenData);
+router.get('/homescreen', homescreenController.getHomescreenData);
 
 // Individual homescreen component endpoints for selective updates
 // These can be uncommented and implemented as needed:
