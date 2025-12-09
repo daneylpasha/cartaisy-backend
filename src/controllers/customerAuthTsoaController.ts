@@ -141,7 +141,7 @@ export class CustomerAuthTsoaController extends Controller {
   @Response(404, 'Store not found')
   @Response(409, 'Email already exists')
   @Response(500, 'Internal Server Error')
-  public async register(
+  public async customerRegister(
     @Header('x-store-id') storeId: string,
     @Body() requestBody: CustomerRegisterRequest
   ): Promise<{
@@ -280,7 +280,7 @@ export class CustomerAuthTsoaController extends Controller {
   @Response(401, 'Invalid credentials')
   @Response(403, 'Account deactivated')
   @Response(500, 'Internal Server Error')
-  public async login(
+  public async customerLogin(
     @Header('x-store-id') storeId: string,
     @Body() requestBody: CustomerLoginRequest
   ): Promise<{
@@ -384,7 +384,7 @@ export class CustomerAuthTsoaController extends Controller {
   @Response(401, 'Unauthorized')
   @Response(404, 'Customer not found')
   @Response(500, 'Internal Server Error')
-  public async getProfile(@Request() request: any): Promise<{
+  public async customerGetProfile(@Request() request: any): Promise<{
     status: 'success' | 'error';
     data?: {
       user: CustomerData;
@@ -440,7 +440,7 @@ export class CustomerAuthTsoaController extends Controller {
   @Response(401, 'Unauthorized')
   @Response(404, 'Customer not found')
   @Response(500, 'Internal Server Error')
-  public async updateProfile(
+  public async customerUpdateProfile(
     @Body() requestBody: CustomerUpdateProfileRequest,
     @Request() request: any
   ): Promise<{
@@ -540,7 +540,7 @@ export class CustomerAuthTsoaController extends Controller {
   @SuccessResponse(200, 'Logged out successfully')
   @Response(401, 'Unauthorized')
   @Response(500, 'Internal Server Error')
-  public async logout(
+  public async customerLogout(
     @Body() requestBody: CustomerLogoutRequest,
     @Request() request: any
   ): Promise<{
@@ -591,7 +591,7 @@ export class CustomerAuthTsoaController extends Controller {
   @Response(400, 'Bad Request')
   @Response(401, 'Unauthorized')
   @Response(500, 'Internal Server Error')
-  public async updateDeviceToken(
+  public async customerUpdateDeviceToken(
     @Body() requestBody: CustomerDeviceTokenRequest,
     @Request() request: any
   ): Promise<{

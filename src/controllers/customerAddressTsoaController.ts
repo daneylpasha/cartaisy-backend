@@ -103,7 +103,7 @@ export class CustomerAddressTsoaController extends Controller {
   @Response(401, 'Unauthorized')
   @Response(404, 'Customer not found')
   @Response(500, 'Internal Server Error')
-  public async getAddresses(@Request() request: any): Promise<{
+  public async customerGetAddresses(@Request() request: any): Promise<{
     status: 'success' | 'error';
     data?: CustomerAddressResponse[];
     message?: string;
@@ -156,7 +156,7 @@ export class CustomerAddressTsoaController extends Controller {
   @Response(401, 'Unauthorized')
   @Response(404, 'Customer not found')
   @Response(500, 'Internal Server Error')
-  public async addAddress(
+  public async customerAddAddress(
     @Body() requestBody: CustomerAddAddressRequest,
     @Request() request: any
   ): Promise<{
@@ -267,7 +267,7 @@ export class CustomerAddressTsoaController extends Controller {
   @Response(401, 'Unauthorized')
   @Response(404, 'Address not found')
   @Response(500, 'Internal Server Error')
-  public async updateAddress(
+  public async customerUpdateAddress(
     @Path() addressId: string,
     @Body() requestBody: CustomerUpdateAddressRequest,
     @Request() request: any
@@ -381,7 +381,7 @@ export class CustomerAddressTsoaController extends Controller {
   @Response(401, 'Unauthorized')
   @Response(404, 'Address not found')
   @Response(500, 'Internal Server Error')
-  public async deleteAddress(
+  public async customerDeleteAddress(
     @Path() addressId: string,
     @Request() request: any
   ): Promise<{
@@ -470,7 +470,7 @@ export class CustomerAddressTsoaController extends Controller {
   @Response(401, 'Unauthorized')
   @Response(404, 'Address not found')
   @Response(500, 'Internal Server Error')
-  public async setDefaultAddress(
+  public async customerSetDefaultAddress(
     @Path() addressId: string,
     @Request() request: any
   ): Promise<{
@@ -556,7 +556,7 @@ export class CustomerAddressTsoaController extends Controller {
   @Response(401, 'Unauthorized')
   @Response(404, 'No default address found')
   @Response(500, 'Internal Server Error')
-  public async getDefaultAddress(@Request() request: any): Promise<{
+  public async customerGetDefaultAddress(@Request() request: any): Promise<{
     status: 'success' | 'error';
     data?: {
       address: CustomerAddressResponse;

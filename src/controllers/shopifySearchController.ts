@@ -30,7 +30,7 @@ export class ShopifySearchController extends Controller {
   @Get('suggestions')
   @TsoaResponse(400, 'Bad Request')
   @TsoaResponse(500, 'Internal Server Error')
-  public async getSearchSuggestions(
+  public async shopifyGetSearchSuggestions(
     @Query() q: string,
     @Query() limit?: number
   ): Promise<PredictiveSearchResponse> {
@@ -227,7 +227,7 @@ export class ShopifySearchController extends Controller {
    */
   @Get('popular')
   @TsoaResponse(500, 'Internal Server Error')
-  public async getPopularSearches(
+  public async shopifyGetPopularSearches(
     @Query() limit?: number,
     @Query() days?: number
   ): Promise<PopularSearchesResponse> {

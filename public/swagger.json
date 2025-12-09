@@ -1595,6 +1595,430 @@
 				"type": "object",
 				"additionalProperties": false
 			},
+			"CarouselItemResponse": {
+				"description": "Carousel item for hero section",
+				"properties": {
+					"imageUrl": {
+						"type": "string"
+					},
+					"title": {
+						"type": "string"
+					},
+					"subtitle": {
+						"type": "string"
+					},
+					"ctaText": {
+						"type": "string"
+					},
+					"collectionId": {
+						"type": "string"
+					},
+					"endsAt": {
+						"type": "string"
+					},
+					"promoTag": {
+						"properties": {
+							"textColor": {
+								"type": "string"
+							},
+							"backgroundColor": {
+								"type": "string"
+							},
+							"text": {
+								"type": "string"
+							}
+						},
+						"required": [
+							"textColor",
+							"backgroundColor",
+							"text"
+						],
+						"type": "object"
+					},
+					"isActive": {
+						"type": "boolean"
+					}
+				},
+				"required": [
+					"imageUrl",
+					"title",
+					"subtitle",
+					"ctaText",
+					"collectionId",
+					"isActive"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"CategoryGridItemResponse": {
+				"description": "Category grid item",
+				"properties": {
+					"imageUrl": {
+						"type": "string"
+					},
+					"title": {
+						"type": "string"
+					},
+					"collectionId": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"imageUrl",
+					"title",
+					"collectionId"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"CalloutBannerItemResponse": {
+				"description": "Callout banner item",
+				"properties": {
+					"imageUrl": {
+						"type": "string"
+					},
+					"title": {
+						"type": "string"
+					},
+					"subTitle": {
+						"type": "string"
+					},
+					"buttonText": {
+						"type": "string"
+					},
+					"action": {
+						"properties": {
+							"value": {
+								"type": "string"
+							},
+							"type": {
+								"type": "string"
+							}
+						},
+						"required": [
+							"value",
+							"type"
+						],
+						"type": "object"
+					},
+					"backgroundColor": {
+						"type": "string"
+					},
+					"textColor": {
+						"type": "string"
+					},
+					"buttonColor": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"imageUrl",
+					"title",
+					"subTitle",
+					"buttonText",
+					"action"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"PromoBannerItemResponse": {
+				"description": "Promo banner item",
+				"properties": {
+					"image": {
+						"type": "string"
+					},
+					"title": {
+						"type": "string"
+					},
+					"subtitle": {
+						"type": "string"
+					},
+					"ctaText": {
+						"type": "string"
+					},
+					"collectionId": {
+						"type": "string"
+					},
+					"backgroundColor": {
+						"type": "string"
+					},
+					"textColor": {
+						"type": "string"
+					},
+					"buttonColor": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"image",
+					"title",
+					"subtitle",
+					"ctaText",
+					"collectionId"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"CollectionDisplayResponse": {
+				"description": "Collection display item",
+				"properties": {
+					"type": {
+						"type": "string",
+						"enum": [
+							"large_row",
+							"small_grid",
+							"medium_row"
+						]
+					},
+					"order": {
+						"type": "number",
+						"format": "double"
+					},
+					"collection": {}
+				},
+				"required": [
+					"type",
+					"order",
+					"collection"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"CategoryCollectionGridResponse": {
+				"description": "Category collection grid item",
+				"properties": {
+					"title": {
+						"type": "string"
+					},
+					"subtitle": {
+						"type": "string"
+					},
+					"collections": {
+						"items": {
+							"properties": {
+								"collectionId": {
+									"type": "string"
+								},
+								"title": {
+									"type": "string"
+								},
+								"image": {
+									"type": "string"
+								}
+							},
+							"required": [
+								"collectionId",
+								"title",
+								"image"
+							],
+							"type": "object"
+						},
+						"type": "array"
+					}
+				},
+				"required": [
+					"title",
+					"subtitle",
+					"collections"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"CollectionShowcaseResponse": {
+				"description": "Collection showcase item",
+				"properties": {
+					"type": {
+						"type": "string",
+						"enum": [
+							"grid",
+							"circular"
+						]
+					},
+					"title": {
+						"type": "string"
+					},
+					"icon": {
+						"type": "string"
+					},
+					"collections": {
+						"items": {
+							"properties": {
+								"collectionId": {
+									"type": "string"
+								},
+								"title": {
+									"type": "string"
+								},
+								"image": {
+									"type": "string"
+								}
+							},
+							"required": [
+								"collectionId",
+								"title",
+								"image"
+							],
+							"type": "object"
+						},
+						"type": "array"
+					}
+				},
+				"required": [
+					"type",
+					"title",
+					"collections"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"LayoutSectionResponse": {
+				"description": "Layout section",
+				"properties": {
+					"type": {
+						"type": "string",
+						"enum": [
+							"carousel",
+							"promo_banners",
+							"callout_banners",
+							"category_grid",
+							"collection_displays",
+							"collection_showcases",
+							"category_collection_grid"
+						]
+					},
+					"position": {
+						"type": "number",
+						"format": "double"
+					},
+					"isVisible": {
+						"type": "boolean"
+					}
+				},
+				"required": [
+					"type",
+					"position",
+					"isVisible"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"HomescreenMetadataResponse": {
+				"description": "Homescreen metadata",
+				"properties": {
+					"carouselItemsCount": {
+						"type": "number",
+						"format": "double"
+					},
+					"categoryGridItemsCount": {
+						"type": "number",
+						"format": "double"
+					},
+					"calloutBannersCount": {
+						"type": "number",
+						"format": "double"
+					},
+					"promoBannersCount": {
+						"type": "number",
+						"format": "double"
+					},
+					"collectionDisplaysCount": {
+						"type": "number",
+						"format": "double"
+					},
+					"categoryCollectionGridCount": {
+						"type": "number",
+						"format": "double"
+					},
+					"collectionShowcasesCount": {
+						"type": "number",
+						"format": "double"
+					},
+					"lastUpdated": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"carouselItemsCount",
+					"categoryGridItemsCount",
+					"calloutBannersCount",
+					"promoBannersCount",
+					"collectionDisplaysCount",
+					"categoryCollectionGridCount",
+					"collectionShowcasesCount",
+					"lastUpdated"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"HomescreenDataResponse": {
+				"description": "Complete homescreen data",
+				"properties": {
+					"carousel": {
+						"items": {
+							"$ref": "#/components/schemas/CarouselItemResponse"
+						},
+						"type": "array"
+					},
+					"categoryGrid": {
+						"items": {
+							"$ref": "#/components/schemas/CategoryGridItemResponse"
+						},
+						"type": "array"
+					},
+					"calloutBanners": {
+						"items": {
+							"$ref": "#/components/schemas/CalloutBannerItemResponse"
+						},
+						"type": "array"
+					},
+					"promoBanners": {
+						"items": {
+							"$ref": "#/components/schemas/PromoBannerItemResponse"
+						},
+						"type": "array"
+					},
+					"collectionDisplays": {
+						"items": {
+							"$ref": "#/components/schemas/CollectionDisplayResponse"
+						},
+						"type": "array"
+					},
+					"categoryCollectionGrid": {
+						"items": {
+							"$ref": "#/components/schemas/CategoryCollectionGridResponse"
+						},
+						"type": "array"
+					},
+					"collectionShowcases": {
+						"items": {
+							"$ref": "#/components/schemas/CollectionShowcaseResponse"
+						},
+						"type": "array"
+					},
+					"layout": {
+						"items": {
+							"$ref": "#/components/schemas/LayoutSectionResponse"
+						},
+						"type": "array"
+					},
+					"metadata": {
+						"$ref": "#/components/schemas/HomescreenMetadataResponse"
+					}
+				},
+				"required": [
+					"carousel",
+					"categoryGrid",
+					"calloutBanners",
+					"promoBanners",
+					"collectionDisplays",
+					"categoryCollectionGrid",
+					"collectionShowcases",
+					"layout",
+					"metadata"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
 			"FavoritesResponse": {
 				"description": "Favorites response - returns just product IDs for efficient client-side merging",
 				"properties": {
@@ -4149,7 +4573,7 @@
 	"paths": {
 		"/search/suggestions": {
 			"get": {
-				"operationId": "GetSearchSuggestions",
+				"operationId": "ShopifyGetSearchSuggestions",
 				"responses": {
 					"200": {
 						"description": "Ok",
@@ -4319,7 +4743,7 @@
 		},
 		"/search/popular": {
 			"get": {
-				"operationId": "GetPopularSearches",
+				"operationId": "ShopifyGetPopularSearches",
 				"responses": {
 					"200": {
 						"description": "Ok",
@@ -5639,6 +6063,70 @@
 				"parameters": []
 			}
 		},
+		"/customer/homescreen": {
+			"get": {
+				"operationId": "GetHomescreenData",
+				"responses": {
+					"200": {
+						"description": "Homescreen data retrieved successfully",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"error": {
+											"type": "string"
+										},
+										"data": {
+											"$ref": "#/components/schemas/HomescreenDataResponse"
+										},
+										"success": {
+											"type": "boolean"
+										}
+									},
+									"required": [
+										"data",
+										"success"
+									],
+									"type": "object"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "Bad Request - Store ID required"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Get complete homescreen data for the mobile app\nReturns all components needed to render the mobile app home screen including\ncarousel, category grid, banners, collection displays, and layout configuration.",
+				"summary": "Get homescreen data",
+				"tags": [
+					"Customer Homescreen"
+				],
+				"security": [],
+				"parameters": [
+					{
+						"description": "Store ID from header (required)",
+						"in": "header",
+						"name": "x-store-id",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"description": "Alternative: Store ID from query parameter",
+						"in": "query",
+						"name": "storeId",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
+					}
+				]
+			}
+		},
 		"/customer/favorites": {
 			"get": {
 				"operationId": "GetFavorites",
@@ -5820,7 +6308,7 @@
 		},
 		"/customer/auth/register": {
 			"post": {
-				"operationId": "Register",
+				"operationId": "CustomerRegister",
 				"responses": {
 					"201": {
 						"description": "Registration successful",
@@ -5916,7 +6404,7 @@
 		},
 		"/customer/auth/login": {
 			"post": {
-				"operationId": "Login",
+				"operationId": "CustomerLogin",
 				"responses": {
 					"200": {
 						"description": "Login successful",
@@ -6009,7 +6497,7 @@
 		},
 		"/customer/auth/profile": {
 			"get": {
-				"operationId": "GetProfile",
+				"operationId": "CustomerGetProfile",
 				"responses": {
 					"200": {
 						"description": "Profile retrieved successfully",
@@ -6070,7 +6558,7 @@
 				"parameters": []
 			},
 			"patch": {
-				"operationId": "UpdateProfile",
+				"operationId": "CustomerUpdateProfile",
 				"responses": {
 					"200": {
 						"description": "Profile updated successfully",
@@ -6146,7 +6634,7 @@
 		},
 		"/customer/auth/logout": {
 			"post": {
-				"operationId": "Logout",
+				"operationId": "CustomerLogout",
 				"responses": {
 					"200": {
 						"description": "Logged out successfully",
@@ -6208,7 +6696,7 @@
 		},
 		"/customer/auth/device-token": {
 			"post": {
-				"operationId": "UpdateDeviceToken",
+				"operationId": "CustomerUpdateDeviceToken",
 				"responses": {
 					"200": {
 						"description": "Device token updated",
@@ -6273,7 +6761,7 @@
 		},
 		"/customer/addresses": {
 			"get": {
-				"operationId": "GetAddresses",
+				"operationId": "CustomerGetAddresses",
 				"responses": {
 					"200": {
 						"description": "Addresses retrieved successfully",
@@ -6329,7 +6817,7 @@
 				"parameters": []
 			},
 			"post": {
-				"operationId": "AddAddress",
+				"operationId": "CustomerAddAddress",
 				"responses": {
 					"201": {
 						"description": "Address added successfully",
@@ -6400,7 +6888,7 @@
 		},
 		"/customer/addresses/{addressId}": {
 			"patch": {
-				"operationId": "UpdateAddress",
+				"operationId": "CustomerUpdateAddress",
 				"responses": {
 					"200": {
 						"description": "Address updated successfully",
@@ -6479,7 +6967,7 @@
 				}
 			},
 			"delete": {
-				"operationId": "DeleteAddress",
+				"operationId": "CustomerDeleteAddress",
 				"responses": {
 					"200": {
 						"description": "Address deleted successfully",
@@ -6545,7 +7033,7 @@
 		},
 		"/customer/addresses/{addressId}/default": {
 			"patch": {
-				"operationId": "SetDefaultAddress",
+				"operationId": "CustomerSetDefaultAddress",
 				"responses": {
 					"200": {
 						"description": "Default address updated successfully",
@@ -6614,7 +7102,7 @@
 		},
 		"/customer/addresses/default": {
 			"get": {
-				"operationId": "GetDefaultAddress",
+				"operationId": "CustomerGetDefaultAddress",
 				"responses": {
 					"200": {
 						"description": "Default address retrieved successfully",

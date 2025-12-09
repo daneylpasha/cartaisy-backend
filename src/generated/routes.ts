@@ -14,6 +14,8 @@ import { ProductDetailController } from './../controllers/productDetailControlle
 // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
 import { PaymentMethodsController } from './../controllers/paymentMethodsController';
 // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+import { HomescreenTsoaController } from './../controllers/homescreenTsoaController';
+// WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
 import { FavoritesController } from './../controllers/favoritesController';
 // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
 import { CustomerAuthTsoaController } from './../controllers/customerAuthTsoaController';
@@ -460,6 +462,133 @@ const models: TsoaRoute.Models = {
             "success": {"dataType":"boolean","required":true},
             "data": {"dataType":"nestedObjectLiteral","nestedProperties":{"paymentMethod":{"ref":"StoredPaymentMethod","required":true}}},
             "message": {"dataType":"string"},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "CarouselItemResponse": {
+        "dataType": "refObject",
+        "properties": {
+            "imageUrl": {"dataType":"string","required":true},
+            "title": {"dataType":"string","required":true},
+            "subtitle": {"dataType":"string","required":true},
+            "ctaText": {"dataType":"string","required":true},
+            "collectionId": {"dataType":"string","required":true},
+            "endsAt": {"dataType":"string"},
+            "promoTag": {"dataType":"nestedObjectLiteral","nestedProperties":{"textColor":{"dataType":"string","required":true},"backgroundColor":{"dataType":"string","required":true},"text":{"dataType":"string","required":true}}},
+            "isActive": {"dataType":"boolean","required":true},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "CategoryGridItemResponse": {
+        "dataType": "refObject",
+        "properties": {
+            "imageUrl": {"dataType":"string","required":true},
+            "title": {"dataType":"string","required":true},
+            "collectionId": {"dataType":"string","required":true},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "CalloutBannerItemResponse": {
+        "dataType": "refObject",
+        "properties": {
+            "imageUrl": {"dataType":"string","required":true},
+            "title": {"dataType":"string","required":true},
+            "subTitle": {"dataType":"string","required":true},
+            "buttonText": {"dataType":"string","required":true},
+            "action": {"dataType":"nestedObjectLiteral","nestedProperties":{"value":{"dataType":"string","required":true},"type":{"dataType":"string","required":true}},"required":true},
+            "backgroundColor": {"dataType":"string"},
+            "textColor": {"dataType":"string"},
+            "buttonColor": {"dataType":"string"},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "PromoBannerItemResponse": {
+        "dataType": "refObject",
+        "properties": {
+            "image": {"dataType":"string","required":true},
+            "title": {"dataType":"string","required":true},
+            "subtitle": {"dataType":"string","required":true},
+            "ctaText": {"dataType":"string","required":true},
+            "collectionId": {"dataType":"string","required":true},
+            "backgroundColor": {"dataType":"string"},
+            "textColor": {"dataType":"string"},
+            "buttonColor": {"dataType":"string"},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "CollectionDisplayResponse": {
+        "dataType": "refObject",
+        "properties": {
+            "type": {"dataType":"union","subSchemas":[{"dataType":"enum","enums":["large_row"]},{"dataType":"enum","enums":["small_grid"]},{"dataType":"enum","enums":["medium_row"]}],"required":true},
+            "order": {"dataType":"double","required":true},
+            "collection": {"dataType":"any","required":true},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "CategoryCollectionGridResponse": {
+        "dataType": "refObject",
+        "properties": {
+            "title": {"dataType":"string","required":true},
+            "subtitle": {"dataType":"string","required":true},
+            "collections": {"dataType":"array","array":{"dataType":"nestedObjectLiteral","nestedProperties":{"collectionId":{"dataType":"string","required":true},"title":{"dataType":"string","required":true},"image":{"dataType":"string","required":true}}},"required":true},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "CollectionShowcaseResponse": {
+        "dataType": "refObject",
+        "properties": {
+            "type": {"dataType":"union","subSchemas":[{"dataType":"enum","enums":["grid"]},{"dataType":"enum","enums":["circular"]}],"required":true},
+            "title": {"dataType":"string","required":true},
+            "icon": {"dataType":"string"},
+            "collections": {"dataType":"array","array":{"dataType":"nestedObjectLiteral","nestedProperties":{"collectionId":{"dataType":"string","required":true},"title":{"dataType":"string","required":true},"image":{"dataType":"string","required":true}}},"required":true},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "LayoutSectionResponse": {
+        "dataType": "refObject",
+        "properties": {
+            "type": {"dataType":"union","subSchemas":[{"dataType":"enum","enums":["carousel"]},{"dataType":"enum","enums":["promo_banners"]},{"dataType":"enum","enums":["callout_banners"]},{"dataType":"enum","enums":["category_grid"]},{"dataType":"enum","enums":["collection_displays"]},{"dataType":"enum","enums":["collection_showcases"]},{"dataType":"enum","enums":["category_collection_grid"]}],"required":true},
+            "position": {"dataType":"double","required":true},
+            "isVisible": {"dataType":"boolean","required":true},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "HomescreenMetadataResponse": {
+        "dataType": "refObject",
+        "properties": {
+            "carouselItemsCount": {"dataType":"double","required":true},
+            "categoryGridItemsCount": {"dataType":"double","required":true},
+            "calloutBannersCount": {"dataType":"double","required":true},
+            "promoBannersCount": {"dataType":"double","required":true},
+            "collectionDisplaysCount": {"dataType":"double","required":true},
+            "categoryCollectionGridCount": {"dataType":"double","required":true},
+            "collectionShowcasesCount": {"dataType":"double","required":true},
+            "lastUpdated": {"dataType":"string","required":true},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "HomescreenDataResponse": {
+        "dataType": "refObject",
+        "properties": {
+            "carousel": {"dataType":"array","array":{"dataType":"refObject","ref":"CarouselItemResponse"},"required":true},
+            "categoryGrid": {"dataType":"array","array":{"dataType":"refObject","ref":"CategoryGridItemResponse"},"required":true},
+            "calloutBanners": {"dataType":"array","array":{"dataType":"refObject","ref":"CalloutBannerItemResponse"},"required":true},
+            "promoBanners": {"dataType":"array","array":{"dataType":"refObject","ref":"PromoBannerItemResponse"},"required":true},
+            "collectionDisplays": {"dataType":"array","array":{"dataType":"refObject","ref":"CollectionDisplayResponse"},"required":true},
+            "categoryCollectionGrid": {"dataType":"array","array":{"dataType":"refObject","ref":"CategoryCollectionGridResponse"},"required":true},
+            "collectionShowcases": {"dataType":"array","array":{"dataType":"refObject","ref":"CollectionShowcaseResponse"},"required":true},
+            "layout": {"dataType":"array","array":{"dataType":"refObject","ref":"LayoutSectionResponse"},"required":true},
+            "metadata": {"ref":"HomescreenMetadataResponse","required":true},
         },
         "additionalProperties": false,
     },
@@ -1228,26 +1357,26 @@ export function RegisterRoutes(app: Router) {
 
 
     
-        const argsShopifySearchController_getSearchSuggestions: Record<string, TsoaRoute.ParameterSchema> = {
+        const argsShopifySearchController_shopifyGetSearchSuggestions: Record<string, TsoaRoute.ParameterSchema> = {
                 q: {"in":"query","name":"q","required":true,"dataType":"string"},
                 limit: {"in":"query","name":"limit","dataType":"double"},
         };
         app.get('/api/v1/search/suggestions',
             ...(fetchMiddlewares<RequestHandler>(ShopifySearchController)),
-            ...(fetchMiddlewares<RequestHandler>(ShopifySearchController.prototype.getSearchSuggestions)),
+            ...(fetchMiddlewares<RequestHandler>(ShopifySearchController.prototype.shopifyGetSearchSuggestions)),
 
-            async function ShopifySearchController_getSearchSuggestions(request: ExRequest, response: ExResponse, next: any) {
+            async function ShopifySearchController_shopifyGetSearchSuggestions(request: ExRequest, response: ExResponse, next: any) {
 
             // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
 
             let validatedArgs: any[] = [];
             try {
-                validatedArgs = templateService.getValidatedArgs({ args: argsShopifySearchController_getSearchSuggestions, request, response });
+                validatedArgs = templateService.getValidatedArgs({ args: argsShopifySearchController_shopifyGetSearchSuggestions, request, response });
 
                 const controller = new ShopifySearchController();
 
               await templateService.apiHandler({
-                methodName: 'getSearchSuggestions',
+                methodName: 'shopifyGetSearchSuggestions',
                 controller,
                 response,
                 next,
@@ -1323,26 +1452,26 @@ export function RegisterRoutes(app: Router) {
             }
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
-        const argsShopifySearchController_getPopularSearches: Record<string, TsoaRoute.ParameterSchema> = {
+        const argsShopifySearchController_shopifyGetPopularSearches: Record<string, TsoaRoute.ParameterSchema> = {
                 limit: {"in":"query","name":"limit","dataType":"double"},
                 days: {"in":"query","name":"days","dataType":"double"},
         };
         app.get('/api/v1/search/popular',
             ...(fetchMiddlewares<RequestHandler>(ShopifySearchController)),
-            ...(fetchMiddlewares<RequestHandler>(ShopifySearchController.prototype.getPopularSearches)),
+            ...(fetchMiddlewares<RequestHandler>(ShopifySearchController.prototype.shopifyGetPopularSearches)),
 
-            async function ShopifySearchController_getPopularSearches(request: ExRequest, response: ExResponse, next: any) {
+            async function ShopifySearchController_shopifyGetPopularSearches(request: ExRequest, response: ExResponse, next: any) {
 
             // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
 
             let validatedArgs: any[] = [];
             try {
-                validatedArgs = templateService.getValidatedArgs({ args: argsShopifySearchController_getPopularSearches, request, response });
+                validatedArgs = templateService.getValidatedArgs({ args: argsShopifySearchController_shopifyGetPopularSearches, request, response });
 
                 const controller = new ShopifySearchController();
 
               await templateService.apiHandler({
-                methodName: 'getPopularSearches',
+                methodName: 'shopifyGetPopularSearches',
                 controller,
                 response,
                 next,
@@ -2111,6 +2240,37 @@ export function RegisterRoutes(app: Router) {
             }
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+        const argsHomescreenTsoaController_getHomescreenData: Record<string, TsoaRoute.ParameterSchema> = {
+                storeId: {"in":"header","name":"x-store-id","dataType":"string"},
+                storeIdQuery: {"in":"query","name":"storeId","dataType":"string"},
+        };
+        app.get('/api/v1/customer/homescreen',
+            ...(fetchMiddlewares<RequestHandler>(HomescreenTsoaController)),
+            ...(fetchMiddlewares<RequestHandler>(HomescreenTsoaController.prototype.getHomescreenData)),
+
+            async function HomescreenTsoaController_getHomescreenData(request: ExRequest, response: ExResponse, next: any) {
+
+            // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+
+            let validatedArgs: any[] = [];
+            try {
+                validatedArgs = templateService.getValidatedArgs({ args: argsHomescreenTsoaController_getHomescreenData, request, response });
+
+                const controller = new HomescreenTsoaController();
+
+              await templateService.apiHandler({
+                methodName: 'getHomescreenData',
+                controller,
+                response,
+                next,
+                validatedArgs,
+                successStatus: 200,
+              });
+            } catch (err) {
+                return next(err);
+            }
+        });
+        // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsFavoritesController_getFavorites: Record<string, TsoaRoute.ParameterSchema> = {
                 request: {"in":"request","name":"request","required":true,"dataType":"object"},
         };
@@ -2239,26 +2399,26 @@ export function RegisterRoutes(app: Router) {
             }
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
-        const argsCustomerAuthTsoaController_register: Record<string, TsoaRoute.ParameterSchema> = {
+        const argsCustomerAuthTsoaController_customerRegister: Record<string, TsoaRoute.ParameterSchema> = {
                 storeId: {"in":"header","name":"x-store-id","required":true,"dataType":"string"},
                 requestBody: {"in":"body","name":"requestBody","required":true,"ref":"CustomerRegisterRequest"},
         };
         app.post('/api/v1/customer/auth/register',
             ...(fetchMiddlewares<RequestHandler>(CustomerAuthTsoaController)),
-            ...(fetchMiddlewares<RequestHandler>(CustomerAuthTsoaController.prototype.register)),
+            ...(fetchMiddlewares<RequestHandler>(CustomerAuthTsoaController.prototype.customerRegister)),
 
-            async function CustomerAuthTsoaController_register(request: ExRequest, response: ExResponse, next: any) {
+            async function CustomerAuthTsoaController_customerRegister(request: ExRequest, response: ExResponse, next: any) {
 
             // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
 
             let validatedArgs: any[] = [];
             try {
-                validatedArgs = templateService.getValidatedArgs({ args: argsCustomerAuthTsoaController_register, request, response });
+                validatedArgs = templateService.getValidatedArgs({ args: argsCustomerAuthTsoaController_customerRegister, request, response });
 
                 const controller = new CustomerAuthTsoaController();
 
               await templateService.apiHandler({
-                methodName: 'register',
+                methodName: 'customerRegister',
                 controller,
                 response,
                 next,
@@ -2270,26 +2430,26 @@ export function RegisterRoutes(app: Router) {
             }
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
-        const argsCustomerAuthTsoaController_login: Record<string, TsoaRoute.ParameterSchema> = {
+        const argsCustomerAuthTsoaController_customerLogin: Record<string, TsoaRoute.ParameterSchema> = {
                 storeId: {"in":"header","name":"x-store-id","required":true,"dataType":"string"},
                 requestBody: {"in":"body","name":"requestBody","required":true,"ref":"CustomerLoginRequest"},
         };
         app.post('/api/v1/customer/auth/login',
             ...(fetchMiddlewares<RequestHandler>(CustomerAuthTsoaController)),
-            ...(fetchMiddlewares<RequestHandler>(CustomerAuthTsoaController.prototype.login)),
+            ...(fetchMiddlewares<RequestHandler>(CustomerAuthTsoaController.prototype.customerLogin)),
 
-            async function CustomerAuthTsoaController_login(request: ExRequest, response: ExResponse, next: any) {
+            async function CustomerAuthTsoaController_customerLogin(request: ExRequest, response: ExResponse, next: any) {
 
             // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
 
             let validatedArgs: any[] = [];
             try {
-                validatedArgs = templateService.getValidatedArgs({ args: argsCustomerAuthTsoaController_login, request, response });
+                validatedArgs = templateService.getValidatedArgs({ args: argsCustomerAuthTsoaController_customerLogin, request, response });
 
                 const controller = new CustomerAuthTsoaController();
 
               await templateService.apiHandler({
-                methodName: 'login',
+                methodName: 'customerLogin',
                 controller,
                 response,
                 next,
@@ -2301,26 +2461,26 @@ export function RegisterRoutes(app: Router) {
             }
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
-        const argsCustomerAuthTsoaController_getProfile: Record<string, TsoaRoute.ParameterSchema> = {
+        const argsCustomerAuthTsoaController_customerGetProfile: Record<string, TsoaRoute.ParameterSchema> = {
                 request: {"in":"request","name":"request","required":true,"dataType":"object"},
         };
         app.get('/api/v1/customer/auth/profile',
             authenticateMiddleware([{"jwt":[]}]),
             ...(fetchMiddlewares<RequestHandler>(CustomerAuthTsoaController)),
-            ...(fetchMiddlewares<RequestHandler>(CustomerAuthTsoaController.prototype.getProfile)),
+            ...(fetchMiddlewares<RequestHandler>(CustomerAuthTsoaController.prototype.customerGetProfile)),
 
-            async function CustomerAuthTsoaController_getProfile(request: ExRequest, response: ExResponse, next: any) {
+            async function CustomerAuthTsoaController_customerGetProfile(request: ExRequest, response: ExResponse, next: any) {
 
             // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
 
             let validatedArgs: any[] = [];
             try {
-                validatedArgs = templateService.getValidatedArgs({ args: argsCustomerAuthTsoaController_getProfile, request, response });
+                validatedArgs = templateService.getValidatedArgs({ args: argsCustomerAuthTsoaController_customerGetProfile, request, response });
 
                 const controller = new CustomerAuthTsoaController();
 
               await templateService.apiHandler({
-                methodName: 'getProfile',
+                methodName: 'customerGetProfile',
                 controller,
                 response,
                 next,
@@ -2332,27 +2492,27 @@ export function RegisterRoutes(app: Router) {
             }
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
-        const argsCustomerAuthTsoaController_updateProfile: Record<string, TsoaRoute.ParameterSchema> = {
+        const argsCustomerAuthTsoaController_customerUpdateProfile: Record<string, TsoaRoute.ParameterSchema> = {
                 requestBody: {"in":"body","name":"requestBody","required":true,"ref":"CustomerUpdateProfileRequest"},
                 request: {"in":"request","name":"request","required":true,"dataType":"object"},
         };
         app.patch('/api/v1/customer/auth/profile',
             authenticateMiddleware([{"jwt":[]}]),
             ...(fetchMiddlewares<RequestHandler>(CustomerAuthTsoaController)),
-            ...(fetchMiddlewares<RequestHandler>(CustomerAuthTsoaController.prototype.updateProfile)),
+            ...(fetchMiddlewares<RequestHandler>(CustomerAuthTsoaController.prototype.customerUpdateProfile)),
 
-            async function CustomerAuthTsoaController_updateProfile(request: ExRequest, response: ExResponse, next: any) {
+            async function CustomerAuthTsoaController_customerUpdateProfile(request: ExRequest, response: ExResponse, next: any) {
 
             // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
 
             let validatedArgs: any[] = [];
             try {
-                validatedArgs = templateService.getValidatedArgs({ args: argsCustomerAuthTsoaController_updateProfile, request, response });
+                validatedArgs = templateService.getValidatedArgs({ args: argsCustomerAuthTsoaController_customerUpdateProfile, request, response });
 
                 const controller = new CustomerAuthTsoaController();
 
               await templateService.apiHandler({
-                methodName: 'updateProfile',
+                methodName: 'customerUpdateProfile',
                 controller,
                 response,
                 next,
@@ -2364,27 +2524,27 @@ export function RegisterRoutes(app: Router) {
             }
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
-        const argsCustomerAuthTsoaController_logout: Record<string, TsoaRoute.ParameterSchema> = {
+        const argsCustomerAuthTsoaController_customerLogout: Record<string, TsoaRoute.ParameterSchema> = {
                 requestBody: {"in":"body","name":"requestBody","required":true,"ref":"CustomerLogoutRequest"},
                 request: {"in":"request","name":"request","required":true,"dataType":"object"},
         };
         app.post('/api/v1/customer/auth/logout',
             authenticateMiddleware([{"jwt":[]}]),
             ...(fetchMiddlewares<RequestHandler>(CustomerAuthTsoaController)),
-            ...(fetchMiddlewares<RequestHandler>(CustomerAuthTsoaController.prototype.logout)),
+            ...(fetchMiddlewares<RequestHandler>(CustomerAuthTsoaController.prototype.customerLogout)),
 
-            async function CustomerAuthTsoaController_logout(request: ExRequest, response: ExResponse, next: any) {
+            async function CustomerAuthTsoaController_customerLogout(request: ExRequest, response: ExResponse, next: any) {
 
             // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
 
             let validatedArgs: any[] = [];
             try {
-                validatedArgs = templateService.getValidatedArgs({ args: argsCustomerAuthTsoaController_logout, request, response });
+                validatedArgs = templateService.getValidatedArgs({ args: argsCustomerAuthTsoaController_customerLogout, request, response });
 
                 const controller = new CustomerAuthTsoaController();
 
               await templateService.apiHandler({
-                methodName: 'logout',
+                methodName: 'customerLogout',
                 controller,
                 response,
                 next,
@@ -2396,27 +2556,27 @@ export function RegisterRoutes(app: Router) {
             }
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
-        const argsCustomerAuthTsoaController_updateDeviceToken: Record<string, TsoaRoute.ParameterSchema> = {
+        const argsCustomerAuthTsoaController_customerUpdateDeviceToken: Record<string, TsoaRoute.ParameterSchema> = {
                 requestBody: {"in":"body","name":"requestBody","required":true,"ref":"CustomerDeviceTokenRequest"},
                 request: {"in":"request","name":"request","required":true,"dataType":"object"},
         };
         app.post('/api/v1/customer/auth/device-token',
             authenticateMiddleware([{"jwt":[]}]),
             ...(fetchMiddlewares<RequestHandler>(CustomerAuthTsoaController)),
-            ...(fetchMiddlewares<RequestHandler>(CustomerAuthTsoaController.prototype.updateDeviceToken)),
+            ...(fetchMiddlewares<RequestHandler>(CustomerAuthTsoaController.prototype.customerUpdateDeviceToken)),
 
-            async function CustomerAuthTsoaController_updateDeviceToken(request: ExRequest, response: ExResponse, next: any) {
+            async function CustomerAuthTsoaController_customerUpdateDeviceToken(request: ExRequest, response: ExResponse, next: any) {
 
             // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
 
             let validatedArgs: any[] = [];
             try {
-                validatedArgs = templateService.getValidatedArgs({ args: argsCustomerAuthTsoaController_updateDeviceToken, request, response });
+                validatedArgs = templateService.getValidatedArgs({ args: argsCustomerAuthTsoaController_customerUpdateDeviceToken, request, response });
 
                 const controller = new CustomerAuthTsoaController();
 
               await templateService.apiHandler({
-                methodName: 'updateDeviceToken',
+                methodName: 'customerUpdateDeviceToken',
                 controller,
                 response,
                 next,
@@ -2428,26 +2588,26 @@ export function RegisterRoutes(app: Router) {
             }
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
-        const argsCustomerAddressTsoaController_getAddresses: Record<string, TsoaRoute.ParameterSchema> = {
+        const argsCustomerAddressTsoaController_customerGetAddresses: Record<string, TsoaRoute.ParameterSchema> = {
                 request: {"in":"request","name":"request","required":true,"dataType":"object"},
         };
         app.get('/api/v1/customer/addresses',
             authenticateMiddleware([{"jwt":[]}]),
             ...(fetchMiddlewares<RequestHandler>(CustomerAddressTsoaController)),
-            ...(fetchMiddlewares<RequestHandler>(CustomerAddressTsoaController.prototype.getAddresses)),
+            ...(fetchMiddlewares<RequestHandler>(CustomerAddressTsoaController.prototype.customerGetAddresses)),
 
-            async function CustomerAddressTsoaController_getAddresses(request: ExRequest, response: ExResponse, next: any) {
+            async function CustomerAddressTsoaController_customerGetAddresses(request: ExRequest, response: ExResponse, next: any) {
 
             // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
 
             let validatedArgs: any[] = [];
             try {
-                validatedArgs = templateService.getValidatedArgs({ args: argsCustomerAddressTsoaController_getAddresses, request, response });
+                validatedArgs = templateService.getValidatedArgs({ args: argsCustomerAddressTsoaController_customerGetAddresses, request, response });
 
                 const controller = new CustomerAddressTsoaController();
 
               await templateService.apiHandler({
-                methodName: 'getAddresses',
+                methodName: 'customerGetAddresses',
                 controller,
                 response,
                 next,
@@ -2459,27 +2619,27 @@ export function RegisterRoutes(app: Router) {
             }
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
-        const argsCustomerAddressTsoaController_addAddress: Record<string, TsoaRoute.ParameterSchema> = {
+        const argsCustomerAddressTsoaController_customerAddAddress: Record<string, TsoaRoute.ParameterSchema> = {
                 requestBody: {"in":"body","name":"requestBody","required":true,"ref":"CustomerAddAddressRequest"},
                 request: {"in":"request","name":"request","required":true,"dataType":"object"},
         };
         app.post('/api/v1/customer/addresses',
             authenticateMiddleware([{"jwt":[]}]),
             ...(fetchMiddlewares<RequestHandler>(CustomerAddressTsoaController)),
-            ...(fetchMiddlewares<RequestHandler>(CustomerAddressTsoaController.prototype.addAddress)),
+            ...(fetchMiddlewares<RequestHandler>(CustomerAddressTsoaController.prototype.customerAddAddress)),
 
-            async function CustomerAddressTsoaController_addAddress(request: ExRequest, response: ExResponse, next: any) {
+            async function CustomerAddressTsoaController_customerAddAddress(request: ExRequest, response: ExResponse, next: any) {
 
             // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
 
             let validatedArgs: any[] = [];
             try {
-                validatedArgs = templateService.getValidatedArgs({ args: argsCustomerAddressTsoaController_addAddress, request, response });
+                validatedArgs = templateService.getValidatedArgs({ args: argsCustomerAddressTsoaController_customerAddAddress, request, response });
 
                 const controller = new CustomerAddressTsoaController();
 
               await templateService.apiHandler({
-                methodName: 'addAddress',
+                methodName: 'customerAddAddress',
                 controller,
                 response,
                 next,
@@ -2491,7 +2651,7 @@ export function RegisterRoutes(app: Router) {
             }
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
-        const argsCustomerAddressTsoaController_updateAddress: Record<string, TsoaRoute.ParameterSchema> = {
+        const argsCustomerAddressTsoaController_customerUpdateAddress: Record<string, TsoaRoute.ParameterSchema> = {
                 addressId: {"in":"path","name":"addressId","required":true,"dataType":"string"},
                 requestBody: {"in":"body","name":"requestBody","required":true,"ref":"CustomerUpdateAddressRequest"},
                 request: {"in":"request","name":"request","required":true,"dataType":"object"},
@@ -2499,20 +2659,20 @@ export function RegisterRoutes(app: Router) {
         app.patch('/api/v1/customer/addresses/:addressId',
             authenticateMiddleware([{"jwt":[]}]),
             ...(fetchMiddlewares<RequestHandler>(CustomerAddressTsoaController)),
-            ...(fetchMiddlewares<RequestHandler>(CustomerAddressTsoaController.prototype.updateAddress)),
+            ...(fetchMiddlewares<RequestHandler>(CustomerAddressTsoaController.prototype.customerUpdateAddress)),
 
-            async function CustomerAddressTsoaController_updateAddress(request: ExRequest, response: ExResponse, next: any) {
+            async function CustomerAddressTsoaController_customerUpdateAddress(request: ExRequest, response: ExResponse, next: any) {
 
             // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
 
             let validatedArgs: any[] = [];
             try {
-                validatedArgs = templateService.getValidatedArgs({ args: argsCustomerAddressTsoaController_updateAddress, request, response });
+                validatedArgs = templateService.getValidatedArgs({ args: argsCustomerAddressTsoaController_customerUpdateAddress, request, response });
 
                 const controller = new CustomerAddressTsoaController();
 
               await templateService.apiHandler({
-                methodName: 'updateAddress',
+                methodName: 'customerUpdateAddress',
                 controller,
                 response,
                 next,
@@ -2524,27 +2684,27 @@ export function RegisterRoutes(app: Router) {
             }
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
-        const argsCustomerAddressTsoaController_deleteAddress: Record<string, TsoaRoute.ParameterSchema> = {
+        const argsCustomerAddressTsoaController_customerDeleteAddress: Record<string, TsoaRoute.ParameterSchema> = {
                 addressId: {"in":"path","name":"addressId","required":true,"dataType":"string"},
                 request: {"in":"request","name":"request","required":true,"dataType":"object"},
         };
         app.delete('/api/v1/customer/addresses/:addressId',
             authenticateMiddleware([{"jwt":[]}]),
             ...(fetchMiddlewares<RequestHandler>(CustomerAddressTsoaController)),
-            ...(fetchMiddlewares<RequestHandler>(CustomerAddressTsoaController.prototype.deleteAddress)),
+            ...(fetchMiddlewares<RequestHandler>(CustomerAddressTsoaController.prototype.customerDeleteAddress)),
 
-            async function CustomerAddressTsoaController_deleteAddress(request: ExRequest, response: ExResponse, next: any) {
+            async function CustomerAddressTsoaController_customerDeleteAddress(request: ExRequest, response: ExResponse, next: any) {
 
             // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
 
             let validatedArgs: any[] = [];
             try {
-                validatedArgs = templateService.getValidatedArgs({ args: argsCustomerAddressTsoaController_deleteAddress, request, response });
+                validatedArgs = templateService.getValidatedArgs({ args: argsCustomerAddressTsoaController_customerDeleteAddress, request, response });
 
                 const controller = new CustomerAddressTsoaController();
 
               await templateService.apiHandler({
-                methodName: 'deleteAddress',
+                methodName: 'customerDeleteAddress',
                 controller,
                 response,
                 next,
@@ -2556,27 +2716,27 @@ export function RegisterRoutes(app: Router) {
             }
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
-        const argsCustomerAddressTsoaController_setDefaultAddress: Record<string, TsoaRoute.ParameterSchema> = {
+        const argsCustomerAddressTsoaController_customerSetDefaultAddress: Record<string, TsoaRoute.ParameterSchema> = {
                 addressId: {"in":"path","name":"addressId","required":true,"dataType":"string"},
                 request: {"in":"request","name":"request","required":true,"dataType":"object"},
         };
         app.patch('/api/v1/customer/addresses/:addressId/default',
             authenticateMiddleware([{"jwt":[]}]),
             ...(fetchMiddlewares<RequestHandler>(CustomerAddressTsoaController)),
-            ...(fetchMiddlewares<RequestHandler>(CustomerAddressTsoaController.prototype.setDefaultAddress)),
+            ...(fetchMiddlewares<RequestHandler>(CustomerAddressTsoaController.prototype.customerSetDefaultAddress)),
 
-            async function CustomerAddressTsoaController_setDefaultAddress(request: ExRequest, response: ExResponse, next: any) {
+            async function CustomerAddressTsoaController_customerSetDefaultAddress(request: ExRequest, response: ExResponse, next: any) {
 
             // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
 
             let validatedArgs: any[] = [];
             try {
-                validatedArgs = templateService.getValidatedArgs({ args: argsCustomerAddressTsoaController_setDefaultAddress, request, response });
+                validatedArgs = templateService.getValidatedArgs({ args: argsCustomerAddressTsoaController_customerSetDefaultAddress, request, response });
 
                 const controller = new CustomerAddressTsoaController();
 
               await templateService.apiHandler({
-                methodName: 'setDefaultAddress',
+                methodName: 'customerSetDefaultAddress',
                 controller,
                 response,
                 next,
@@ -2588,26 +2748,26 @@ export function RegisterRoutes(app: Router) {
             }
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
-        const argsCustomerAddressTsoaController_getDefaultAddress: Record<string, TsoaRoute.ParameterSchema> = {
+        const argsCustomerAddressTsoaController_customerGetDefaultAddress: Record<string, TsoaRoute.ParameterSchema> = {
                 request: {"in":"request","name":"request","required":true,"dataType":"object"},
         };
         app.get('/api/v1/customer/addresses/default',
             authenticateMiddleware([{"jwt":[]}]),
             ...(fetchMiddlewares<RequestHandler>(CustomerAddressTsoaController)),
-            ...(fetchMiddlewares<RequestHandler>(CustomerAddressTsoaController.prototype.getDefaultAddress)),
+            ...(fetchMiddlewares<RequestHandler>(CustomerAddressTsoaController.prototype.customerGetDefaultAddress)),
 
-            async function CustomerAddressTsoaController_getDefaultAddress(request: ExRequest, response: ExResponse, next: any) {
+            async function CustomerAddressTsoaController_customerGetDefaultAddress(request: ExRequest, response: ExResponse, next: any) {
 
             // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
 
             let validatedArgs: any[] = [];
             try {
-                validatedArgs = templateService.getValidatedArgs({ args: argsCustomerAddressTsoaController_getDefaultAddress, request, response });
+                validatedArgs = templateService.getValidatedArgs({ args: argsCustomerAddressTsoaController_customerGetDefaultAddress, request, response });
 
                 const controller = new CustomerAddressTsoaController();
 
               await templateService.apiHandler({
-                methodName: 'getDefaultAddress',
+                methodName: 'customerGetDefaultAddress',
                 controller,
                 response,
                 next,
