@@ -33,7 +33,7 @@ export const getAddresses = async (
 
     res.status(200).json({
       status: 'success',
-      data: customer.addresses,
+      data: customer.addresses || [],
     });
   } catch (error) {
     console.error('Get addresses error:', error);
