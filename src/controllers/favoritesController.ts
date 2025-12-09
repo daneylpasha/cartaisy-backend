@@ -1,5 +1,6 @@
 import { Get, Post, Delete, Route, Tags, Response, Body, Security, Request, Query } from 'tsoa';
 import { Controller } from '@tsoa/runtime';
+import mongoose from 'mongoose';
 import Favorite from '../models/Favorite';
 import shopifyStorefront from '../services/shopifyStorefrontService';
 import {
@@ -26,7 +27,7 @@ export class FavoritesController extends Controller {
   @Response(500, 'Internal Server Error')
   public async getFavorites(@Request() request: any): Promise<FavoritesResponse> {
     try {
-      const userId = request.user?.id || request.user?._id;
+      const userId = request.user?.id || request.user?._id?.toString();
       const isCustomer = request.user?.role === 'customer';
 
       if (!userId) {
@@ -37,8 +38,11 @@ export class FavoritesController extends Controller {
         };
       }
 
+      // Convert userId string to ObjectId for mongoose queries
+      const userObjectId = new mongoose.Types.ObjectId(userId);
+
       // Query by customerId for customers, userId for users
-      const query = isCustomer ? { customerId: userId } : { userId };
+      const query = isCustomer ? { customerId: userObjectId } : { userId: userObjectId };
       const favorites = await Favorite.find(query)
         .select('productId')
         .lean();
@@ -71,9 +75,12 @@ export class FavoritesController extends Controller {
     @Body() body: FavoriteRequest,
     @Request() request: any
   ): Promise<FavoriteOperationResponse> {
+    let userId: string | undefined;
+    let isCustomer = false;
+
     try {
-      const userId = request.user?.id || request.user?._id;
-      const isCustomer = request.user?.role === 'customer';
+      userId = request.user?.id || request.user?._id?.toString();
+      isCustomer = request.user?.role === 'customer';
 
       if (!userId) {
         this.setStatus(401);
@@ -104,10 +111,13 @@ export class FavoritesController extends Controller {
         };
       }
 
+      // Convert userId string to ObjectId for mongoose queries
+      const userObjectId = new mongoose.Types.ObjectId(userId);
+
       // Check if already favorited - query by customerId for customers, userId for users
       const query = isCustomer
-        ? { customerId: userId, productId: sanitizedProductId }
-        : { userId, productId: sanitizedProductId };
+        ? { customerId: userObjectId, productId: sanitizedProductId }
+        : { userId: userObjectId, productId: sanitizedProductId };
       const existing = await Favorite.findOne(query);
 
       if (existing) {
@@ -119,8 +129,8 @@ export class FavoritesController extends Controller {
 
       // Add to favorites - set customerId for customers, userId for users
       const favoriteData = isCustomer
-        ? { customerId: userId, productId: sanitizedProductId }
-        : { userId, productId: sanitizedProductId };
+        ? { customerId: userObjectId, productId: sanitizedProductId }
+        : { userId: userObjectId, productId: sanitizedProductId };
       await Favorite.create(favoriteData);
 
       return {
@@ -128,11 +138,17 @@ export class FavoritesController extends Controller {
         message: 'Product added to favorites',
       };
     } catch (error) {
-      console.error('Error adding favorite:', error instanceof Error ? error.message : 'Unknown error');
+      console.error('[Favorites] Add favorite error:', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+        userId,
+        isCustomer,
+        productId: body.productId,
+      });
       this.setStatus(500);
       return {
         success: false,
-        message: 'Failed to add favorite',
+        message: error instanceof Error ? error.message : 'Failed to add favorite',
       };
     }
   }
@@ -150,7 +166,7 @@ export class FavoritesController extends Controller {
     @Request() request: any
   ): Promise<FavoriteOperationResponse> {
     try {
-      const userId = request.user?.id || request.user?._id;
+      const userId = request.user?.id || request.user?._id?.toString();
       const isCustomer = request.user?.role === 'customer';
 
       if (!userId) {
@@ -161,10 +177,13 @@ export class FavoritesController extends Controller {
         };
       }
 
+      // Convert userId string to ObjectId for mongoose queries
+      const userObjectId = new mongoose.Types.ObjectId(userId);
+
       // Delete by customerId for customers, userId for users
       const query = isCustomer
-        ? { customerId: userId, productId }
-        : { userId, productId };
+        ? { customerId: userObjectId, productId }
+        : { userId: userObjectId, productId };
       const result = await Favorite.deleteOne(query);
 
       if (result.deletedCount === 0) {
@@ -204,7 +223,7 @@ export class FavoritesController extends Controller {
     @Query() limit: number = 20
   ): Promise<DetailedFavoritesResponse> {
     try {
-      const userId = request.user?.id || request.user?._id;
+      const userId = request.user?.id || request.user?._id?.toString();
       const isCustomer = request.user?.role === 'customer';
 
       if (!userId) {
@@ -222,6 +241,9 @@ export class FavoritesController extends Controller {
           },
         };
       }
+
+      // Convert userId string to ObjectId for mongoose queries
+      const userObjectId = new mongoose.Types.ObjectId(userId);
 
       // Validate and sanitize pagination parameters
       let pageNum = parseInt(String(page));
@@ -244,7 +266,7 @@ export class FavoritesController extends Controller {
       const skip = (pageNum - 1) * limitNum;
 
       // Query by customerId for customers, userId for users
-      const query = isCustomer ? { customerId: userId } : { userId };
+      const query = isCustomer ? { customerId: userObjectId } : { userId: userObjectId };
 
       // Get total count of favorites for pagination
       const totalFavorites = await Favorite.countDocuments(query);
