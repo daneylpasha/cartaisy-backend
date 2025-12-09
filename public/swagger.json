@@ -1715,6 +1715,415 @@
 				"type": "object",
 				"additionalProperties": false
 			},
+			"CustomerData": {
+				"description": "Customer data response interface",
+				"properties": {
+					"id": {
+						"type": "string"
+					},
+					"email": {
+						"type": "string"
+					},
+					"name": {
+						"type": "string"
+					},
+					"phone": {
+						"type": "string"
+					},
+					"avatar": {
+						"type": "string"
+					},
+					"gender": {
+						"type": "string",
+						"enum": [
+							"male",
+							"female",
+							"other",
+							"prefer_not_to_say"
+						]
+					},
+					"dateOfBirth": {
+						"type": "string",
+						"format": "date-time"
+					},
+					"country": {
+						"type": "string"
+					},
+					"storeId": {
+						"type": "string"
+					},
+					"addresses": {
+						"items": {},
+						"type": "array"
+					},
+					"preferences": {},
+					"isVerified": {
+						"type": "boolean"
+					},
+					"isActive": {
+						"type": "boolean"
+					},
+					"createdAt": {
+						"type": "string",
+						"format": "date-time"
+					},
+					"lastLoginAt": {
+						"type": "string",
+						"format": "date-time"
+					}
+				},
+				"required": [
+					"id",
+					"email",
+					"storeId",
+					"addresses",
+					"preferences",
+					"isVerified",
+					"isActive",
+					"createdAt"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"CustomerRegisterRequest": {
+				"properties": {
+					"email": {
+						"type": "string",
+						"description": "Customer email address"
+					},
+					"password": {
+						"type": "string",
+						"description": "Password (minimum 6 characters)"
+					},
+					"name": {
+						"type": "string",
+						"description": "Customer full name (optional)"
+					},
+					"phone": {
+						"type": "string",
+						"description": "Customer phone number (optional)"
+					}
+				},
+				"required": [
+					"email",
+					"password"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"CustomerLoginRequest": {
+				"properties": {
+					"email": {
+						"type": "string",
+						"description": "Customer email address"
+					},
+					"password": {
+						"type": "string",
+						"description": "Customer password"
+					}
+				},
+				"required": [
+					"email",
+					"password"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"CustomerUpdateProfileRequest": {
+				"properties": {
+					"name": {
+						"type": "string",
+						"description": "Customer full name"
+					},
+					"fullName": {
+						"type": "string",
+						"description": "Alternative field name for full name"
+					},
+					"phone": {
+						"type": "string",
+						"description": "Customer phone number"
+					},
+					"phoneNumber": {
+						"type": "string",
+						"description": "Alternative field name for phone number"
+					},
+					"avatar": {
+						"type": "string",
+						"description": "Avatar URL"
+					},
+					"gender": {
+						"type": "string",
+						"enum": [
+							"male",
+							"female",
+							"other",
+							"prefer_not_to_say"
+						],
+						"description": "Gender"
+					},
+					"dateOfBirth": {
+						"type": "string",
+						"description": "Date of birth (ISO string)"
+					},
+					"country": {
+						"type": "string",
+						"description": "Country"
+					},
+					"preferences": {
+						"properties": {
+							"notifications": {
+								"properties": {
+									"orderUpdates": {
+										"type": "boolean"
+									},
+									"promotions": {
+										"type": "boolean"
+									},
+									"sms": {
+										"type": "boolean"
+									},
+									"push": {
+										"type": "boolean"
+									},
+									"email": {
+										"type": "boolean"
+									}
+								},
+								"type": "object"
+							},
+							"language": {
+								"type": "string"
+							},
+							"currency": {
+								"type": "string"
+							}
+						},
+						"type": "object",
+						"description": "Notification and other preferences"
+					}
+				},
+				"type": "object",
+				"additionalProperties": false
+			},
+			"CustomerLogoutRequest": {
+				"properties": {
+					"deviceToken": {
+						"type": "string",
+						"description": "Device token to remove (optional)"
+					}
+				},
+				"type": "object",
+				"additionalProperties": false
+			},
+			"CustomerDeviceTokenRequest": {
+				"properties": {
+					"token": {
+						"type": "string",
+						"description": "Push notification token"
+					},
+					"platform": {
+						"type": "string",
+						"enum": [
+							"ios",
+							"android"
+						],
+						"description": "Device platform"
+					}
+				},
+				"required": [
+					"token",
+					"platform"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"CustomerAddressResponse": {
+				"properties": {
+					"_id": {
+						"type": "string"
+					},
+					"label": {
+						"type": "string"
+					},
+					"type": {
+						"type": "string",
+						"enum": [
+							"billing",
+							"shipping",
+							"both"
+						]
+					},
+					"firstName": {
+						"type": "string"
+					},
+					"lastName": {
+						"type": "string"
+					},
+					"phone": {
+						"type": "string"
+					},
+					"address1": {
+						"type": "string"
+					},
+					"address2": {
+						"type": "string"
+					},
+					"city": {
+						"type": "string"
+					},
+					"province": {
+						"type": "string"
+					},
+					"country": {
+						"type": "string"
+					},
+					"countryCode": {
+						"type": "string"
+					},
+					"zip": {
+						"type": "string"
+					},
+					"deliveryInstructions": {
+						"type": "string"
+					},
+					"isDefault": {
+						"type": "boolean"
+					}
+				},
+				"required": [
+					"address1",
+					"province",
+					"country"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"CustomerAddAddressRequest": {
+				"description": "Customer Address interface for request body",
+				"properties": {
+					"label": {
+						"type": "string",
+						"description": "Address label like \"Home\", \"Work\""
+					},
+					"type": {
+						"type": "string",
+						"enum": [
+							"billing",
+							"shipping",
+							"both"
+						],
+						"description": "Address type"
+					},
+					"firstName": {
+						"type": "string",
+						"description": "First name"
+					},
+					"lastName": {
+						"type": "string",
+						"description": "Last name"
+					},
+					"phone": {
+						"type": "string",
+						"description": "Phone number"
+					},
+					"address1": {
+						"type": "string",
+						"description": "Street address line 1"
+					},
+					"address2": {
+						"type": "string",
+						"description": "Street address line 2"
+					},
+					"city": {
+						"type": "string",
+						"description": "City"
+					},
+					"province": {
+						"type": "string",
+						"description": "State/Province"
+					},
+					"country": {
+						"type": "string",
+						"description": "Country name"
+					},
+					"countryCode": {
+						"type": "string",
+						"description": "ISO country code like \"US\", \"GB\""
+					},
+					"zip": {
+						"type": "string",
+						"description": "Postal/ZIP code"
+					},
+					"deliveryInstructions": {
+						"type": "string",
+						"description": "Delivery instructions (max 300 characters)"
+					},
+					"isDefault": {
+						"type": "boolean",
+						"description": "Set as default address"
+					}
+				},
+				"required": [
+					"address1",
+					"province",
+					"country"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"CustomerUpdateAddressRequest": {
+				"properties": {
+					"label": {
+						"type": "string"
+					},
+					"type": {
+						"type": "string",
+						"enum": [
+							"billing",
+							"shipping",
+							"both"
+						]
+					},
+					"firstName": {
+						"type": "string"
+					},
+					"lastName": {
+						"type": "string"
+					},
+					"phone": {
+						"type": "string"
+					},
+					"address1": {
+						"type": "string"
+					},
+					"address2": {
+						"type": "string"
+					},
+					"city": {
+						"type": "string"
+					},
+					"province": {
+						"type": "string"
+					},
+					"country": {
+						"type": "string"
+					},
+					"countryCode": {
+						"type": "string"
+					},
+					"zip": {
+						"type": "string"
+					},
+					"deliveryInstructions": {
+						"type": "string"
+					},
+					"isDefault": {
+						"type": "boolean"
+					}
+				},
+				"type": "object",
+				"additionalProperties": false
+			},
 			"CollectionProduct": {
 				"description": "Product item in collection response",
 				"properties": {
@@ -5407,6 +5816,863 @@
 						}
 					}
 				]
+			}
+		},
+		"/customer/auth/register": {
+			"post": {
+				"operationId": "Register",
+				"responses": {
+					"201": {
+						"description": "Registration successful",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"data": {
+											"properties": {
+												"refreshToken": {
+													"type": "string"
+												},
+												"token": {
+													"type": "string"
+												},
+												"user": {
+													"$ref": "#/components/schemas/CustomerData"
+												}
+											},
+											"required": [
+												"refreshToken",
+												"token",
+												"user"
+											],
+											"type": "object"
+										},
+										"message": {
+											"type": "string"
+										},
+										"status": {
+											"type": "string",
+											"enum": [
+												"success",
+												"error"
+											]
+										}
+									},
+									"required": [
+										"message",
+										"status"
+									],
+									"type": "object"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "Bad Request"
+					},
+					"403": {
+						"description": "Store not active"
+					},
+					"404": {
+						"description": "Store not found"
+					},
+					"409": {
+						"description": "Email already exists"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Register a new customer account",
+				"summary": "Register new customer",
+				"tags": [
+					"Customer Authentication"
+				],
+				"security": [],
+				"parameters": [
+					{
+						"description": "Store ID from header",
+						"in": "header",
+						"name": "x-store-id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"requestBody": {
+					"description": "Registration data",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/CustomerRegisterRequest",
+								"description": "Registration data"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/customer/auth/login": {
+			"post": {
+				"operationId": "Login",
+				"responses": {
+					"200": {
+						"description": "Login successful",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"data": {
+											"properties": {
+												"refreshToken": {
+													"type": "string"
+												},
+												"token": {
+													"type": "string"
+												},
+												"user": {
+													"$ref": "#/components/schemas/CustomerData"
+												}
+											},
+											"required": [
+												"refreshToken",
+												"token",
+												"user"
+											],
+											"type": "object"
+										},
+										"message": {
+											"type": "string"
+										},
+										"status": {
+											"type": "string",
+											"enum": [
+												"success",
+												"error"
+											]
+										}
+									},
+									"required": [
+										"message",
+										"status"
+									],
+									"type": "object"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "Bad Request"
+					},
+					"401": {
+						"description": "Invalid credentials"
+					},
+					"403": {
+						"description": "Account deactivated"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Login customer",
+				"summary": "Customer login",
+				"tags": [
+					"Customer Authentication"
+				],
+				"security": [],
+				"parameters": [
+					{
+						"description": "Store ID from header",
+						"in": "header",
+						"name": "x-store-id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"requestBody": {
+					"description": "Login credentials",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/CustomerLoginRequest",
+								"description": "Login credentials"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/customer/auth/profile": {
+			"get": {
+				"operationId": "GetProfile",
+				"responses": {
+					"200": {
+						"description": "Profile retrieved successfully",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"message": {
+											"type": "string"
+										},
+										"data": {
+											"properties": {
+												"user": {
+													"$ref": "#/components/schemas/CustomerData"
+												}
+											},
+											"required": [
+												"user"
+											],
+											"type": "object"
+										},
+										"status": {
+											"type": "string",
+											"enum": [
+												"success",
+												"error"
+											]
+										}
+									},
+									"required": [
+										"status"
+									],
+									"type": "object"
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "Unauthorized"
+					},
+					"404": {
+						"description": "Customer not found"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Get current customer profile",
+				"summary": "Get customer profile",
+				"tags": [
+					"Customer Authentication"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": []
+			},
+			"patch": {
+				"operationId": "UpdateProfile",
+				"responses": {
+					"200": {
+						"description": "Profile updated successfully",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"data": {
+											"properties": {
+												"user": {
+													"$ref": "#/components/schemas/CustomerData"
+												}
+											},
+											"required": [
+												"user"
+											],
+											"type": "object"
+										},
+										"message": {
+											"type": "string"
+										},
+										"status": {
+											"type": "string",
+											"enum": [
+												"success",
+												"error"
+											]
+										}
+									},
+									"required": [
+										"message",
+										"status"
+									],
+									"type": "object"
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "Unauthorized"
+					},
+					"404": {
+						"description": "Customer not found"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Update customer profile",
+				"summary": "Update customer profile",
+				"tags": [
+					"Customer Authentication"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [],
+				"requestBody": {
+					"description": "Profile fields to update",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/CustomerUpdateProfileRequest",
+								"description": "Profile fields to update"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/customer/auth/logout": {
+			"post": {
+				"operationId": "Logout",
+				"responses": {
+					"200": {
+						"description": "Logged out successfully",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"message": {
+											"type": "string"
+										},
+										"status": {
+											"type": "string",
+											"enum": [
+												"success",
+												"error"
+											]
+										}
+									},
+									"required": [
+										"message",
+										"status"
+									],
+									"type": "object"
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "Unauthorized"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Logout customer",
+				"summary": "Customer logout",
+				"tags": [
+					"Customer Authentication"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [],
+				"requestBody": {
+					"description": "Optional device token to remove",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/CustomerLogoutRequest",
+								"description": "Optional device token to remove"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/customer/auth/device-token": {
+			"post": {
+				"operationId": "UpdateDeviceToken",
+				"responses": {
+					"200": {
+						"description": "Device token updated",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"message": {
+											"type": "string"
+										},
+										"status": {
+											"type": "string",
+											"enum": [
+												"success",
+												"error"
+											]
+										}
+									},
+									"required": [
+										"message",
+										"status"
+									],
+									"type": "object"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "Bad Request"
+					},
+					"401": {
+						"description": "Unauthorized"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Update device token for push notifications",
+				"summary": "Update device token",
+				"tags": [
+					"Customer Authentication"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [],
+				"requestBody": {
+					"description": "Device token and platform",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/CustomerDeviceTokenRequest",
+								"description": "Device token and platform"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/customer/addresses": {
+			"get": {
+				"operationId": "GetAddresses",
+				"responses": {
+					"200": {
+						"description": "Addresses retrieved successfully",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"message": {
+											"type": "string"
+										},
+										"data": {
+											"items": {
+												"$ref": "#/components/schemas/CustomerAddressResponse"
+											},
+											"type": "array"
+										},
+										"status": {
+											"type": "string",
+											"enum": [
+												"success",
+												"error"
+											]
+										}
+									},
+									"required": [
+										"status"
+									],
+									"type": "object"
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "Unauthorized"
+					},
+					"404": {
+						"description": "Customer not found"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Get all addresses for the authenticated customer",
+				"summary": "Get customer addresses",
+				"tags": [
+					"Customer Addresses"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": []
+			},
+			"post": {
+				"operationId": "AddAddress",
+				"responses": {
+					"201": {
+						"description": "Address added successfully",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"data": {
+											"$ref": "#/components/schemas/CustomerAddressResponse"
+										},
+										"message": {
+											"type": "string"
+										},
+										"status": {
+											"type": "string",
+											"enum": [
+												"success",
+												"error"
+											]
+										}
+									},
+									"required": [
+										"message",
+										"status"
+									],
+									"type": "object"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "Bad Request"
+					},
+					"401": {
+						"description": "Unauthorized"
+					},
+					"404": {
+						"description": "Customer not found"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Add a new address for the authenticated customer",
+				"summary": "Add new address",
+				"tags": [
+					"Customer Addresses"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [],
+				"requestBody": {
+					"description": "Address details",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/CustomerAddAddressRequest",
+								"description": "Address details"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/customer/addresses/{addressId}": {
+			"patch": {
+				"operationId": "UpdateAddress",
+				"responses": {
+					"200": {
+						"description": "Address updated successfully",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"data": {
+											"$ref": "#/components/schemas/CustomerAddressResponse"
+										},
+										"message": {
+											"type": "string"
+										},
+										"status": {
+											"type": "string",
+											"enum": [
+												"success",
+												"error"
+											]
+										}
+									},
+									"required": [
+										"message",
+										"status"
+									],
+									"type": "object"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "Bad Request"
+					},
+					"401": {
+						"description": "Unauthorized"
+					},
+					"404": {
+						"description": "Address not found"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Update an existing address by ID",
+				"summary": "Update address",
+				"tags": [
+					"Customer Addresses"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [
+					{
+						"description": "MongoDB ObjectId of the address",
+						"in": "path",
+						"name": "addressId",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"requestBody": {
+					"description": "Updated address details",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/CustomerUpdateAddressRequest",
+								"description": "Updated address details"
+							}
+						}
+					}
+				}
+			},
+			"delete": {
+				"operationId": "DeleteAddress",
+				"responses": {
+					"200": {
+						"description": "Address deleted successfully",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"message": {
+											"type": "string"
+										},
+										"status": {
+											"type": "string",
+											"enum": [
+												"success",
+												"error"
+											]
+										}
+									},
+									"required": [
+										"message",
+										"status"
+									],
+									"type": "object"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "Bad Request"
+					},
+					"401": {
+						"description": "Unauthorized"
+					},
+					"404": {
+						"description": "Address not found"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Delete an address by ID",
+				"summary": "Delete address",
+				"tags": [
+					"Customer Addresses"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [
+					{
+						"description": "MongoDB ObjectId of the address",
+						"in": "path",
+						"name": "addressId",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				]
+			}
+		},
+		"/customer/addresses/{addressId}/default": {
+			"patch": {
+				"operationId": "SetDefaultAddress",
+				"responses": {
+					"200": {
+						"description": "Default address updated successfully",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"data": {
+											"$ref": "#/components/schemas/CustomerAddressResponse"
+										},
+										"message": {
+											"type": "string"
+										},
+										"status": {
+											"type": "string",
+											"enum": [
+												"success",
+												"error"
+											]
+										}
+									},
+									"required": [
+										"message",
+										"status"
+									],
+									"type": "object"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "Bad Request"
+					},
+					"401": {
+						"description": "Unauthorized"
+					},
+					"404": {
+						"description": "Address not found"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Set an address as default",
+				"summary": "Set default address",
+				"tags": [
+					"Customer Addresses"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [
+					{
+						"description": "MongoDB ObjectId of the address",
+						"in": "path",
+						"name": "addressId",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				]
+			}
+		},
+		"/customer/addresses/default": {
+			"get": {
+				"operationId": "GetDefaultAddress",
+				"responses": {
+					"200": {
+						"description": "Default address retrieved successfully",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"message": {
+											"type": "string"
+										},
+										"data": {
+											"properties": {
+												"address": {
+													"$ref": "#/components/schemas/CustomerAddressResponse"
+												}
+											},
+											"required": [
+												"address"
+											],
+											"type": "object"
+										},
+										"status": {
+											"type": "string",
+											"enum": [
+												"success",
+												"error"
+											]
+										}
+									},
+									"required": [
+										"status"
+									],
+									"type": "object"
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "Unauthorized"
+					},
+					"404": {
+						"description": "No default address found"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Get the default address for the authenticated customer",
+				"summary": "Get default address",
+				"tags": [
+					"Customer Addresses"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": []
 			}
 		},
 		"/collections/{collectionId}/products": {
