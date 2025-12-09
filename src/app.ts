@@ -19,7 +19,10 @@ app.use(cors({
   credentials: true
 }));
 
-// Rate limiting (prevents spam/abuse)
+// Trust proxy for Railway/production deployments (must be before rate limiters)
+app.set('trust proxy', 1);
+
+// Standard rate limiting (prevents spam/abuse)
 const limiter = rateLimit({
   windowMs: tenantConfig.security.rateLimitWindowMs,
   max: tenantConfig.security.rateLimitMaxRequests,
@@ -30,9 +33,35 @@ const limiter = rateLimit({
   legacyHeaders: false
 });
 
-// Trust proxy for Railway/production deployments
-app.set('trust proxy', 1);
+// More lenient rate limiter for search and read-only endpoints
+// Mobile apps frequently hit these endpoints (e.g., search screen opens)
+const searchLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute window
+  max: 60, // 60 requests per minute (1 per second average)
+  message: {
+    error: 'Too many search requests, please try again later.'
+  },
+  standardHeaders: true,
+  legacyHeaders: false
+});
 
+// Very lenient rate limiter for homescreen/public data (cached on client anyway)
+const publicDataLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute window
+  max: 120, // 120 requests per minute
+  message: {
+    error: 'Too many requests, please try again later.'
+  },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+// Apply lenient rate limiters to specific paths BEFORE the general limiter
+app.use(`/api/${apiConfig.version}/customer/search`, searchLimiter);
+app.use(`/api/${apiConfig.version}/search`, searchLimiter);
+app.use(`/api/${apiConfig.version}/customer/homescreen`, publicDataLimiter);
+
+// Apply general rate limiter to all other API routes
 app.use(`/api/${apiConfig.version}/`, limiter);
 
 // Logging (see all requests in console)
