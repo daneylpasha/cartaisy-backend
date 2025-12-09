@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Patch,
   Post,
@@ -119,6 +120,11 @@ interface CustomerDeviceTokenRequest {
 interface CustomerLogoutRequest {
   /** Device token to remove (optional) */
   deviceToken?: string;
+}
+
+interface CustomerDeleteAccountRequest {
+  /** Customer's password for verification */
+  password: string;
 }
 
 /**
@@ -654,6 +660,95 @@ export class CustomerAuthTsoaController extends Controller {
       return {
         status: 'error',
         message: 'Failed to update device token. Please try again.',
+      };
+    }
+  }
+
+  /**
+   * Delete customer account
+   * Soft deletes the customer account after password verification.
+   * Order history is preserved for record-keeping.
+   * @summary Delete customer account
+   * @param requestBody Password for verification
+   */
+  @Delete('account')
+  @Security('jwt')
+  @SuccessResponse(200, 'Account deleted successfully')
+  @Response(400, 'Bad Request - Password required')
+  @Response(401, 'Unauthorized')
+  @Response(403, 'Forbidden - Incorrect password')
+  @Response(404, 'Customer not found')
+  @Response(500, 'Internal Server Error')
+  public async customerDeleteAccount(
+    @Body() requestBody: CustomerDeleteAccountRequest,
+    @Request() request: any
+  ): Promise<{
+    success: boolean;
+    message: string;
+  }> {
+    try {
+      const customerId = request.user?._id || request.user?.id;
+
+      if (!customerId) {
+        this.setStatus(401);
+        return {
+          success: false,
+          message: 'User not authenticated',
+        };
+      }
+
+      const { password } = requestBody;
+
+      // Validate password is provided
+      if (!password) {
+        this.setStatus(400);
+        return {
+          success: false,
+          message: 'Password is required for account deletion.',
+        };
+      }
+
+      // Find customer with password field
+      const customer = await Customer.findById(customerId).select('+password');
+
+      if (!customer) {
+        this.setStatus(404);
+        return {
+          success: false,
+          message: 'Customer not found',
+        };
+      }
+
+      // Verify password
+      const isPasswordValid = await customer.comparePassword(password);
+      if (!isPasswordValid) {
+        this.setStatus(403);
+        return {
+          success: false,
+          message: 'Incorrect password. Please try again.',
+        };
+      }
+
+      // Soft delete: set isActive to false and add deletedAt timestamp
+      customer.isActive = false;
+      (customer as any).deletedAt = new Date();
+
+      // Clear sensitive data but preserve for order history
+      customer.deviceTokens = [];
+
+      await customer.save();
+
+      this.setStatus(200);
+      return {
+        success: true,
+        message: 'Account deleted successfully',
+      };
+    } catch (error) {
+      console.error('Delete customer account error:', error);
+      this.setStatus(500);
+      return {
+        success: false,
+        message: 'Failed to delete account. Please try again.',
       };
     }
   }

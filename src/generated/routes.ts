@@ -708,6 +708,14 @@ const models: TsoaRoute.Models = {
         "additionalProperties": false,
     },
     // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "CustomerDeleteAccountRequest": {
+        "dataType": "refObject",
+        "properties": {
+            "password": {"dataType":"string","required":true},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
     "CustomerAddressResponse": {
         "dataType": "refObject",
         "properties": {
@@ -2577,6 +2585,38 @@ export function RegisterRoutes(app: Router) {
 
               await templateService.apiHandler({
                 methodName: 'customerUpdateDeviceToken',
+                controller,
+                response,
+                next,
+                validatedArgs,
+                successStatus: 200,
+              });
+            } catch (err) {
+                return next(err);
+            }
+        });
+        // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+        const argsCustomerAuthTsoaController_customerDeleteAccount: Record<string, TsoaRoute.ParameterSchema> = {
+                requestBody: {"in":"body","name":"requestBody","required":true,"ref":"CustomerDeleteAccountRequest"},
+                request: {"in":"request","name":"request","required":true,"dataType":"object"},
+        };
+        app.delete('/api/v1/customer/auth/account',
+            authenticateMiddleware([{"jwt":[]}]),
+            ...(fetchMiddlewares<RequestHandler>(CustomerAuthTsoaController)),
+            ...(fetchMiddlewares<RequestHandler>(CustomerAuthTsoaController.prototype.customerDeleteAccount)),
+
+            async function CustomerAuthTsoaController_customerDeleteAccount(request: ExRequest, response: ExResponse, next: any) {
+
+            // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+
+            let validatedArgs: any[] = [];
+            try {
+                validatedArgs = templateService.getValidatedArgs({ args: argsCustomerAuthTsoaController_customerDeleteAccount, request, response });
+
+                const controller = new CustomerAuthTsoaController();
+
+              await templateService.apiHandler({
+                methodName: 'customerDeleteAccount',
                 controller,
                 response,
                 next,
