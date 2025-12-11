@@ -286,6 +286,20 @@ export const createOrder = async (req: CustomerRequest, res: Response): Promise<
       });
     }
 
+    // Update customer segmentation data
+    await Customer.findByIdAndUpdate(customerId, {
+      $set: { lastOrderDate: new Date() },
+      $inc: { orderCount: 1, totalSpent: totalPrice }
+    });
+
+    // Send push notification (async, don't wait)
+    setImmediate(() => {
+      const { FirebaseNotificationService } = require('../services/firebaseNotificationService');
+      FirebaseNotificationService.sendOrderNotification(order, 'confirmed').catch((err: any) => {
+        console.error('Order confirmation push error:', err);
+      });
+    });
+
     res.status(201).json({
       status: 'success',
       message: 'Order created successfully',
@@ -441,6 +455,14 @@ export const cancelOrder = async (req: CustomerRequest, res: Response): Promise<
         });
       }
     }
+
+    // Send push notification (async, don't wait)
+    setImmediate(() => {
+      const { FirebaseNotificationService } = require('../services/firebaseNotificationService');
+      FirebaseNotificationService.sendOrderNotification(order, 'cancelled').catch((err: any) => {
+        console.error('Order cancellation push error:', err);
+      });
+    });
 
     res.status(200).json({
       status: 'success',

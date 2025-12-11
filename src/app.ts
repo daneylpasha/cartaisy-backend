@@ -6,6 +6,17 @@ import rateLimit from 'express-rate-limit';
 import swaggerUi from 'swagger-ui-express';
 import { tenantConfig, apiConfig, derivedConfig } from './config/tenant';
 
+// Firebase initialization
+import { FirebaseNotificationService } from './services/firebaseNotificationService';
+
+// Log Firebase status on startup
+console.log('Firebase Status:', {
+  initialized: FirebaseNotificationService.isInitialized(),
+  message: FirebaseNotificationService.isInitialized()
+    ? 'Push notifications enabled ✅'
+    : 'Push notifications disabled (no credentials) ⚠️'
+});
+
 // Security middleware imports
 import { strictStoreValidation } from './middleware/strictStoreValidation';
 import { queryProtection } from './middleware/queryInjectionProtection';
@@ -210,6 +221,7 @@ import unifiedCartRoutes from './routes/unifiedCartRoutes';
 import orderManagementRoutes from './routes/orderManagementRoutes';
 import securityRoutes from './routes/securityRoutes';
 import emailConfigRoutes from './routes/emailConfigRoutes';
+import pushNotificationRoutes from './routes/pushNotificationRoutes';
 
 // API Routes with versioning
 app.use(`/api/${apiConfig.version}/auth`, authRoutes);
@@ -243,6 +255,8 @@ app.use(`/api/${apiConfig.version}`, collectionShowcaseRoutes);
 app.use(`/api/${apiConfig.version}/recommendations`, recommendationsRoutes);
 app.use(`/api/${apiConfig.version}/analytics`, analyticsRoutes);
 app.use('/api/analytics', analyticsRoutes); // Also support without version
+// Push notification routes (customer)
+app.use(`/api/${apiConfig.version}/notifications`, pushNotificationRoutes);
 
 // tsoa generated routes (auto-generated, includes controllers with decorators)
 try {

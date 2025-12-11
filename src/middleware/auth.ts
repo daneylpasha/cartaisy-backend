@@ -19,11 +19,11 @@ export const authenticate = async (
   try {
     // Extract token from Authorization header
     const authHeader = req.headers.authorization;
-    
+
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       res.status(401).json({
         status: 'error',
-        message: 'No token provided. Please authenticate.'
+        message: 'No token provided. Please authenticate.',
       });
       return;
     }
@@ -39,18 +39,18 @@ export const authenticate = async (
       const errorMessage = error instanceof Error ? error.message : 'Invalid token';
       res.status(401).json({
         status: 'error',
-        message: errorMessage
+        message: errorMessage,
       });
       return;
     }
 
     // Find user by ID from token payload
     const user = await User.findById(decoded.userId).select('-password');
-    
+
     if (!user) {
       res.status(401).json({
         status: 'error',
-        message: 'User not found. Please authenticate again.'
+        message: 'User not found. Please authenticate again.',
       });
       return;
     }
@@ -59,7 +59,7 @@ export const authenticate = async (
     if (!user.isActive) {
       res.status(403).json({
         status: 'error',
-        message: 'Your account has been deactivated. Please contact support.'
+        message: 'Your account has been deactivated. Please contact support.',
       });
       return;
     }
@@ -79,15 +79,15 @@ export const authenticate = async (
       addresses: user.addresses,
       preferences: user.preferences,
       createdAt: user.createdAt,
-      lastLoginAt: user.lastLoginAt
+      lastLoginAt: user.lastLoginAt,
     };
-    
+
     next();
   } catch (error) {
     console.error('Authentication error:', error);
     res.status(500).json({
       status: 'error',
-      message: 'Authentication failed. Please try again.'
+      message: 'Authentication failed. Please try again.',
     });
   }
 };
@@ -104,7 +104,7 @@ export const optionalAuthenticate = async (
 ): Promise<void> => {
   try {
     const authHeader = req.headers.authorization;
-    
+
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       // No token provided, continue without user
       return next();
@@ -115,7 +115,7 @@ export const optionalAuthenticate = async (
     try {
       const decoded = verifyToken(token);
       const user = await User.findById(decoded.userId).select('-password');
-      
+
       if (user && user.isActive) {
         req.user = {
           _id: user._id,
@@ -131,14 +131,14 @@ export const optionalAuthenticate = async (
           addresses: user.addresses,
           preferences: user.preferences,
           createdAt: user.createdAt,
-          lastLoginAt: user.lastLoginAt
+          lastLoginAt: user.lastLoginAt,
         };
       }
     } catch (error) {
       // Invalid token, continue without user
       console.log('Optional auth: Invalid token provided');
     }
-    
+
     next();
   } catch (error) {
     // Error in optional auth, continue without user
@@ -156,7 +156,7 @@ export const authorize = (...roles: string[]) => {
     if (!req.user) {
       res.status(401).json({
         status: 'error',
-        message: 'Authentication required'
+        message: 'Authentication required',
       });
       return;
     }
@@ -164,7 +164,7 @@ export const authorize = (...roles: string[]) => {
     if (!roles.includes(req.user.role)) {
       res.status(403).json({
         status: 'error',
-        message: 'You do not have permission to perform this action'
+        message: 'You do not have permission to perform this action',
       });
       return;
     }

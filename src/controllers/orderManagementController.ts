@@ -302,6 +302,32 @@ export const updateOrderStatus = async (req: AuthenticatedRequest, res: Response
       console.error('Shopify sync error:', err)
     );
 
+    // Send push notification for status changes (async, don't wait)
+    if (status) {
+      setImmediate(() => {
+        const { FirebaseNotificationService } = require('../services/firebaseNotificationService');
+
+        // Map status to notification type
+        let notificationType: 'confirmed' | 'shipped' | 'delivered' | 'cancelled' | null = null;
+
+        if (status === 'shipped' || status === 'out_for_delivery') {
+          notificationType = 'shipped';
+        } else if (status === 'delivered') {
+          notificationType = 'delivered';
+        } else if (status === 'cancelled') {
+          notificationType = 'cancelled';
+        } else if (status === 'confirmed') {
+          notificationType = 'confirmed';
+        }
+
+        if (notificationType) {
+          FirebaseNotificationService.sendOrderNotification(order, notificationType).catch((err: any) => {
+            console.error('Order status update push error:', err);
+          });
+        }
+      });
+    }
+
     res.status(200).json({
       status: 'success',
       message: 'Order updated successfully',

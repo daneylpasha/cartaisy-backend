@@ -46,6 +46,9 @@ export interface IPreferences {
 export interface IDeviceToken {
   token: string;
   platform: 'ios' | 'android';
+  deviceId?: string;
+  lastUsed: Date;
+  active: boolean;
   createdAt: Date;
 }
 
@@ -64,6 +67,17 @@ export interface ICustomer extends Document {
   cart: ICart;
   preferences: IPreferences;
   deviceTokens: IDeviceToken[];
+  notificationPreferences: {
+    pushEnabled: boolean;
+    orderUpdates: boolean;
+    promotions: boolean;
+    newProducts: boolean;
+  };
+  subscribedToTopics: string[];
+  // Segmentation fields
+  lastOrderDate?: Date;
+  orderCount: number;
+  totalSpent: number;
   stripeCustomerId?: string;
   isActive: boolean;
   isVerified: boolean;
@@ -75,6 +89,11 @@ export interface ICustomer extends Document {
   createdAt: Date;
   updatedAt: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;
+  addDeviceToken(token: string, platform: 'ios' | 'android', deviceId?: string): Promise<ICustomer>;
+  removeDeviceToken(token: string): Promise<ICustomer>;
+  deactivateDeviceToken(token: string): Promise<ICustomer>;
+  getActiveDeviceTokens(): string[];
+  getDeviceTokensByPlatform(platform: 'ios' | 'android'): string[];
 }
 
 const addressSchema = new Schema<IAddress>(
@@ -110,6 +129,9 @@ const deviceTokenSchema = new Schema<IDeviceToken>(
   {
     token: { type: String, required: true },
     platform: { type: String, enum: ['ios', 'android'], required: true },
+    deviceId: { type: String },
+    lastUsed: { type: Date, default: Date.now },
+    active: { type: Boolean, default: true },
     createdAt: { type: Date, default: Date.now },
   },
   { _id: false }
@@ -172,6 +194,17 @@ const customerSchema = new Schema<ICustomer>(
       },
     },
     deviceTokens: [deviceTokenSchema],
+    notificationPreferences: {
+      pushEnabled: { type: Boolean, default: true },
+      orderUpdates: { type: Boolean, default: true },
+      promotions: { type: Boolean, default: true },
+      newProducts: { type: Boolean, default: false },
+    },
+    subscribedToTopics: [{ type: String }],
+    // Segmentation fields for targeted notifications
+    lastOrderDate: { type: Date },
+    orderCount: { type: Number, default: 0 },
+    totalSpent: { type: Number, default: 0 },
     stripeCustomerId: {
       type: String,
       sparse: true,
@@ -234,6 +267,86 @@ customerSchema.methods.comparePassword = async function (
   candidatePassword: string
 ): Promise<boolean> {
   return bcrypt.compare(candidatePassword, this.password);
+};
+
+/**
+ * Add or update a device token
+ */
+customerSchema.methods.addDeviceToken = async function (
+  token: string,
+  platform: 'ios' | 'android',
+  deviceId?: string
+) {
+  // Check if token already exists
+  const existingTokenIndex = this.deviceTokens.findIndex(
+    (dt: IDeviceToken) => dt.token === token
+  );
+
+  if (existingTokenIndex !== -1) {
+    // Update existing token
+    this.deviceTokens[existingTokenIndex].lastUsed = new Date();
+    this.deviceTokens[existingTokenIndex].active = true;
+    this.deviceTokens[existingTokenIndex].platform = platform;
+    if (deviceId) {
+      this.deviceTokens[existingTokenIndex].deviceId = deviceId;
+    }
+  } else {
+    // Add new token
+    this.deviceTokens.push({
+      token,
+      platform,
+      deviceId,
+      lastUsed: new Date(),
+      active: true,
+      createdAt: new Date(),
+    });
+  }
+
+  return this.save();
+};
+
+/**
+ * Remove a device token
+ */
+customerSchema.methods.removeDeviceToken = async function (token: string) {
+  this.deviceTokens = this.deviceTokens.filter(
+    (dt: IDeviceToken) => dt.token !== token
+  );
+  return this.save();
+};
+
+/**
+ * Deactivate a device token (mark as inactive instead of removing)
+ */
+customerSchema.methods.deactivateDeviceToken = async function (token: string) {
+  const tokenIndex = this.deviceTokens.findIndex(
+    (dt: IDeviceToken) => dt.token === token
+  );
+  if (tokenIndex !== -1) {
+    this.deviceTokens[tokenIndex].active = false;
+    return this.save();
+  }
+  return this;
+};
+
+/**
+ * Get all active device tokens
+ */
+customerSchema.methods.getActiveDeviceTokens = function (): string[] {
+  return this.deviceTokens
+    .filter((dt: IDeviceToken) => dt.active)
+    .map((dt: IDeviceToken) => dt.token);
+};
+
+/**
+ * Get device tokens by platform
+ */
+customerSchema.methods.getDeviceTokensByPlatform = function (
+  platform: 'ios' | 'android'
+): string[] {
+  return this.deviceTokens
+    .filter((dt: IDeviceToken) => dt.active && dt.platform === platform)
+    .map((dt: IDeviceToken) => dt.token);
 };
 
 const Customer = mongoose.model<ICustomer>('Customer', customerSchema);
