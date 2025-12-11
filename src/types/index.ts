@@ -625,8 +625,10 @@ export interface IReturnExchange {
 
 export interface IOrder extends Document {
   _id: ObjectId;
+  storeId?: ObjectId;
   shopifyOrderId?: string;
   shopifyOrderNumber?: string;
+  shopifyDraftOrderId?: string;
   orderNumber: string;
   confirmationNumber?: string;
   user?: ObjectId;
@@ -675,6 +677,7 @@ export interface IOrder extends Document {
   source: 'mobile' | 'web' | 'api' | 'pos';
   channel: 'app' | 'website' | 'marketplace' | 'social';
   campaignId?: string;
+  tags?: string[];
   placedAt: Date;
   processedAt?: Date;
   shippedAt?: Date;

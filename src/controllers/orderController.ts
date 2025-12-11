@@ -5,6 +5,7 @@ import OrderTracking from '../models/OrderTracking';
 import Product, { IProductDocument } from '../models/Product';
 import User from '../models/User';
 import { AuthenticatedRequest } from '../types';
+import { ShopifyOrderSyncService } from '../services/shopifyOrderSyncService';
 
 export const getUserOrders = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
@@ -279,6 +280,7 @@ export const createOrder = async (req: AuthenticatedRequest, res: Response): Pro
 
     // Create order
     const order = new Order({
+      storeId: req.storeId || req.user?.storeId,
       user: userId,
       email: req.user?.email,
       lineItems: processedLineItems,
@@ -294,6 +296,7 @@ export const createOrder = async (req: AuthenticatedRequest, res: Response): Pro
       source,
       channel,
       campaignId,
+      tags: ['mobile', 'cartaisy'],
       notificationPreferences: {
         pushEnabled: true,
         emailEnabled: true,
@@ -310,12 +313,28 @@ export const createOrder = async (req: AuthenticatedRequest, res: Response): Pro
       });
     }
 
-    // Send order confirmation notification
+    // Send order confirmation notification (legacy)
     await order.sendNotification(
       'email',
       'Order Confirmation',
       `Your order #${order.orderNumber} has been received and is being processed.`
     );
+
+    // Send order confirmation email via Resend (async, don't wait)
+    setImmediate(() => {
+      const { EmailService } = require('../services/emailService');
+      EmailService.sendOrderConfirmation(order).catch((err: any) => {
+        console.error('Order confirmation email error:', err);
+      });
+    });
+
+    // Async: Create draft order in Shopify (don't wait for completion)
+    ShopifyOrderSyncService.createDraftOrder(order._id.toString())
+      .catch(err => console.error('Shopify sync error:', err));
+
+    // Async: Update inventory in Shopify
+    ShopifyOrderSyncService.updateInventory(order._id.toString())
+      .catch(err => console.error('Inventory update error:', err));
 
     res.status(201).json({
       success: true,
@@ -372,6 +391,14 @@ export const updateOrderStatus = async (req: AuthenticatedRequest, res: Response
     }
 
     await order.updateMobileStatus(status, note, location);
+
+    // Send status update email via Resend (async, don't wait)
+    setImmediate(() => {
+      const { EmailService } = require('../services/emailService');
+      EmailService.sendOrderStatusUpdate(order, status).catch((err: any) => {
+        console.error('Status update email error:', err);
+      });
+    });
 
     res.json({
       success: true,
@@ -433,6 +460,14 @@ export const cancelOrder = async (req: AuthenticatedRequest, res: Response): Pro
         $inc: { 'inventoryTracking.totalQuantity': item.quantity }
       });
     }
+
+    // Send cancellation email via Resend (async, don't wait)
+    setImmediate(() => {
+      const { EmailService } = require('../services/emailService');
+      EmailService.sendOrderCancellation(order, reason).catch((err: any) => {
+        console.error('Cancellation email error:', err);
+      });
+    });
 
     res.json({
       success: true,

@@ -6,6 +6,12 @@ import rateLimit from 'express-rate-limit';
 import swaggerUi from 'swagger-ui-express';
 import { tenantConfig, apiConfig, derivedConfig } from './config/tenant';
 
+// Security middleware imports
+import { strictStoreValidation } from './middleware/strictStoreValidation';
+import { queryProtection } from './middleware/queryInjectionProtection';
+import { auditLogger } from './middleware/auditLogger';
+import { loginLimiter } from './middleware/storeLimiter';
+
 const app: Application = express();
 
 // Security Middleware (protects your API)
@@ -70,6 +76,29 @@ app.use(morgan('combined'));
 // Body parsing (handle JSON data from mobile app)
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+
+// =============================================================================
+// SECURITY MIDDLEWARE
+// =============================================================================
+
+// NoSQL injection protection - sanitizes all input
+app.use(queryProtection);
+
+// Store ID validation for all API routes (prevents cross-store access)
+app.use(`/api/${apiConfig.version}/*`, strictStoreValidation);
+
+// Audit logging for all API routes (async, non-blocking)
+app.use(`/api/${apiConfig.version}/*`, auditLogger);
+
+// Stricter rate limiting for auth endpoints
+app.use(`/api/${apiConfig.version}/customer/auth/login`, loginLimiter);
+app.use(`/api/${apiConfig.version}/customer/auth/register`, loginLimiter);
+app.use(`/api/${apiConfig.version}/auth/login`, loginLimiter);
+app.use(`/api/${apiConfig.version}/auth/register`, loginLimiter);
+
+// =============================================================================
+// HEALTH & MONITORING
+// =============================================================================
 
 // Detailed health check route with system info
 app.get('/api/health/detailed', async (_req: Request, res: Response) => {
@@ -178,6 +207,9 @@ import analyticsRoutes from './routes/analyticsRoutes';
 import customerAuthRoutes from './routes/customerAuthRoutes';
 import customerAddressRoutes from './routes/customerAddressRoutes';
 import unifiedCartRoutes from './routes/unifiedCartRoutes';
+import orderManagementRoutes from './routes/orderManagementRoutes';
+import securityRoutes from './routes/securityRoutes';
+import emailConfigRoutes from './routes/emailConfigRoutes';
 
 // API Routes with versioning
 app.use(`/api/${apiConfig.version}/auth`, authRoutes);
@@ -195,6 +227,12 @@ app.use(`/api/${apiConfig.version}/shopify`, shopifyRoutes);
 app.use('/api/auth/shopify', shopifyOAuthRoutes);
 app.use(`/api/webhooks`, webhookRoutes);
 app.use(`/api/${apiConfig.version}/admin`, adminRoutes);
+// Order management routes (admin)
+app.use(`/api/${apiConfig.version}/admin`, orderManagementRoutes);
+// Security monitoring routes (admin)
+app.use(`/api/${apiConfig.version}/admin`, securityRoutes);
+// Email configuration routes (admin)
+app.use(`/api/${apiConfig.version}/admin`, emailConfigRoutes);
 app.use(`/api/${apiConfig.version}`, carouselRoutes);
 app.use(`/api/${apiConfig.version}`, categoryGridRoutes);
 app.use(`/api/${apiConfig.version}`, calloutBannerRoutes);

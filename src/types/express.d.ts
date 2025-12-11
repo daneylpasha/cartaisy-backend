@@ -34,6 +34,7 @@ declare global {
       };
       sessionID?: string;
       storeId?: ObjectId | string;
+      userId?: string; // For security middleware
       userRole?: string;
       // Unified cart user for guest checkout support
       cartUser?: UnifiedCartUser;
@@ -58,6 +59,7 @@ declare module 'express-serve-static-core' {
     };
     sessionID?: string;
     storeId?: ObjectId | string;
+    userId?: string; // For security middleware
     userRole?: string;
     // Unified cart user for guest checkout support
     cartUser?: UnifiedCartUser;

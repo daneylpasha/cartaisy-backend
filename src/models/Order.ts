@@ -399,16 +399,22 @@ const ReturnExchangeSchema = new Schema({
 
 const OrderSchema = new Schema<IOrder>({
   // Shopify Integration
-  shopifyOrderId: { 
-    type: String, 
-    sparse: true, 
+  shopifyOrderId: {
+    type: String,
+    sparse: true,
     unique: true,
     index: true,
     trim: true
   },
-  shopifyOrderNumber: { 
-    type: String, 
+  shopifyOrderNumber: {
+    type: String,
     sparse: true,
+    trim: true
+  },
+  shopifyDraftOrderId: {
+    type: String,
+    sparse: true,
+    index: true,
     trim: true
   },
   
@@ -426,6 +432,13 @@ const OrderSchema = new Schema<IOrder>({
     trim: true,
     sparse: true,
     maxlength: [100, 'Confirmation number cannot exceed 100 characters']
+  },
+  // Store reference for multi-tenant support
+  storeId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Store',
+    required: false,
+    index: true
   },
   user: {
     type: Schema.Types.ObjectId,
@@ -680,12 +693,16 @@ const OrderSchema = new Schema<IOrder>({
     default: 'app',
     index: true
   },
-  campaignId: { 
+  campaignId: {
     type: String,
     trim: true,
     maxlength: [100, 'Campaign ID cannot exceed 100 characters']
   },
-  
+  tags: {
+    type: [String],
+    default: []
+  },
+
   // Timestamps
   placedAt: { 
     type: Date, 
@@ -971,6 +988,27 @@ OrderSchema.statics.findRequiringAttention = function() {
   }).sort({ updatedAt: -1 });
 };
 
+/**
+ * Generate unique order number
+ */
+OrderSchema.statics.generateOrderNumber = async function(): Promise<string> {
+  const prefix = 'ORD';
+  let isUnique = false;
+  let orderNumber = '';
+
+  while (!isUnique) {
+    const randomNum = Math.floor(10000 + Math.random() * 90000);
+    orderNumber = `${prefix}-${randomNum}`;
+
+    const existing = await this.findOne({ orderNumber });
+    if (!existing) {
+      isUnique = true;
+    }
+  }
+
+  return orderNumber;
+};
+
 // =============================================================================
 // MODEL EXPORT
 // =============================================================================
@@ -985,11 +1023,12 @@ export interface IOrderDocument extends MongooseDocument<IOrder> {
 
 export interface IOrderModel extends mongoose.Model<IOrderDocument> {
   findByUser(
-    userId: string, 
+    userId: string,
     options?: { limit?: number; skip?: number; status?: string }
   ): mongoose.Query<IOrderDocument[], IOrderDocument>;
   findByTrackingNumber(trackingNumber: string): mongoose.Query<IOrderDocument | null, IOrderDocument>;
   findRequiringAttention(): mongoose.Query<IOrderDocument[], IOrderDocument>;
+  generateOrderNumber(): Promise<string>;
 }
 
 export type { 

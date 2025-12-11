@@ -34,6 +34,32 @@ export interface IStoreSettings {
   language?: string;
 }
 
+export interface IEmailDnsRecord {
+  type: 'TXT' | 'CNAME' | 'MX';
+  name: string;
+  value: string;
+  verified: boolean;
+}
+
+export interface IEmailPreferences {
+  sendOrderConfirmation: boolean;
+  sendShippingUpdates: boolean;
+  sendDeliveryConfirmation: boolean;
+}
+
+export interface IStoreEmail {
+  provider: 'resend' | 'smtp';
+  domain?: string;
+  fromAddress?: string;
+  fromName?: string;
+  replyTo?: string;
+  verified: boolean;
+  verifiedAt?: Date;
+  resendDomainId?: string;
+  dnsRecords: IEmailDnsRecord[];
+  preferences: IEmailPreferences;
+}
+
 export interface IStore extends Document {
   _id: ObjectId;
   name: string;
@@ -41,6 +67,7 @@ export interface IStore extends Document {
   shopify: IShopifyConnection;
   plan: IStorePlan;
   settings: IStoreSettings;
+  email: IStoreEmail;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -115,6 +142,82 @@ const StoreSettingsSchema = new Schema<IStoreSettings>(
   { _id: false }
 );
 
+const EmailDnsRecordSchema = new Schema<IEmailDnsRecord>(
+  {
+    type: {
+      type: String,
+      enum: ['TXT', 'CNAME', 'MX'],
+    },
+    name: String,
+    value: String,
+    verified: {
+      type: Boolean,
+      default: false,
+    },
+  },
+  { _id: false }
+);
+
+const EmailPreferencesSchema = new Schema<IEmailPreferences>(
+  {
+    sendOrderConfirmation: {
+      type: Boolean,
+      default: true,
+    },
+    sendShippingUpdates: {
+      type: Boolean,
+      default: true,
+    },
+    sendDeliveryConfirmation: {
+      type: Boolean,
+      default: true,
+    },
+  },
+  { _id: false }
+);
+
+const StoreEmailSchema = new Schema<IStoreEmail>(
+  {
+    provider: {
+      type: String,
+      enum: ['resend', 'smtp'],
+      default: 'resend',
+    },
+    domain: {
+      type: String,
+      trim: true,
+    },
+    fromAddress: {
+      type: String,
+      trim: true,
+    },
+    fromName: {
+      type: String,
+      trim: true,
+    },
+    replyTo: {
+      type: String,
+      trim: true,
+    },
+    verified: {
+      type: Boolean,
+      default: false,
+    },
+    verifiedAt: Date,
+    resendDomainId: String,
+    dnsRecords: [EmailDnsRecordSchema],
+    preferences: {
+      type: EmailPreferencesSchema,
+      default: () => ({
+        sendOrderConfirmation: true,
+        sendShippingUpdates: true,
+        sendDeliveryConfirmation: true,
+      }),
+    },
+  },
+  { _id: false }
+);
+
 // =============================================================================
 // MAIN STORE SCHEMA
 // =============================================================================
@@ -162,6 +265,21 @@ const StoreSchema = new Schema<IStore>(
       type: StoreSettingsSchema,
       required: true,
       default: () => ({ timezone: 'UTC', currency: 'USD', language: 'en' }),
+    },
+
+    // Email Configuration
+    email: {
+      type: StoreEmailSchema,
+      default: () => ({
+        provider: 'resend',
+        verified: false,
+        dnsRecords: [],
+        preferences: {
+          sendOrderConfirmation: true,
+          sendShippingUpdates: true,
+          sendDeliveryConfirmation: true,
+        },
+      }),
     },
 
     // Status
@@ -232,6 +350,28 @@ StoreSchema.methods.getShopifyAccessToken = async function (
   return store?.shopify?.accessToken || null;
 };
 
+/**
+ * Get email configuration with fallback to Cartaisy domain
+ */
+StoreSchema.methods.getEmailConfig = function (this: Document & IStore): {
+  fromName: string;
+  fromAddress: string;
+  replyTo: string;
+  verified: boolean;
+} {
+  const storeName = this.name || 'Store';
+  const safeSlug = storeName.toLowerCase().replace(/[^a-z0-9]/g, '-');
+
+  return {
+    fromName: this.email?.fromName || storeName,
+    fromAddress: this.email?.verified
+      ? this.email.fromAddress || `orders@${this.email.domain}`
+      : `${safeSlug}@cartaisy.com`,
+    replyTo: this.email?.replyTo || this.email?.fromAddress || `support@cartaisy.com`,
+    verified: this.email?.verified || false,
+  };
+};
+
 // =============================================================================
 // MIDDLEWARE (HOOKS)
 // =============================================================================
@@ -272,9 +412,15 @@ StoreSchema.statics.findByShopifyShop = function (
 // TYPES
 // =============================================================================
 
-export interface IStoreDocument extends Document, IStore {
+export interface IStoreDocument extends IStore {
   canAddMembers(): Promise<boolean>;
   getShopifyAccessToken(): Promise<string | null>;
+  getEmailConfig(): {
+    fromName: string;
+    fromAddress: string;
+    replyTo: string;
+    verified: boolean;
+  };
 }
 
 export interface IStoreModel extends mongoose.Model<IStoreDocument> {
