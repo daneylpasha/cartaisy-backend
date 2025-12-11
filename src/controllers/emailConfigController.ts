@@ -3,7 +3,13 @@ import { Resend } from 'resend';
 import Store, { IStoreDocument } from '../models/Store';
 import { AuthenticatedRequest } from '../types';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Only initialize Resend if API key is available
+let resend: Resend | null = null;
+if (process.env.RESEND_API_KEY) {
+  resend = new Resend(process.env.RESEND_API_KEY);
+} else {
+  console.warn('⚠️  RESEND_API_KEY not found - email functionality will be disabled');
+}
 
 /**
  * Get email configuration for store
@@ -153,6 +159,14 @@ export const sendTestEmail = async (
     }
 
     const emailConfig = store.getEmailConfig();
+
+    if (!resend) {
+      res.status(503).json({
+        status: 'error',
+        message: 'Email service is not configured. Please set RESEND_API_KEY environment variable.',
+      });
+      return;
+    }
 
     await resend.emails.send({
       from: `${emailConfig.fromName} <${emailConfig.fromAddress}>`,

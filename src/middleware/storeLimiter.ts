@@ -2,6 +2,18 @@ import rateLimit from 'express-rate-limit';
 import { Request, Response } from 'express';
 
 /**
+ * Helper to normalize IP addresses (handles IPv6 -> IPv4 mapping)
+ */
+const normalizeIp = (ip: string | undefined): string => {
+  if (!ip) return 'unknown';
+  // Handle IPv6-mapped IPv4 addresses (::ffff:192.168.1.1 -> 192.168.1.1)
+  if (ip.startsWith('::ffff:')) {
+    return ip.substring(7);
+  }
+  return ip;
+};
+
+/**
  * Rate limiting per store to prevent abuse
  * Limits: 1000 requests per 15 minutes per store+IP combination
  */
@@ -10,11 +22,12 @@ export const storeLimiter = rateLimit({
   max: 1000, // 1000 requests per window per store
   standardHeaders: true, // Return rate limit info in headers
   legacyHeaders: false,
+  validate: { xForwardedForHeader: false, ip: false },
 
   // Generate key based on storeId + IP
   keyGenerator: (req: Request): string => {
     const storeId = req.storeId?.toString() || req.headers['x-store-id'] as string || 'unknown';
-    const ip = req.ip || req.socket?.remoteAddress || 'unknown';
+    const ip = normalizeIp(req.ip || req.socket?.remoteAddress);
     return `${storeId}:${ip}`;
   },
 
@@ -47,10 +60,11 @@ export const storeLimiter = rateLimit({
 export const strictLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // Only 100 requests per 15 min
+  validate: { xForwardedForHeader: false, ip: false },
 
   keyGenerator: (req: Request): string => {
     const storeId = req.storeId?.toString() || req.headers['x-store-id'] as string || 'unknown';
-    const ip = req.ip || req.socket?.remoteAddress || 'unknown';
+    const ip = normalizeIp(req.ip || req.socket?.remoteAddress);
     return `strict:${storeId}:${ip}`;
   },
 
@@ -79,9 +93,10 @@ export const strictLimiter = rateLimit({
 export const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 10, // Only 10 login attempts per 15 min
+  validate: { xForwardedForHeader: false, ip: false },
 
   keyGenerator: (req: Request): string => {
-    const ip = req.ip || req.socket?.remoteAddress || 'unknown';
+    const ip = normalizeIp(req.ip || req.socket?.remoteAddress);
     return `login:${ip}`;
   },
 
