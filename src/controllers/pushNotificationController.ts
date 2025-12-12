@@ -280,7 +280,7 @@ export const broadcastStoreNotification = async (
     }
 
     // Security: Verify user owns this store
-    const userStoreId = req.storeId;
+    const userStoreId = req.storeId?.toString();
     if (userStoreId !== storeId) {
       res.status(403).json({
         status: 'error',
@@ -454,7 +454,7 @@ export const getNotificationStats = async (
     const { storeId } = req.params;
 
     // Security: Verify user owns this store
-    if (req.storeId !== storeId) {
+    if (req.storeId?.toString() !== storeId) {
       res.status(403).json({
         status: 'error',
         message: 'Access denied',
@@ -526,7 +526,7 @@ export const getNotificationRecipients = async (
     const { page = 1, limit = 50 } = req.query;
 
     // Security check
-    if (req.storeId !== storeId) {
+    if (req.storeId?.toString() !== storeId) {
       res.status(403).json({
         status: 'error',
         message: 'Access denied',
@@ -602,7 +602,7 @@ export const getAvailableSegments = async (
     const { storeId } = req.params;
 
     // Security check
-    if (req.storeId !== storeId) {
+    if (req.storeId?.toString() !== storeId) {
       res.status(403).json({
         status: 'error',
         message: 'Access denied',
