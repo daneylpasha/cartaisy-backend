@@ -87,13 +87,14 @@ export const strictLimiter = rateLimit({
 });
 
 /**
- * Very strict rate limiting for login attempts
- * Limits: 10 attempts per 15 minutes per IP
+ * Rate limiting for login attempts
+ * Limits: 100 attempts per 15 minutes per IP (increased for testing)
  */
 export const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // Only 10 login attempts per 15 min
+  max: 100, // 100 login attempts per 15 min
   validate: false,
+  skipSuccessfulRequests: true, // Don't count successful logins
 
   keyGenerator: (req: Request): string => {
     const ip = normalizeIp(req.ip || req.socket?.remoteAddress);
