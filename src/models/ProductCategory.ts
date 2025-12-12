@@ -161,12 +161,12 @@ const ProductCategorySchema = new Schema({
   toObject: { virtuals: true }
 });
 
-// Indexes
-ProductCategorySchema.index({ handle: 1 });
-ProductCategorySchema.index({ 'seo.slug': 1 });
+// Indexes - removing duplicates where index: true or unique: true already exists on field
+// ProductCategorySchema.index({ handle: 1 }); // Already has unique: true
+// ProductCategorySchema.index({ 'seo.slug': 1 }); // Already has unique: true in subdocument
 ProductCategorySchema.index({ parent: 1, level: 1 });
 ProductCategorySchema.index({ isActive: 1, isVisible: 1, 'display.sortOrder': 1 });
-ProductCategorySchema.index({ path: 1 });
+// ProductCategorySchema.index({ path: 1 }); // Already has index: true
 ProductCategorySchema.index({ 'analytics.popularityScore': -1 });
 
 // Text search

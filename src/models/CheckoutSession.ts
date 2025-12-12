@@ -618,9 +618,6 @@ export interface ICheckoutSessionModel extends mongoose.Model<ICheckoutSessionDo
   cleanupExpired(): Promise<number>;
 }
 
-const CheckoutSession = mongoose.model<ICheckoutSessionDocument, ICheckoutSessionModel>(
-  'CheckoutSession',
-  CheckoutSessionSchema
-);
+const CheckoutSession = mongoose.model('CheckoutSession', CheckoutSessionSchema) as unknown as ICheckoutSessionModel;
 
 export default CheckoutSession;

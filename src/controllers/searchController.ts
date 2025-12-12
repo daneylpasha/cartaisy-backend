@@ -187,7 +187,7 @@ export class SearchController extends Controller {
 
             if (productResponse?.data?.product) {
               // Transform and enrich product
-              const transformedProduct = transformShopifyProductEdges([{ node: productResponse.data.product }])[0];
+              const transformedProduct = transformShopifyProductEdges([{ node: productResponse.data.product, cursor: '' }] as any)[0];
               const enrichedProducts = await productEnrichment.enrichProducts([transformedProduct]);
 
               return {
@@ -781,7 +781,7 @@ export class SearchController extends Controller {
           categories: categorySuggestions.map(c => ({
             type: 'category',
             text: c.name,
-            slug: c.slug
+            slug: (c as any).slug || c.name.toLowerCase().replace(/\s+/g, '-')
           }))
         }
       };
@@ -988,11 +988,12 @@ export class SearchController extends Controller {
       }
 
       // Update search record with click data
-      searchRecord.results.clickedResults.push(new mongoose.Types.ObjectId(productId));
+      (searchRecord as any).results = (searchRecord as any).results || { clickedResults: [] };
+      (searchRecord as any).results.clickedResults.push(new mongoose.Types.ObjectId(productId));
       if (position) {
-        searchRecord.selectedResultPosition = position;
+        (searchRecord as any).selectedResultPosition = position;
       }
-      searchRecord.isSuccessful = true;
+      (searchRecord as any).isSuccessful = true;
 
       await searchRecord.save();
 

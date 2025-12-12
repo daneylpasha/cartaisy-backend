@@ -81,8 +81,8 @@ export const getCartRecommendationsController = async (
   res: Response
 ): Promise<Response> => {
   try {
-    const { limit = '6' } = req.query;
-    const body = req.body || {};
+    const { limit = '6' } = req.query as { limit?: string };
+    const body = req.body as { cartItems?: string[] } || {};
     const { cartItems } = body;
 
     // Parse and validate limit

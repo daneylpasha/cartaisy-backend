@@ -33,6 +33,9 @@ interface Product {
         title: string;
         weight?: number;
         weightUnit?: string;
+        inventoryItem?: {
+          id: string;
+        };
       };
     }>;
   };

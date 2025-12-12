@@ -17,7 +17,8 @@
       "Bash(npm run generate:*)",
       "Bash(npm run tsoa:generate)",
       "WebSearch",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(grep:*)"
     ],
     "deny": [],
     "ask": []

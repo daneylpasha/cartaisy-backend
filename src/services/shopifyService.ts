@@ -108,8 +108,9 @@ export const testShopifyConnection = async (): Promise<boolean> => {
     const response = await client.get({
       path: 'shop'
     });
-    
-    return response.status === 200;
+
+    // Check if we got a response body (indicates success)
+    return !!(response as any).body?.shop || (response as any).status === 200;
   } catch (error) {
     console.error('Shopify connection test failed:', error);
     return false;

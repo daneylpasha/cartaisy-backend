@@ -8,7 +8,8 @@ import {
   getProfile,
   updateProfile,
   changePassword,
-  deleteAccount
+  deleteAccount,
+  refreshToken
 } from '../controllers/authController';
 import { authenticate } from '../middleware/auth';
 import {
@@ -22,18 +23,17 @@ import {
 
 const router = Router();
 
-// Rate limiting for auth routes (production settings)
+// Rate limiting for auth routes
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // 10 requests per windowMs (production limit)
+  max: process.env.NODE_ENV === 'production' ? 50 : 100, // More lenient limit
   message: {
     status: 'error',
     message: 'Too many authentication attempts. Please try again later.'
   },
   standardHeaders: true,
   legacyHeaders: false,
-  // Skip successful requests from rate limiting
-  skipSuccessfulRequests: false
+  skipSuccessfulRequests: true // Don't count successful logins against limit
 });
 
 // Rate limiting for password reset (production settings)
@@ -86,6 +86,13 @@ router.post(
   resetPassword
 );
 
+// Refresh access token
+router.post(
+  '/refresh-token',
+  authLimiter,
+  refreshToken
+);
+
 /**
  * Protected routes (authentication required)
  */
@@ -93,23 +100,23 @@ router.post(
 // Get current user profile
 router.get(
   '/profile',
-  authenticate,
-  getProfile
+  authenticate as any,
+  getProfile as any
 );
 
 // Update user profile - comprehensive API for updating existing fields or adding new fields
 router.patch(
   '/profile',
-  authenticate,
+  authenticate as any,
   validateProfileUpdate,
   handleValidationErrors,
-  updateProfile
+  updateProfile as any
 );
 
 // Change password (for authenticated users)
 router.post(
   '/change-password',
-  authenticate,
+  authenticate as any,
   authLimiter,
   [
     // Custom validation for change password
@@ -121,19 +128,19 @@ router.post(
     ]
   ],
   handleValidationErrors,
-  changePassword
+  changePassword as any
 );
 
 // Delete account (requires password verification)
 router.delete(
   '/account',
-  authenticate,
+  authenticate as any,
   [
     require('express-validator').body('password')
       .notEmpty().withMessage('Password is required to delete account')
   ],
   handleValidationErrors,
-  deleteAccount
+  deleteAccount as any
 );
 
 /**

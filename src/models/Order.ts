@@ -727,18 +727,18 @@ const OrderSchema = new Schema<IOrder>({
 });
 
 // =============================================================================
-// INDEXES
+// INDEXES - removing duplicates where index: true already exists on field
 // =============================================================================
 
 OrderSchema.index({ user: 1, placedAt: -1 });
 OrderSchema.index({ customer: 1, placedAt: -1 });  // Index for customer queries
 OrderSchema.index({ email: 1, placedAt: -1 });
-OrderSchema.index({ orderNumber: 1 });
-OrderSchema.index({ 'shipping.trackingNumber': 1 });
+// OrderSchema.index({ orderNumber: 1 }); // Already has index: true
+// OrderSchema.index({ 'shipping.trackingNumber': 1 }); // Already has index: true
 OrderSchema.index({ 'mobileStatus.current': 1, placedAt: -1 });
 OrderSchema.index({ source: 1, channel: 1, placedAt: -1 });
 OrderSchema.index({ financialStatus: 1, fulfillmentStatus: 1 });
-OrderSchema.index({ shopifyOrderId: 1 });
+// OrderSchema.index({ shopifyOrderId: 1 }); // Already has index: true
 
 // Compound indexes for complex queries
 OrderSchema.index({ user: 1, 'mobileStatus.current': 1, placedAt: -1 });
@@ -747,7 +747,7 @@ OrderSchema.index({ financialStatus: 1, placedAt: -1 });
 
 // Guest order indexes
 OrderSchema.index({ isGuestOrder: 1, 'guestContact.email': 1 });
-OrderSchema.index({ guestSessionId: 1 });
+// OrderSchema.index({ guestSessionId: 1 }); // Already has index: true
 
 // =============================================================================
 // PRE-VALIDATE HOOK - Ensure user, customer, or guest order is present
@@ -968,7 +968,7 @@ OrderSchema.statics.findByUser = function(
 OrderSchema.statics.findByTrackingNumber = function(
   trackingNumber: string
 ) {
-  return this.findOne({ 'shipping.trackingNumber': trackingNumber });
+  return this.findOne({ 'shipping.trackingNumber': trackingNumber } as any);
 };
 
 /**
@@ -985,7 +985,7 @@ OrderSchema.statics.findRequiringAttention = function() {
         deliveredAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } // Within 7 days
       }
     ]
-  }).sort({ updatedAt: -1 });
+  } as any).sort({ updatedAt: -1 });
 };
 
 /**
@@ -1000,7 +1000,7 @@ OrderSchema.statics.generateOrderNumber = async function(): Promise<string> {
     const randomNum = Math.floor(10000 + Math.random() * 90000);
     orderNumber = `${prefix}-${randomNum}`;
 
-    const existing = await this.findOne({ orderNumber });
+    const existing = await this.findOne({ orderNumber } as any);
     if (!existing) {
       isUnique = true;
     }

@@ -593,11 +593,12 @@ export interface ISearchHistoryModel extends mongoose.Model<ISearchHistoryDocume
     partialQuery: string,
     limit?: number
   ): Promise<Array<{ query: string; popularity: number }>>;
+  getUserSearchHistory(
+    userId: string,
+    limit?: number
+  ): Promise<any[]>;
 }
 
-const SearchHistory = mongoose.model<ISearchHistoryDocument, ISearchHistoryModel>(
-  'SearchHistory',
-  SearchHistorySchema
-);
+const SearchHistory = mongoose.model('SearchHistory', SearchHistorySchema) as unknown as ISearchHistoryModel;
 
 export default SearchHistory;

@@ -18,17 +18,20 @@ export interface IProductReview extends Document {
   customer?: mongoose.Types.ObjectId;
   product: mongoose.Types.ObjectId;
   orderId?: string; // Shopify order ID for verified purchases
-  
+
   // Review content
   rating: number; // 1-5 stars
   title?: string;
   reviewText: string;
   images: IReviewImage[];
-  
+  pros?: string[];
+  cons?: string[];
+  wouldRecommend?: boolean;
+
   // Verification and status
   verifiedPurchase: boolean;
   status: 'pending' | 'approved' | 'rejected' | 'spam';
-  
+
   // Community interaction
   helpfulVotes: {
     helpful: mongoose.Types.ObjectId[];
@@ -37,24 +40,32 @@ export interface IProductReview extends Document {
   helpfulCount: number;
   reportCount: number;
   reportedBy: mongoose.Types.ObjectId[];
-  
+  reports?: Array<{
+    userId?: mongoose.Types.ObjectId;
+    reportedBy?: mongoose.Types.ObjectId;
+    reason: string;
+    description?: string;
+    createdAt: Date;
+  }>;
+
   // Admin moderation
   moderatedBy?: mongoose.Types.ObjectId;
   moderatedAt?: Date;
   moderationReason?: string;
+  adminNotes?: string;
   adminResponse?: IAdminResponse;
-  
+
   // Review metadata
   deviceInfo?: {
     platform: string;
     browser?: string;
     isMobile: boolean;
   };
-  
+
   // Timestamps
   createdAt: Date;
   updatedAt: Date;
-  
+
   // Methods
   updateHelpfulCount(): void;
   canBeEditedBy(userId: string): boolean;

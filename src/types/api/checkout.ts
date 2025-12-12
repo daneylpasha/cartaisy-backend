@@ -229,6 +229,7 @@ export interface CheckoutSummaryResponse {
     deliveryInstructions?: string;
     promoCode?: string;
     status: string;
+    paymentError?: string;
     expiresAt: string;
   };
 }
@@ -257,10 +258,21 @@ export interface CompleteCheckoutResponse {
       orderNumber: string;
       shopifyOrderId?: string;
       confirmationNumber?: string;
+      email?: string;
+      phone?: string;
       totalPrice: number;
       currency: string;
       status: string;
       estimatedDelivery?: string;
+      products?: any[];
+      pricing?: any;
+      discount?: any;
+      shippingAddress?: any;
+      billingAddress?: any;
+      shippingMethod?: any;
+      paymentInfo?: any;
+      timeline?: any;
+      [key: string]: any; // Allow additional properties
     };
     payment: {
       status: 'succeeded' | 'requires_action' | 'processing';

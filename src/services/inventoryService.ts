@@ -300,7 +300,7 @@ export const getLowStockProducts = async (threshold?: number): Promise<IProduct[
       }
     ];
 
-    const lowStockProducts = await Product.aggregate(pipeline);
+    const lowStockProducts = await Product.aggregate(pipeline as any);
     
     console.log(`📦 Found ${lowStockProducts.length} low stock products`);
     return lowStockProducts;

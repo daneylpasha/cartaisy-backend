@@ -87,8 +87,8 @@ export const requestMetrics = (req: Request, res: Response, next: NextFunction):
   (req as any).startTime = startTime;
 
   // Override res.end to capture metrics
-  const originalEnd = res.end;
-  res.end = function(this: Response, ...args: any[]) {
+  const originalEnd = res.end.bind(res);
+  (res as any).end = function(...args: any[]) {
     const endTime = performance.now();
     const responseTime = Math.round(endTime - startTime);
     

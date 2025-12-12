@@ -34,7 +34,6 @@ class StripeService {
 
     try {
       this.stripe = new Stripe(secretKey, {
-        apiVersion: '2024-12-18.acacia', // Latest stable version
         typescript: true,
         telemetry: false, // Disable telemetry in production
       });
@@ -401,7 +400,7 @@ class StripeService {
    * Check if payment intent requires action (3D Secure, etc.)
    */
   requiresAction(paymentIntent: Stripe.PaymentIntent): boolean {
-    return paymentIntent.status === 'requires_action' || paymentIntent.status === 'requires_source_action';
+    return paymentIntent.status === 'requires_action';
   }
 
   /**

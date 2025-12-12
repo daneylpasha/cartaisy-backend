@@ -3371,6 +3371,9 @@
 							"expiresAt": {
 								"type": "string"
 							},
+							"paymentError": {
+								"type": "string"
+							},
 							"status": {
 								"type": "string"
 							},
@@ -3540,6 +3543,17 @@
 							},
 							"order": {
 								"properties": {
+									"timeline": {},
+									"paymentInfo": {},
+									"shippingMethod": {},
+									"billingAddress": {},
+									"shippingAddress": {},
+									"discount": {},
+									"pricing": {},
+									"products": {
+										"items": {},
+										"type": "array"
+									},
 									"estimatedDelivery": {
 										"type": "string"
 									},
@@ -3552,6 +3566,12 @@
 									"totalPrice": {
 										"type": "number",
 										"format": "double"
+									},
+									"phone": {
+										"type": "string"
+									},
+									"email": {
+										"type": "string"
 									},
 									"confirmationNumber": {
 										"type": "string"
@@ -3566,6 +3586,7 @@
 										"type": "string"
 									}
 								},
+								"additionalProperties": {},
 								"required": [
 									"status",
 									"currency",
@@ -3986,6 +4007,12 @@
 									"isEmailVerified": {
 										"type": "boolean"
 									},
+									"storeName": {
+										"type": "string"
+									},
+									"storeId": {
+										"type": "string"
+									},
 									"role": {
 										"type": "string"
 									},
@@ -4124,6 +4151,95 @@
 				"type": "object",
 				"additionalProperties": false
 			},
+			"RefreshTokenResponse": {
+				"description": "Refresh token response",
+				"properties": {
+					"status": {
+						"type": "string",
+						"enum": [
+							"success",
+							"error"
+						]
+					},
+					"message": {
+						"type": "string"
+					},
+					"data": {
+						"properties": {
+							"refreshToken": {
+								"type": "string"
+							},
+							"token": {
+								"type": "string"
+							},
+							"user": {
+								"properties": {
+									"avatar": {
+										"type": "string"
+									},
+									"isActive": {
+										"type": "boolean"
+									},
+									"isEmailVerified": {
+										"type": "boolean"
+									},
+									"storeName": {
+										"type": "string"
+									},
+									"storeId": {
+										"type": "string"
+									},
+									"role": {
+										"type": "string"
+									},
+									"email": {
+										"type": "string"
+									},
+									"name": {
+										"type": "string"
+									},
+									"id": {
+										"type": "string"
+									}
+								},
+								"required": [
+									"isActive",
+									"isEmailVerified",
+									"role",
+									"email",
+									"id"
+								],
+								"type": "object"
+							}
+						},
+						"required": [
+							"refreshToken",
+							"token",
+							"user"
+						],
+						"type": "object"
+					}
+				},
+				"required": [
+					"status",
+					"message"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"RefreshTokenRequest": {
+				"description": "Refresh token request",
+				"properties": {
+					"refreshToken": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"refreshToken"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
 			"GetProfileResponse": {
 				"description": "Get profile response",
 				"properties": {
@@ -4170,6 +4286,12 @@
 									},
 									"isEmailVerified": {
 										"type": "boolean"
+									},
+									"storeName": {
+										"type": "string"
+									},
+									"storeId": {
+										"type": "string"
 									},
 									"role": {
 										"type": "string"
@@ -8234,6 +8356,54 @@
 							"schema": {
 								"$ref": "#/components/schemas/ResetPasswordRequest",
 								"description": "Reset token and new password"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/auth/refresh-token": {
+			"post": {
+				"operationId": "RefreshToken",
+				"responses": {
+					"200": {
+						"description": "Token refreshed successfully",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/RefreshTokenResponse"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "Bad Request - Refresh token required"
+					},
+					"401": {
+						"description": "Unauthorized - Invalid or expired refresh token"
+					},
+					"403": {
+						"description": "Forbidden - Account deactivated"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Refresh access token",
+				"summary": "Get new access token using refresh token",
+				"tags": [
+					"Authentication"
+				],
+				"security": [],
+				"parameters": [],
+				"requestBody": {
+					"description": "Refresh token",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/RefreshTokenRequest",
+								"description": "Refresh token"
 							}
 						}
 					}

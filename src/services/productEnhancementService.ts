@@ -5,7 +5,16 @@ import ProductReview from '../models/ProductReview';
 import SearchHistory from '../models/SearchHistory';
 import Order from '../models/Order';
 import Wishlist from '../models/Wishlist';
-import { IProduct, IShopifyProduct, IProductImage, IProductBadge } from '../types/index';
+import { IProduct, IShopifyProduct, IProductImage } from '../types/index';
+
+// Define IProductBadge locally since it may not be exported from types
+interface IProductBadge {
+  text: string;
+  type: 'sale' | 'new' | 'bestseller' | 'trending' | 'limited' | 'custom';
+  color?: string;
+  backgroundColor?: string;
+  expiresAt?: Date;
+}
 import { ApiError } from '../utils/errors';
 
 interface ProductEnhancement {
@@ -171,9 +180,9 @@ export const generateProductRecommendations = async (
     // 3. Popularity-Based Fallback
     if (recommendations.length < limit) {
       const popularRecs = await getPopularityBasedRecommendations(
-        baseProduct.category._id,
+        (baseProduct.category as any)?._id?.toString() || '',
         limit - recommendations.length,
-        recommendations.map(r => r._id)
+        recommendations.map(r => r._id?.toString())
       );
       recommendations.push(...popularRecs);
     }
@@ -213,41 +222,48 @@ export const updateProductAnalytics = async (
       throw new Error('Product not found');
     }
 
-    // Update view count
-    product.analytics.viewCount += 1;
-    product.analytics.lastViewedAt = new Date();
+    // Update view count - cast to any to access extended analytics properties
+    const analytics = product.analytics as any;
+    analytics.viewCount = (analytics.viewCount || 0) + 1;
+    analytics.lastViewedAt = new Date();
 
     // Update mobile-specific metrics
     if (viewData.device === 'mobile') {
-      product.analytics.mobileMetrics.mobileViews += 1;
-      
+      if (!analytics.mobileMetrics) {
+        analytics.mobileMetrics = { mobileViews: 0, averageMobileSessionTime: 0, mobileCartAdditions: 0, mobileWishlistAdditions: 0 };
+      }
+      analytics.mobileMetrics.mobileViews += 1;
+
       if (viewData.viewDuration) {
-        const currentAvg = product.analytics.mobileMetrics.averageMobileSessionTime;
-        const totalSessions = product.analytics.mobileMetrics.mobileViews;
-        product.analytics.mobileMetrics.averageMobileSessionTime = 
+        const currentAvg = analytics.mobileMetrics.averageMobileSessionTime;
+        const totalSessions = analytics.mobileMetrics.mobileViews;
+        analytics.mobileMetrics.averageMobileSessionTime =
           ((currentAvg * (totalSessions - 1)) + viewData.viewDuration) / totalSessions;
       }
 
       if (viewData.interactions?.addedToCart) {
-        product.analytics.mobileMetrics.mobileCartAdditions += 1;
+        analytics.mobileMetrics.mobileCartAdditions += 1;
       }
 
       if (viewData.interactions?.addedToWishlist) {
-        product.analytics.mobileMetrics.mobileWishlistAdditions += 1;
+        analytics.mobileMetrics.mobileWishlistAdditions += 1;
       }
     }
 
     // Update average time on page
     if (viewData.viewDuration) {
-      const currentAvg = product.analytics.averageTimeOnPage;
-      const totalViews = product.analytics.viewCount;
-      product.analytics.averageTimeOnPage = 
+      const currentAvg = analytics.averageTimeOnPage || 0;
+      const totalViews = analytics.viewCount;
+      analytics.averageTimeOnPage =
         ((currentAvg * (totalViews - 1)) + viewData.viewDuration) / totalViews;
     }
 
     // Add conversion event
     if (viewData.interactions?.addedToCart || viewData.interactions?.addedToWishlist) {
-      product.analytics.conversionEvents.push({
+      if (!analytics.conversionEvents) {
+        analytics.conversionEvents = [];
+      }
+      analytics.conversionEvents.push({
         type: viewData.interactions.addedToCart ? 'cart_addition' : 'wishlist_addition',
         timestamp: new Date(),
         userId: viewData.userId,
@@ -256,8 +272,8 @@ export const updateProductAnalytics = async (
       });
 
       // Recalculate conversion rate
-      const cartEvents = product.analytics.conversionEvents.filter(e => e.type === 'cart_addition').length;
-      product.analytics.conversionRate = (cartEvents / product.analytics.viewCount) * 100;
+      const cartEvents = analytics.conversionEvents.filter((e: any) => e.type === 'cart_addition').length;
+      analytics.conversionRate = (cartEvents / analytics.viewCount) * 100;
     }
 
     await product.save();
@@ -287,7 +303,7 @@ export const optimizeProductSearch = async (productId?: string): Promise<void> =
       const searchKeywords = generateSearchKeywords(product);
       
       // Update search optimization fields
-      product.searchOptimization = {
+      (product as any).searchOptimization = {
         keywords: searchKeywords,
         searchScore: calculateSearchScore(product),
         lastOptimized: new Date(),
@@ -455,7 +471,7 @@ export const calculateProductScore = async (productId: string): Promise<number> 
     score = Math.min(Math.max(score, 0), 100);
 
     // Update product with calculated score
-    product.analytics.qualityScore = score;
+    (product.analytics as any).qualityScore = score;
     await product.save();
 
     return score;
@@ -500,20 +516,20 @@ function generateShortDescription(bodyHtml?: string, title?: string): string {
   return plainText.length > 100 ? plainText.substring(0, 97) + '...' : plainText;
 }
 
-function generateProductBadges(shopifyProduct: any): string[] {
-  const badges = [];
-  
-  if (shopifyProduct.tags?.includes('bestseller')) badges.push('Best Seller');
-  if (shopifyProduct.tags?.includes('new')) badges.push('New');
-  if (shopifyProduct.tags?.includes('sale')) badges.push('Sale');
-  
+function generateProductBadges(shopifyProduct: any): IProductBadge[] {
+  const badges: IProductBadge[] = [];
+
+  if (shopifyProduct.tags?.includes('bestseller')) badges.push({ text: 'Best Seller', type: 'bestseller' });
+  if (shopifyProduct.tags?.includes('new')) badges.push({ text: 'New', type: 'new' });
+  if (shopifyProduct.tags?.includes('sale')) badges.push({ text: 'Sale', type: 'sale' });
+
   // Check for discount
   const variant = shopifyProduct.variants?.[0];
   if (variant?.compare_at_price && variant.price < variant.compare_at_price) {
     const discount = Math.round((1 - variant.price / variant.compare_at_price) * 100);
-    badges.push(`${discount}% Off`);
+    badges.push({ text: `${discount}% Off`, type: 'sale' });
   }
-  
+
   return badges;
 }
 

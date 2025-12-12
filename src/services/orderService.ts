@@ -183,7 +183,7 @@ export const createMobileOrder = async (
             lineItems: processedItems.map(item => ({
               variantId: item.variantId || item.product.variants[0]?.id,
               quantity: item.quantity
-            })),
+            })) as any,
             billingAddress: cartData.billingAddress,
             shippingAddress: cartData.shippingAddress,
             specialInstructions: cartData.specialInstructions
@@ -382,11 +382,11 @@ export const handleOrderRefund = async (
     
     const returnData = {
       id: returnId,
-      type: 'return',
+      type: 'return' as const,
       status: 'approved',
       reason,
-      items: items || order.lineItems.map(item => ({
-        lineItemId: item._id.toString(),
+      items: items || order.lineItems.map((item: any, index: number) => ({
+        lineItemId: item._id?.toString() || `item-${index}`,
         quantity: item.quantity,
         reason
       })),
@@ -395,7 +395,7 @@ export const handleOrderRefund = async (
       refundAmount: amount
     };
 
-    order.returns.push(returnData);
+    order.returns.push(returnData as any);
 
     // Update financial status
     if (amount >= order.totalPrice) {
@@ -515,7 +515,7 @@ export const trackOrderProgress = async (orderId: string): Promise<OrderTracking
 
     return {
       order: {
-        id: order._id,
+        id: order._id.toString(),
         orderNumber: order.orderNumber,
         status: order.mobileStatus.current,
         totalPrice: order.totalPrice,
@@ -759,8 +759,9 @@ async function calculateShippingCost(items: ProcessedCartItem[], address: IShipp
     return weight + (item.product.weight || 1) * item.quantity;
   }, 0);
 
-  const baseShipping = tenantConfig.store.shipping.baseCost;
-  const freeShippingThreshold = tenantConfig.store.shipping.freeShippingThreshold;
+  const storeConfig = tenantConfig.store as any;
+  const baseShipping = storeConfig.shipping?.baseCost || 5;
+  const freeShippingThreshold = storeConfig.shipping?.freeShippingThreshold || 50;
   
   const subtotal = items.reduce((total, item) => total + (item.price * item.quantity), 0);
 

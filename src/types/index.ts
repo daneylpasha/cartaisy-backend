@@ -196,7 +196,7 @@ export interface IInventoryHistoryEntry {
   date: Date;
   change: number;
   newQuantity: number;
-  reason: 'sale' | 'restock' | 'adjustment' | 'return' | 'shopify_sync' | 'manual_update';
+  reason: 'sale' | 'restock' | 'adjustment' | 'return' | 'shopify_sync' | 'manual_update' | 'order_cancelled' | 'order_placed';
   note?: string;
 }
 
@@ -265,6 +265,9 @@ export interface IProduct extends Document {
   analytics: IProductAnalytics;
   reviews: IProductReviews;
   seo: IProductSEO;
+  category?: ObjectId | IProductCategory; // Reference to product category
+  sku?: string;
+  weight?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -333,6 +336,13 @@ export interface IPaymentDetails {
 // REVIEW TYPES
 // =============================================================================
 
+export interface IProductReviewReport {
+  reportedBy: ObjectId;
+  reason: string;
+  description?: string;
+  reportedAt: Date;
+}
+
 export interface IProductReview extends Document {
   _id: ObjectId;
   productId: ObjectId;
@@ -343,7 +353,14 @@ export interface IProductReview extends Document {
   verified: boolean;
   helpful: number;
   reported: boolean;
-  status: 'pending' | 'approved' | 'rejected';
+  status: 'pending' | 'approved' | 'rejected' | 'spam';
+  pros?: string[];
+  cons?: string[];
+  wouldRecommend?: boolean;
+  reports?: IProductReviewReport[];
+  adminNotes?: string;
+  moderatedAt?: Date;
+  moderatedBy?: ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -365,6 +382,7 @@ export interface IWishlist extends Document {
   name: string;
   items: IWishlistItem[];
   isPublic: boolean;
+  totalValue?: number; // Virtual property - calculated from items
   createdAt: Date;
   updatedAt: Date;
 }
@@ -633,6 +651,13 @@ export interface IOrder extends Document {
   confirmationNumber?: string;
   user?: ObjectId;
   customer?: ObjectId;
+  isGuestOrder?: boolean;
+  guestSessionId?: string;
+  guestContact?: {
+    email?: string;
+    phone?: string;
+    fullName?: string;
+  };
   email: string;
   lineItems: IOrderLineItem[];
   subtotalPrice: number;
@@ -886,22 +911,36 @@ export interface AuthenticatedRequest<
   TBody = unknown
 > extends Request<TParams, unknown, TBody, TQuery> {
   user?: {
-    _id: ObjectId;
-    id: string; // Convenience getter for _id.toString()
-    storeId: ObjectId;
+    _id: any; // Using any for ObjectId compatibility across different mongoose imports
+    id?: string; // Convenience getter for _id.toString()
+    storeId?: any;
     email: string;
-    role: 'super_admin' | 'admin' | 'customer' | 'moderator' | 'premium_customer';
+    role: string; // Flexible for different role types
     name: string;
     isActive: boolean;
-    isVerified: boolean;
+    isVerified?: boolean;
     phone?: string;
-    profile: IUserProfile;
-    addresses: IAddress[];
-    preferences: IUserPreferences;
-    createdAt: Date;
+    profile?: IUserProfile;
+    addresses?: IAddress[];
+    preferences?: IUserPreferences;
+    createdAt?: Date;
     lastLoginAt?: Date;
   };
   sessionID?: string;
+}
+
+// Simplified AuthRequest for middleware that only needs basic user info
+export interface AuthRequest extends Request {
+  user?: {
+    _id: any; // Using any for ObjectId compatibility
+    id?: string;
+    storeId?: any;
+    email: string;
+    role: string;
+    name: string;
+    isActive: boolean;
+  };
+  storeId?: string;
 }
 
 export interface PaginatedRequest<TQuery = unknown> extends AuthenticatedRequest {

@@ -1,5 +1,5 @@
-import { Request, Response } from 'express';
-import { verifyWebhookSignature, syncProduct } from '../services/shopifyService';
+import { Request, Response, NextFunction } from 'express';
+import { verifyWebhookSignature as verifySignature, syncProduct } from '../services/shopifyService';
 import { syncProductData, syncCustomerData } from '../services/syncService';
 import Product from '../models/Product';
 import User from '../models/User';
@@ -9,25 +9,27 @@ import { tenantConfig } from '../config/tenant';
 /**
  * Middleware to verify Shopify webhook signature
  */
-export const verifyWebhookSignature = (req: Request, res: Response, next: any) => {
+export const verifyWebhookMiddleware = (req: Request, res: Response, next: NextFunction): void => {
   try {
     const signature = req.get('X-Shopify-Hmac-Sha256');
     const body = JSON.stringify(req.body);
     const secret = tenantConfig.shopify.webhookSecret;
 
     if (!signature) {
-      return res.status(401).json({
+      res.status(401).json({
         error: 'Missing webhook signature'
       });
+      return;
     }
 
-    const isValid = verifyWebhookSignature(body, signature, secret);
+    const isValid = verifySignature(body, signature, secret);
 
     if (!isValid) {
       console.warn('⚠️ Invalid webhook signature received');
-      return res.status(401).json({
+      res.status(401).json({
         error: 'Invalid webhook signature'
       });
+      return;
     }
 
     next();
@@ -42,7 +44,7 @@ export const verifyWebhookSignature = (req: Request, res: Response, next: any) =
 /**
  * Handle product update webhook from Shopify
  */
-export const handleProductUpdate = async (req: Request, res: Response): Promise<void> => {
+export const handleProductUpdate = async (req: Request, res: Response): Promise<Response | void> => {
   try {
     const shopifyProduct = req.body;
     console.log(`📦 Received product update webhook for: ${shopifyProduct.title}`);
@@ -82,7 +84,7 @@ export const handleProductUpdate = async (req: Request, res: Response): Promise<
 /**
  * Handle product creation webhook from Shopify
  */
-export const handleProductCreate = async (req: Request, res: Response): Promise<void> => {
+export const handleProductCreate = async (req: Request, res: Response): Promise<Response | void> => {
   try {
     const shopifyProduct = req.body;
     console.log(`🆕 Received product create webhook for: ${shopifyProduct.title}`);
@@ -113,7 +115,7 @@ export const handleProductCreate = async (req: Request, res: Response): Promise<
 /**
  * Handle product deletion webhook from Shopify
  */
-export const handleProductDelete = async (req: Request, res: Response): Promise<void> => {
+export const handleProductDelete = async (req: Request, res: Response): Promise<Response | void> => {
   try {
     const shopifyProduct = req.body;
     console.log(`🗑️ Received product delete webhook for: ${shopifyProduct.id}`);
@@ -143,7 +145,7 @@ export const handleProductDelete = async (req: Request, res: Response): Promise<
 /**
  * Handle order creation webhook from Shopify
  */
-export const handleOrderCreate = async (req: Request, res: Response): Promise<void> => {
+export const handleOrderCreate = async (req: Request, res: Response): Promise<Response | void> => {
   try {
     const shopifyOrder = req.body;
     console.log(`📋 Received order create webhook for: ${shopifyOrder.order_number}`);
@@ -272,7 +274,7 @@ export const handleOrderCreate = async (req: Request, res: Response): Promise<vo
 /**
  * Handle order update webhook from Shopify
  */
-export const handleOrderUpdate = async (req: Request, res: Response): Promise<void> => {
+export const handleOrderUpdate = async (req: Request, res: Response): Promise<Response | void> => {
   try {
     const shopifyOrder = req.body;
     console.log(`📋 Received order update webhook for: ${shopifyOrder.order_number}`);
@@ -323,7 +325,7 @@ export const handleOrderUpdate = async (req: Request, res: Response): Promise<vo
 /**
  * Handle order payment webhook from Shopify
  */
-export const handleOrderPaid = async (req: Request, res: Response): Promise<void> => {
+export const handleOrderPaid = async (req: Request, res: Response): Promise<Response | void> => {
   try {
     const shopifyOrder = req.body;
     console.log(`💳 Received order paid webhook for: ${shopifyOrder.order_number}`);
@@ -368,7 +370,7 @@ export const handleOrderPaid = async (req: Request, res: Response): Promise<void
 /**
  * Handle customer creation webhook from Shopify
  */
-export const handleCustomerCreate = async (req: Request, res: Response): Promise<void> => {
+export const handleCustomerCreate = async (req: Request, res: Response): Promise<Response | void> => {
   try {
     const shopifyCustomer = req.body;
     console.log(`👤 Received customer create webhook for: ${shopifyCustomer.email}`);
@@ -406,7 +408,7 @@ export const handleCustomerCreate = async (req: Request, res: Response): Promise
 /**
  * Handle customer update webhook from Shopify
  */
-export const handleCustomerUpdate = async (req: Request, res: Response): Promise<void> => {
+export const handleCustomerUpdate = async (req: Request, res: Response): Promise<Response | void> => {
   try {
     const shopifyCustomer = req.body;
     console.log(`👤 Received customer update webhook for: ${shopifyCustomer.email}`);
@@ -443,7 +445,7 @@ export const handleCustomerUpdate = async (req: Request, res: Response): Promise
 /**
  * Handle inventory level update webhook from Shopify
  */
-export const handleInventoryUpdate = async (req: Request, res: Response): Promise<void> => {
+export const handleInventoryUpdate = async (req: Request, res: Response): Promise<Response | void> => {
   try {
     const inventoryLevel = req.body;
     console.log(`📦 Received inventory update webhook for item: ${inventoryLevel.inventory_item_id}`);

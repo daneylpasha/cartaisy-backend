@@ -476,7 +476,7 @@ async function getRecentActivity(limit: number = 50): Promise<any[]> {
     ...recentOrders.map(order => ({
       type: 'order',
       id: order._id,
-      description: `Order created - $${order.totals?.total || 0}`,
+      description: `Order created - $${(order as any).totals?.total || order.totalPrice || 0}`,
       status: order.mobileStatus?.current || 'unknown',
       timestamp: order.createdAt
     })),
@@ -509,7 +509,7 @@ async function performHealthCheck(): Promise<any> {
 
   try {
     // Database check
-    await Product.findOne().lean().timeout(5000);
+    await Product.findOne().lean().maxTimeMS(5000);
     checks.database = true;
   } catch (error) {
     issues.push('Database connectivity issues');

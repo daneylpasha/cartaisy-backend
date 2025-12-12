@@ -170,12 +170,12 @@ const WishlistSchema = new Schema({
   toObject: { virtuals: true }
 });
 
-// Indexes
+// Indexes - removing duplicates where index: true already exists on field
 WishlistSchema.index({ user: 1, name: 1 });
-WishlistSchema.index({ user: 1, isDefault: 1 });
+// WishlistSchema.index({ user: 1, isDefault: 1 }); // Duplicate - covered by partial unique index below
 WishlistSchema.index({ customer: 1, name: 1 });  // Index for customer queries
-WishlistSchema.index({ customer: 1, isDefault: 1 });  // Index for customer default wishlist
-WishlistSchema.index({ 'sharing.token': 1 });
+// WishlistSchema.index({ customer: 1, isDefault: 1 }); // Duplicate - covered by partial unique index below
+// WishlistSchema.index({ 'sharing.token': 1 }); // Already has index: true
 WishlistSchema.index({ 'sharing.isPublic': 1 });
 WishlistSchema.index({ updatedAt: -1 });
 
@@ -313,17 +313,17 @@ WishlistSchema.methods.updateItemCount = async function(): Promise<void> {
 WishlistSchema.pre('save', async function(next) {
   // Ensure user has only one default wishlist
   if (this.isDefault && this.isModified('isDefault')) {
-    await this.constructor.updateMany(
+    await (this.constructor as any).updateMany(
       { user: this.user, _id: { $ne: this._id } },
       { isDefault: false }
     );
   }
-  
+
   // Update item count if items changed
   if (this.isModified('items')) {
     this.itemCount = this.items.length;
   }
-  
+
   next();
 });
 
@@ -333,12 +333,12 @@ WishlistSchema.post('save', async function() {
     try {
       // Update favorite count for affected products
       const Product = mongoose.model('Product');
-      
+
       for (const item of this.items) {
-        const count = await this.constructor.countDocuments({
+        const count = await (this.constructor as any).countDocuments({
           'items.product': item.product
         });
-        
+
         await Product.findByIdAndUpdate(item.product, {
           'analytics.favoriteCount': count
         });

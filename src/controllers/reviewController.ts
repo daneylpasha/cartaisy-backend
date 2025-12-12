@@ -4,9 +4,9 @@ import ProductReview from '../models/ProductReview';
 import Product from '../models/Product';
 import Order from '../models/Order';
 
-export const createReview = async (req: Request, res: Response): Promise<void> => {
+export const createReview = async (req: Request, res: Response): Promise<Response | void> => {
   try {
-    const userId = req.user?.id;
+    const userId = req.user?._id?.toString();
     const {
       productId,
       rating,
@@ -119,10 +119,10 @@ export const createReview = async (req: Request, res: Response): Promise<void> =
   }
 };
 
-export const getReview = async (req: Request, res: Response): Promise<void> => {
+export const getReview = async (req: Request, res: Response): Promise<Response | void> => {
   try {
     const { reviewId } = req.params;
-    const userId = req.user?.id;
+    const userId = req.user?._id?.toString();
 
     const review = await ProductReview.findById(reviewId)
       .populate('user', 'name avatar')
@@ -159,10 +159,10 @@ export const getReview = async (req: Request, res: Response): Promise<void> => {
   }
 };
 
-export const updateReview = async (req: Request, res: Response): Promise<void> => {
+export const updateReview = async (req: Request, res: Response): Promise<Response | void> => {
   try {
     const { reviewId } = req.params;
-    const userId = req.user?.id;
+    const userId = req.user?._id?.toString();
     const {
       rating,
       reviewText,
@@ -261,10 +261,10 @@ export const updateReview = async (req: Request, res: Response): Promise<void> =
   }
 };
 
-export const deleteReview = async (req: Request, res: Response): Promise<void> => {
+export const deleteReview = async (req: Request, res: Response): Promise<Response | void> => {
   try {
     const { reviewId } = req.params;
-    const userId = req.user?.id;
+    const userId = req.user?._id?.toString();
 
     const review = await ProductReview.findById(reviewId);
 
@@ -302,11 +302,11 @@ export const deleteReview = async (req: Request, res: Response): Promise<void> =
   }
 };
 
-export const voteOnReview = async (req: Request, res: Response): Promise<void> => {
+export const voteOnReview = async (req: Request, res: Response): Promise<Response | void> => {
   try {
     const { reviewId } = req.params;
     const { voteType } = req.body; // 'helpful' or 'not_helpful'
-    const userId = req.user?.id;
+    const userId = req.user?._id?.toString();
 
     if (!userId) {
       return res.status(401).json({
@@ -383,9 +383,9 @@ export const voteOnReview = async (req: Request, res: Response): Promise<void> =
   }
 };
 
-export const getUserReviews = async (req: Request, res: Response): Promise<void> => {
+export const getUserReviews = async (req: Request, res: Response): Promise<Response | void> => {
   try {
-    const userId = req.user?.id;
+    const userId = req.user?._id?.toString();
     const {
       page = 1,
       limit = 10,
@@ -439,11 +439,11 @@ export const getUserReviews = async (req: Request, res: Response): Promise<void>
   }
 };
 
-export const reportReview = async (req: Request, res: Response): Promise<void> => {
+export const reportReview = async (req: Request, res: Response): Promise<Response | void> => {
   try {
     const { reviewId } = req.params;
     const { reason, description } = req.body;
-    const userId = req.user?.id;
+    const userId = req.user?._id?.toString();
 
     if (!userId) {
       return res.status(401).json({
@@ -485,8 +485,8 @@ export const reportReview = async (req: Request, res: Response): Promise<void> =
       reportedBy: new mongoose.Types.ObjectId(userId),
       reason,
       description: description?.trim(),
-      reportedAt: new Date()
-    });
+      createdAt: new Date()
+    } as any);
 
     // Auto-flag as spam if multiple reports
     if (review.reports.length >= 3) {
@@ -508,7 +508,7 @@ export const reportReview = async (req: Request, res: Response): Promise<void> =
   }
 };
 
-export const getReviewAnalytics = async (req: Request, res: Response): Promise<void> => {
+export const getReviewAnalytics = async (req: Request, res: Response): Promise<Response | void> => {
   try {
     const { productId } = req.params;
     const { timeframe = '30' } = req.query;
@@ -633,11 +633,11 @@ export const getReviewAnalytics = async (req: Request, res: Response): Promise<v
 };
 
 // Admin functions
-export const moderateReview = async (req: Request, res: Response): Promise<void> => {
+export const moderateReview = async (req: Request, res: Response): Promise<Response | void> => {
   try {
     const { reviewId } = req.params;
     const { action, adminNotes, response } = req.body; // action: 'approve', 'reject', 'spam'
-    const adminId = req.user?.id;
+    const adminId = req.user?._id?.toString();
 
     if (!['approve', 'reject', 'spam'].includes(action)) {
       return res.status(400).json({
@@ -663,7 +663,7 @@ export const moderateReview = async (req: Request, res: Response): Promise<void>
     // Add admin response if provided
     if (response && action === 'approve') {
       review.adminResponse = {
-        responseText: response.trim(),
+        response: response.trim(),
         respondedBy: new mongoose.Types.ObjectId(adminId),
         respondedAt: new Date()
       };

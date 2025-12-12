@@ -218,13 +218,13 @@ const PaymentMethodSchema = new Schema<IPaymentMethod>(
 );
 
 // =============================================================================
-// INDEXES
+// INDEXES - removing duplicates where index: true already exists on userId field
 // =============================================================================
 
-// Compound index for querying user's payment methods
-PaymentMethodSchema.index({ userId: 1, isDefault: 1 });
+// Compound indexes for querying user's payment methods (userId has index: true but these are compound)
+// PaymentMethodSchema.index({ userId: 1, isDefault: 1 }); // isDefault has index: true
 PaymentMethodSchema.index({ userId: 1, createdAt: -1 });
-PaymentMethodSchema.index({ userId: 1, isExpired: 1 });
+// PaymentMethodSchema.index({ userId: 1, isExpired: 1 }); // isExpired has index: true
 
 // =============================================================================
 // VIRTUALS
@@ -419,9 +419,6 @@ export interface IPaymentMethodModel extends mongoose.Model<IPaymentMethodDocume
   ): Promise<IPaymentMethodDocument | null>;
 }
 
-const PaymentMethod = mongoose.model<IPaymentMethodDocument, IPaymentMethodModel>(
-  'PaymentMethod',
-  PaymentMethodSchema
-);
+const PaymentMethod = mongoose.model('PaymentMethod', PaymentMethodSchema) as unknown as IPaymentMethodModel;
 
 export default PaymentMethod;

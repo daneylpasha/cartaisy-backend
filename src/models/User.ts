@@ -400,14 +400,14 @@ const UserSchema = new Schema<IUser>(
 );
 
 // =============================================================================
-// INDEXES
+// INDEXES - removing duplicates where index: true already exists on field
 // =============================================================================
 
-UserSchema.index({ storeId: 1 });
-UserSchema.index({ email: 1 });
-UserSchema.index({ shopifyCustomerId: 1 });
+// UserSchema.index({ storeId: 1 }); // Already has index: true
+// UserSchema.index({ email: 1 }); // Already has index: true
+// UserSchema.index({ shopifyCustomerId: 1 }); // Already has index: true
 UserSchema.index({ role: 1, isActive: 1 });
-UserSchema.index({ isVerified: 1 });
+// UserSchema.index({ isVerified: 1 }); // Already has index: true
 UserSchema.index({ lastLoginAt: -1 });
 UserSchema.index({ createdAt: -1 });
 

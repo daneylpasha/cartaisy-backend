@@ -1021,7 +1021,7 @@ const models: TsoaRoute.Models = {
         "dataType": "refObject",
         "properties": {
             "success": {"dataType":"boolean","required":true},
-            "data": {"dataType":"nestedObjectLiteral","nestedProperties":{"expiresAt":{"dataType":"string","required":true},"status":{"dataType":"string","required":true},"promoCode":{"dataType":"string"},"deliveryInstructions":{"dataType":"string"},"pricing":{"ref":"PricingBreakdown","required":true},"paymentMethod":{"dataType":"nestedObjectLiteral","nestedProperties":{"last4":{"dataType":"string"},"type":{"dataType":"string","required":true},"displayName":{"dataType":"string","required":true},"id":{"dataType":"string","required":true}},"required":true},"shippingMethod":{"dataType":"nestedObjectLiteral","nestedProperties":{"estimatedDelivery":{"dataType":"string"},"price":{"dataType":"double","required":true},"title":{"dataType":"string","required":true}},"required":true},"shippingAddress":{"dataType":"intersection","subSchemas":[{"ref":"AddressSummary"},{"dataType":"nestedObjectLiteral","nestedProperties":{"lastName":{"dataType":"string"},"firstName":{"dataType":"string"}}}],"required":true},"items":{"dataType":"array","array":{"dataType":"nestedObjectLiteral","nestedProperties":{"total":{"dataType":"double","required":true},"quantity":{"dataType":"double","required":true},"price":{"dataType":"double","required":true},"image":{"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},"variantTitle":{"dataType":"string"},"title":{"dataType":"string","required":true},"id":{"dataType":"string","required":true}}},"required":true},"sessionId":{"dataType":"string","required":true}},"required":true},
+            "data": {"dataType":"nestedObjectLiteral","nestedProperties":{"expiresAt":{"dataType":"string","required":true},"paymentError":{"dataType":"string"},"status":{"dataType":"string","required":true},"promoCode":{"dataType":"string"},"deliveryInstructions":{"dataType":"string"},"pricing":{"ref":"PricingBreakdown","required":true},"paymentMethod":{"dataType":"nestedObjectLiteral","nestedProperties":{"last4":{"dataType":"string"},"type":{"dataType":"string","required":true},"displayName":{"dataType":"string","required":true},"id":{"dataType":"string","required":true}},"required":true},"shippingMethod":{"dataType":"nestedObjectLiteral","nestedProperties":{"estimatedDelivery":{"dataType":"string"},"price":{"dataType":"double","required":true},"title":{"dataType":"string","required":true}},"required":true},"shippingAddress":{"dataType":"intersection","subSchemas":[{"ref":"AddressSummary"},{"dataType":"nestedObjectLiteral","nestedProperties":{"lastName":{"dataType":"string"},"firstName":{"dataType":"string"}}}],"required":true},"items":{"dataType":"array","array":{"dataType":"nestedObjectLiteral","nestedProperties":{"total":{"dataType":"double","required":true},"quantity":{"dataType":"double","required":true},"price":{"dataType":"double","required":true},"image":{"dataType":"union","subSchemas":[{"dataType":"string"},{"dataType":"enum","enums":[null]}],"required":true},"variantTitle":{"dataType":"string"},"title":{"dataType":"string","required":true},"id":{"dataType":"string","required":true}}},"required":true},"sessionId":{"dataType":"string","required":true}},"required":true},
         },
         "additionalProperties": false,
     },
@@ -1030,7 +1030,7 @@ const models: TsoaRoute.Models = {
         "dataType": "refObject",
         "properties": {
             "success": {"dataType":"boolean","required":true},
-            "data": {"dataType":"nestedObjectLiteral","nestedProperties":{"payment":{"dataType":"nestedObjectLiteral","nestedProperties":{"clientSecret":{"dataType":"string"},"paymentIntentId":{"dataType":"string","required":true},"status":{"dataType":"union","subSchemas":[{"dataType":"enum","enums":["succeeded"]},{"dataType":"enum","enums":["requires_action"]},{"dataType":"enum","enums":["processing"]}],"required":true}},"required":true},"order":{"dataType":"nestedObjectLiteral","nestedProperties":{"estimatedDelivery":{"dataType":"string"},"status":{"dataType":"string","required":true},"currency":{"dataType":"string","required":true},"totalPrice":{"dataType":"double","required":true},"confirmationNumber":{"dataType":"string"},"shopifyOrderId":{"dataType":"string"},"orderNumber":{"dataType":"string","required":true},"id":{"dataType":"string","required":true}},"required":true}},"required":true},
+            "data": {"dataType":"nestedObjectLiteral","nestedProperties":{"payment":{"dataType":"nestedObjectLiteral","nestedProperties":{"clientSecret":{"dataType":"string"},"paymentIntentId":{"dataType":"string","required":true},"status":{"dataType":"union","subSchemas":[{"dataType":"enum","enums":["succeeded"]},{"dataType":"enum","enums":["requires_action"]},{"dataType":"enum","enums":["processing"]}],"required":true}},"required":true},"order":{"dataType":"nestedObjectLiteral","nestedProperties":{"timeline":{"dataType":"any"},"paymentInfo":{"dataType":"any"},"shippingMethod":{"dataType":"any"},"billingAddress":{"dataType":"any"},"shippingAddress":{"dataType":"any"},"discount":{"dataType":"any"},"pricing":{"dataType":"any"},"products":{"dataType":"array","array":{"dataType":"any"}},"estimatedDelivery":{"dataType":"string"},"status":{"dataType":"string","required":true},"currency":{"dataType":"string","required":true},"totalPrice":{"dataType":"double","required":true},"phone":{"dataType":"string"},"email":{"dataType":"string"},"confirmationNumber":{"dataType":"string"},"shopifyOrderId":{"dataType":"string"},"orderNumber":{"dataType":"string","required":true},"id":{"dataType":"string","required":true}},"additionalProperties":{"dataType":"any"},"required":true}},"required":true},
             "message": {"dataType":"string","required":true},
         },
         "additionalProperties": false,
@@ -1161,7 +1161,7 @@ const models: TsoaRoute.Models = {
         "properties": {
             "status": {"dataType":"union","subSchemas":[{"dataType":"enum","enums":["success"]},{"dataType":"enum","enums":["error"]}],"required":true},
             "message": {"dataType":"string","required":true},
-            "data": {"dataType":"nestedObjectLiteral","nestedProperties":{"refreshToken":{"dataType":"string","required":true},"token":{"dataType":"string","required":true},"user":{"dataType":"nestedObjectLiteral","nestedProperties":{"lastLoginAt":{"dataType":"datetime"},"avatar":{"dataType":"string"},"isActive":{"dataType":"boolean","required":true},"isEmailVerified":{"dataType":"boolean","required":true},"role":{"dataType":"string","required":true},"email":{"dataType":"string","required":true},"name":{"dataType":"string"},"id":{"dataType":"string","required":true}},"required":true}}},
+            "data": {"dataType":"nestedObjectLiteral","nestedProperties":{"refreshToken":{"dataType":"string","required":true},"token":{"dataType":"string","required":true},"user":{"dataType":"nestedObjectLiteral","nestedProperties":{"lastLoginAt":{"dataType":"datetime"},"avatar":{"dataType":"string"},"isActive":{"dataType":"boolean","required":true},"isEmailVerified":{"dataType":"boolean","required":true},"storeName":{"dataType":"string"},"storeId":{"dataType":"string"},"role":{"dataType":"string","required":true},"email":{"dataType":"string","required":true},"name":{"dataType":"string"},"id":{"dataType":"string","required":true}},"required":true}}},
         },
         "additionalProperties": false,
     },
@@ -1211,12 +1211,30 @@ const models: TsoaRoute.Models = {
         "additionalProperties": false,
     },
     // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "RefreshTokenResponse": {
+        "dataType": "refObject",
+        "properties": {
+            "status": {"dataType":"union","subSchemas":[{"dataType":"enum","enums":["success"]},{"dataType":"enum","enums":["error"]}],"required":true},
+            "message": {"dataType":"string","required":true},
+            "data": {"dataType":"nestedObjectLiteral","nestedProperties":{"refreshToken":{"dataType":"string","required":true},"token":{"dataType":"string","required":true},"user":{"dataType":"nestedObjectLiteral","nestedProperties":{"avatar":{"dataType":"string"},"isActive":{"dataType":"boolean","required":true},"isEmailVerified":{"dataType":"boolean","required":true},"storeName":{"dataType":"string"},"storeId":{"dataType":"string"},"role":{"dataType":"string","required":true},"email":{"dataType":"string","required":true},"name":{"dataType":"string"},"id":{"dataType":"string","required":true}},"required":true}}},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "RefreshTokenRequest": {
+        "dataType": "refObject",
+        "properties": {
+            "refreshToken": {"dataType":"string","required":true},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
     "GetProfileResponse": {
         "dataType": "refObject",
         "properties": {
             "status": {"dataType":"union","subSchemas":[{"dataType":"enum","enums":["success"]},{"dataType":"enum","enums":["error"]}],"required":true},
             "message": {"dataType":"string"},
-            "data": {"dataType":"nestedObjectLiteral","nestedProperties":{"user":{"dataType":"nestedObjectLiteral","nestedProperties":{"lastLoginAt":{"dataType":"datetime"},"createdAt":{"dataType":"datetime","required":true},"totalSpent":{"dataType":"double"},"totalOrdersCount":{"dataType":"double"},"preferences":{"dataType":"any"},"addresses":{"dataType":"array","array":{"dataType":"any"}},"avatar":{"dataType":"string"},"isActive":{"dataType":"boolean","required":true},"isEmailVerified":{"dataType":"boolean","required":true},"role":{"dataType":"string","required":true},"defaultAddress":{"dataType":"union","subSchemas":[{"dataType":"any"},{"dataType":"enum","enums":[null]}],"required":true},"dateOfBirth":{"dataType":"string","required":true},"gender":{"dataType":"string","required":true},"country":{"dataType":"string","required":true},"phoneNumber":{"dataType":"string","required":true},"email":{"dataType":"string","required":true},"fullName":{"dataType":"string","required":true},"id":{"dataType":"string","required":true}},"required":true}}},
+            "data": {"dataType":"nestedObjectLiteral","nestedProperties":{"user":{"dataType":"nestedObjectLiteral","nestedProperties":{"lastLoginAt":{"dataType":"datetime"},"createdAt":{"dataType":"datetime","required":true},"totalSpent":{"dataType":"double"},"totalOrdersCount":{"dataType":"double"},"preferences":{"dataType":"any"},"addresses":{"dataType":"array","array":{"dataType":"any"}},"avatar":{"dataType":"string"},"isActive":{"dataType":"boolean","required":true},"isEmailVerified":{"dataType":"boolean","required":true},"storeName":{"dataType":"string"},"storeId":{"dataType":"string"},"role":{"dataType":"string","required":true},"defaultAddress":{"dataType":"union","subSchemas":[{"dataType":"any"},{"dataType":"enum","enums":[null]}],"required":true},"dateOfBirth":{"dataType":"string","required":true},"gender":{"dataType":"string","required":true},"country":{"dataType":"string","required":true},"phoneNumber":{"dataType":"string","required":true},"email":{"dataType":"string","required":true},"fullName":{"dataType":"string","required":true},"id":{"dataType":"string","required":true}},"required":true}}},
         },
         "additionalProperties": false,
     },
@@ -3436,6 +3454,36 @@ export function RegisterRoutes(app: Router) {
 
               await templateService.apiHandler({
                 methodName: 'resetPassword',
+                controller,
+                response,
+                next,
+                validatedArgs,
+                successStatus: 200,
+              });
+            } catch (err) {
+                return next(err);
+            }
+        });
+        // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+        const argsAuthController_refreshToken: Record<string, TsoaRoute.ParameterSchema> = {
+                requestBody: {"in":"body","name":"requestBody","required":true,"ref":"RefreshTokenRequest"},
+        };
+        app.post('/api/v1/auth/refresh-token',
+            ...(fetchMiddlewares<RequestHandler>(AuthController)),
+            ...(fetchMiddlewares<RequestHandler>(AuthController.prototype.refreshToken)),
+
+            async function AuthController_refreshToken(request: ExRequest, response: ExResponse, next: any) {
+
+            // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+
+            let validatedArgs: any[] = [];
+            try {
+                validatedArgs = templateService.getValidatedArgs({ args: argsAuthController_refreshToken, request, response });
+
+                const controller = new AuthController();
+
+              await templateService.apiHandler({
+                methodName: 'refreshToken',
                 controller,
                 response,
                 next,

@@ -5,6 +5,24 @@ import Product from '../models/Product';
 import Order from '../models/Order';
 import { ApiError } from '../utils/errors';
 
+// Placeholder for order queue processing
+const processOrderQueue = async (): Promise<void> => {
+  // Process pending orders
+  const pendingOrders = await Order.find({
+    status: 'pending',
+    createdAt: { $lte: new Date(Date.now() - 5 * 60 * 1000) } // Older than 5 minutes
+  }).limit(10);
+
+  for (const order of pendingOrders) {
+    try {
+      // Basic order processing logic
+      console.log(`Processing order: ${order.orderNumber}`);
+    } catch (error) {
+      console.error(`Error processing order ${order.orderNumber}:`, error);
+    }
+  }
+};
+
 interface IJobStats {
   lastRun: Date;
   runCount: number;
@@ -16,7 +34,7 @@ interface IJobStats {
 
 interface IJobRegistry {
   [jobName: string]: {
-    task: cron.ScheduledTask | null;
+    task: ReturnType<typeof cron.schedule> | null;
     stats: IJobStats;
     isRunning: boolean;
   };
@@ -96,7 +114,7 @@ class BackgroundJobManager {
     }, {
       scheduled: false,
       timezone: 'UTC'
-    });
+    } as any);
 
     this.jobs[name] = {
       task: jobTask,
@@ -266,7 +284,7 @@ class BackgroundJobManager {
   private async performHealthCheck(): Promise<void> {
     try {
       // Check database connectivity
-      const dbCheck = await Product.findOne().lean().timeout(5000);
+      const dbCheck = await Product.findOne().lean().maxTimeMS(5000);
       
       // Check if critical jobs are running properly
       const criticalJobs = ['incremental-sync', 'inventory-sync', 'order-processing'];

@@ -22,7 +22,7 @@ export const storeLimiter = rateLimit({
   max: 1000, // 1000 requests per window per store
   standardHeaders: true, // Return rate limit info in headers
   legacyHeaders: false,
-  validate: { xForwardedForHeader: false, ip: false },
+  validate: false,
 
   // Generate key based on storeId + IP
   keyGenerator: (req: Request): string => {
@@ -60,7 +60,7 @@ export const storeLimiter = rateLimit({
 export const strictLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // Only 100 requests per 15 min
-  validate: { xForwardedForHeader: false, ip: false },
+  validate: false,
 
   keyGenerator: (req: Request): string => {
     const storeId = req.storeId?.toString() || req.headers['x-store-id'] as string || 'unknown';
@@ -93,7 +93,7 @@ export const strictLimiter = rateLimit({
 export const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 10, // Only 10 login attempts per 15 min
-  validate: { xForwardedForHeader: false, ip: false },
+  validate: false,
 
   keyGenerator: (req: Request): string => {
     const ip = normalizeIp(req.ip || req.socket?.remoteAddress);

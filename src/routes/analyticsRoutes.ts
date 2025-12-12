@@ -19,51 +19,51 @@ router.post('/events/track-batch', analyticsController.trackEventsBatch);
 // ============================================
 
 // Combined dashboard (Shopify + App)
-router.get('/dashboard', authenticateAdmin, analyticsController.getCombinedDashboard);
+router.get('/dashboard', authenticateAdmin as any, analyticsController.getCombinedDashboard);
 
 // Legacy dashboard (existing)
-router.get('/legacy-dashboard', authenticateAdmin, analyticsController.getDashboardAnalytics);
+router.get('/legacy-dashboard', authenticateAdmin as any, analyticsController.getDashboardAnalytics);
 
 // ============================================
 // SHOPIFY ANALYTICS (Admin only)
 // ============================================
 
 // Sales
-router.get('/sales/overview', authenticateAdmin, analyticsController.getSalesOverview);
-router.get('/sales/top-products', authenticateAdmin, analyticsController.getTopSellingProducts);
-router.get('/sales/trends', authenticateAdmin, analyticsController.getSalesTrends);
-router.get('/sales/by-category', authenticateAdmin, analyticsController.getRevenueByCategory);
+router.get('/sales/overview', authenticateAdmin as any, analyticsController.getSalesOverview);
+router.get('/sales/top-products', authenticateAdmin as any, analyticsController.getTopSellingProducts);
+router.get('/sales/trends', authenticateAdmin as any, analyticsController.getSalesTrends);
+router.get('/sales/by-category', authenticateAdmin as any, analyticsController.getRevenueByCategory);
 
 // Customers
-router.get('/customers/metrics', authenticateAdmin, analyticsController.getCustomerMetrics);
+router.get('/customers/metrics', authenticateAdmin as any, analyticsController.getCustomerMetrics);
 
 // Orders
-router.get('/orders/fulfillment', authenticateAdmin, analyticsController.getFulfillmentStats);
-router.get('/orders/recent', authenticateAdmin, analyticsController.getRecentOrders);
+router.get('/orders/fulfillment', authenticateAdmin as any, analyticsController.getFulfillmentStats);
+router.get('/orders/recent', authenticateAdmin as any, analyticsController.getRecentOrders);
 
 // Inventory
-router.get('/inventory/low-stock', authenticateAdmin, analyticsController.getLowStockProducts);
-router.get('/inventory/analytics', authenticateAdmin, analyticsController.getInventoryAnalytics);
+router.get('/inventory/low-stock', authenticateAdmin as any, analyticsController.getLowStockProducts);
+router.get('/inventory/analytics', authenticateAdmin as any, analyticsController.getInventoryAnalytics);
 
 // ============================================
 // APP ANALYTICS (Admin only)
 // ============================================
 
 // Engagement
-router.get('/app/engagement', authenticateAdmin, analyticsController.getEngagementMetrics);
-router.get('/app/top-products', authenticateAdmin, analyticsController.getTopProductsByEngagement);
-router.get('/app/top-searches', authenticateAdmin, analyticsController.getTopSearches);
-router.get('/app/platforms', authenticateAdmin, analyticsController.getPlatformBreakdown);
-router.get('/app/funnel', authenticateAdmin, analyticsController.getFunnelAnalysis);
-router.get('/app/hourly-activity', authenticateAdmin, analyticsController.getHourlyActivity);
-router.get('/app/journey/:sessionId', authenticateAdmin, analyticsController.getUserJourney);
+router.get('/app/engagement', authenticateAdmin as any, analyticsController.getEngagementMetrics);
+router.get('/app/top-products', authenticateAdmin as any, analyticsController.getTopProductsByEngagement);
+router.get('/app/top-searches', authenticateAdmin as any, analyticsController.getTopSearches);
+router.get('/app/platforms', authenticateAdmin as any, analyticsController.getPlatformBreakdown);
+router.get('/app/funnel', authenticateAdmin as any, analyticsController.getFunnelAnalysis);
+router.get('/app/hourly-activity', authenticateAdmin as any, analyticsController.getHourlyActivity);
+router.get('/app/journey/:sessionId', authenticateAdmin as any, analyticsController.getUserJourney);
 
 // ============================================
 // LEGACY ANALYTICS (Existing endpoints)
 // ============================================
 
-router.get('/products', authenticateAdmin, analyticsController.getProductAnalytics);
-router.get('/user-behavior', authenticateAdmin, analyticsController.getUserBehaviorAnalytics);
-router.get('/revenue', authenticateAdmin, analyticsController.getRevenueAnalytics);
+router.get('/products', authenticateAdmin as any, analyticsController.getProductAnalytics);
+router.get('/user-behavior', authenticateAdmin as any, analyticsController.getUserBehaviorAnalytics);
+router.get('/revenue', authenticateAdmin as any, analyticsController.getRevenueAnalytics);
 
 export default router;

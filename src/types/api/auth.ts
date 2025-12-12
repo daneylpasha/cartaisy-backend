@@ -52,6 +52,8 @@ export interface LoginResponse {
       name?: string;
       email: string;
       role: string;
+      storeId?: string;
+      storeName?: string;
       isEmailVerified: boolean;
       isActive: boolean;
       avatar?: string;
@@ -113,6 +115,8 @@ export interface GetProfileResponse {
       dateOfBirth: string;
       defaultAddress: any | null;
       role: string;
+      storeId?: string;
+      storeName?: string;
       isEmailVerified: boolean;
       isActive: boolean;
       avatar?: string;
@@ -123,6 +127,36 @@ export interface GetProfileResponse {
       createdAt: Date;
       lastLoginAt?: Date;
     };
+  };
+}
+
+/**
+ * Refresh token request
+ */
+export interface RefreshTokenRequest {
+  refreshToken: string;
+}
+
+/**
+ * Refresh token response
+ */
+export interface RefreshTokenResponse {
+  status: 'success' | 'error';
+  message: string;
+  data?: {
+    user: {
+      id: string;
+      name?: string;
+      email: string;
+      role: string;
+      storeId?: string;
+      storeName?: string;
+      isEmailVerified: boolean;
+      isActive: boolean;
+      avatar?: string;
+    };
+    token: string;
+    refreshToken: string;
   };
 }
 

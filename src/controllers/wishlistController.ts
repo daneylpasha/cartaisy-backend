@@ -3,9 +3,9 @@ import mongoose from 'mongoose';
 import Wishlist from '../models/Wishlist';
 import Product from '../models/Product';
 
-export const getUserWishlists = async (req: Request, res: Response): Promise<void> => {
+export const getUserWishlists = async (req: Request, res: Response): Promise<Response | void> => {
   try {
-    const userId = req.user?.id;
+    const userId = req.user?._id?.toString();
 
     if (!userId) {
       return res.status(401).json({
@@ -33,10 +33,10 @@ export const getUserWishlists = async (req: Request, res: Response): Promise<voi
   }
 };
 
-export const getWishlist = async (req: Request, res: Response): Promise<void> => {
+export const getWishlist = async (req: Request, res: Response): Promise<Response | void> => {
   try {
     const { wishlistId } = req.params;
-    const userId = req.user?.id;
+    const userId = req.user?._id?.toString();
 
     const wishlist = await Wishlist.findById(wishlistId)
       .populate({
@@ -82,7 +82,7 @@ export const getWishlist = async (req: Request, res: Response): Promise<void> =>
           ...wishlist.toObject(),
           items: activeItems
         },
-        totalValue: wishlist.totalValue,
+        totalValue: (wishlist as any).totalValue,
         isOwner: wishlist.user.toString() === userId
       }
     });
@@ -95,9 +95,9 @@ export const getWishlist = async (req: Request, res: Response): Promise<void> =>
   }
 };
 
-export const createWishlist = async (req: Request, res: Response): Promise<void> => {
+export const createWishlist = async (req: Request, res: Response): Promise<Response | void> => {
   try {
-    const userId = req.user?.id;
+    const userId = req.user?._id?.toString();
     const { name, description, isPrivate = true, color } = req.body;
 
     if (!userId) {
@@ -158,10 +158,10 @@ export const createWishlist = async (req: Request, res: Response): Promise<void>
   }
 };
 
-export const updateWishlist = async (req: Request, res: Response): Promise<void> => {
+export const updateWishlist = async (req: Request, res: Response): Promise<Response | void> => {
   try {
     const { wishlistId } = req.params;
-    const userId = req.user?.id;
+    const userId = req.user?._id?.toString();
     const { name, description, isPrivate, color, isDefault } = req.body;
 
     const wishlist = await Wishlist.findById(wishlistId);
@@ -233,10 +233,10 @@ export const updateWishlist = async (req: Request, res: Response): Promise<void>
   }
 };
 
-export const deleteWishlist = async (req: Request, res: Response): Promise<void> => {
+export const deleteWishlist = async (req: Request, res: Response): Promise<Response | void> => {
   try {
     const { wishlistId } = req.params;
-    const userId = req.user?.id;
+    const userId = req.user?._id?.toString();
 
     const wishlist = await Wishlist.findById(wishlistId);
 
@@ -286,10 +286,10 @@ export const deleteWishlist = async (req: Request, res: Response): Promise<void>
   }
 };
 
-export const addToWishlist = async (req: Request, res: Response): Promise<void> => {
+export const addToWishlist = async (req: Request, res: Response): Promise<Response | void> => {
   try {
     const { wishlistId } = req.params;
-    const userId = req.user?.id;
+    const userId = req.user?._id?.toString();
     const { productId, variantId, notes, priority = 3 } = req.body;
 
     if (!userId) {
@@ -371,11 +371,11 @@ export const addToWishlist = async (req: Request, res: Response): Promise<void> 
   }
 };
 
-export const removeFromWishlist = async (req: Request, res: Response): Promise<void> => {
+export const removeFromWishlist = async (req: Request, res: Response): Promise<Response | void> => {
   try {
     const { wishlistId, productId } = req.params;
     const { variantId } = req.query;
-    const userId = req.user?.id;
+    const userId = req.user?._id?.toString();
 
     const wishlist = await Wishlist.findById(wishlistId);
 
@@ -415,11 +415,11 @@ export const removeFromWishlist = async (req: Request, res: Response): Promise<v
   }
 };
 
-export const checkWishlistStatus = async (req: Request, res: Response): Promise<void> => {
+export const checkWishlistStatus = async (req: Request, res: Response): Promise<Response | void> => {
   try {
     const { productId } = req.params;
     const { variantId } = req.query;
-    const userId = req.user?.id;
+    const userId = req.user?._id?.toString();
 
     if (!userId) {
       return res.json({
@@ -458,10 +458,10 @@ export const checkWishlistStatus = async (req: Request, res: Response): Promise<
   }
 };
 
-export const shareWishlist = async (req: Request, res: Response): Promise<void> => {
+export const shareWishlist = async (req: Request, res: Response): Promise<Response | void> => {
   try {
     const { wishlistId } = req.params;
-    const userId = req.user?.id;
+    const userId = req.user?._id?.toString();
     const { isPublic = false, emails = [], expiresInDays } = req.body;
 
     const wishlist = await Wishlist.findById(wishlistId);
@@ -512,7 +512,7 @@ export const shareWishlist = async (req: Request, res: Response): Promise<void> 
   }
 };
 
-export const getSharedWishlist = async (req: Request, res: Response): Promise<void> => {
+export const getSharedWishlist = async (req: Request, res: Response): Promise<Response | void> => {
   try {
     const { token } = req.params;
 
@@ -566,7 +566,7 @@ export const getSharedWishlist = async (req: Request, res: Response): Promise<vo
           sharedAt: wishlist.sharing.sharedAt,
           viewCount: wishlist.sharing.viewCount
         },
-        totalValue: wishlist.totalValue
+        totalValue: (wishlist as any).totalValue
       }
     });
   } catch (error) {
@@ -578,11 +578,11 @@ export const getSharedWishlist = async (req: Request, res: Response): Promise<vo
   }
 };
 
-export const moveItemBetweenWishlists = async (req: Request, res: Response): Promise<void> => {
+export const moveItemBetweenWishlists = async (req: Request, res: Response): Promise<Response | void> => {
   try {
     const { sourceWishlistId, targetWishlistId } = req.params;
     const { productId, variantId } = req.body;
-    const userId = req.user?.id;
+    const userId = req.user?._id?.toString();
 
     if (!productId) {
       return res.status(400).json({

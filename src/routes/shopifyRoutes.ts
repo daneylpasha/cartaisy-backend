@@ -11,11 +11,11 @@ import {
   getInventoryHistory,
   bulkUpdateInventory 
 } from '../services/inventoryService';
-import { 
+import {
   generateProductRecommendations,
-  enhanceProductSEO,
-  optimizeProductImages,
-  getProductAnalytics
+  updateProductAnalytics,
+  optimizeProductSearch,
+  processProductImages
 } from '../services/productEnhancementService';
 import { authenticate } from '../middleware/auth';
 import Product from '../models/Product';
@@ -225,17 +225,17 @@ router.get('/products/:productId/recommendations', async (req: Request, res: Res
 });
 
 /**
- * POST /api/shopify/products/:productId/enhance-seo - Enhance product SEO
+ * POST /api/shopify/products/:productId/enhance-seo - Enhance product SEO (optimize search)
  */
 router.post('/products/:productId/enhance-seo', async (req: Request, res: Response) => {
   try {
     const { productId } = req.params;
-    const enhanced = await enhanceProductSEO(productId);
-    
+    await optimizeProductSearch(productId);
+
     res.json({
       success: true,
       message: 'Product SEO enhanced successfully',
-      data: enhanced
+      data: { productId }
     });
   } catch (error) {
     console.error('Error enhancing product SEO:', error);
@@ -252,8 +252,15 @@ router.post('/products/:productId/enhance-seo', async (req: Request, res: Respon
 router.post('/products/:productId/optimize-images', async (req: Request, res: Response) => {
   try {
     const { productId } = req.params;
-    const result = await optimizeProductImages(productId);
-    
+    const product = await Product.findById(productId);
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        error: 'Product not found'
+      });
+    }
+    const result = await processProductImages(product);
+
     res.json({
       success: true,
       message: 'Product images optimized successfully',
@@ -274,13 +281,18 @@ router.post('/products/:productId/optimize-images', async (req: Request, res: Re
 router.get('/products/:productId/analytics', async (req: Request, res: Response) => {
   try {
     const { productId } = req.params;
-    const period = req.query.period as string || '30d';
-    
-    const analytics = await getProductAnalytics(productId, period);
-    
+    const product = await Product.findById(productId).select('analytics').lean();
+
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        error: 'Product not found'
+      });
+    }
+
     res.json({
       success: true,
-      data: analytics
+      data: product.analytics
     });
   } catch (error) {
     console.error('Error getting product analytics:', error);

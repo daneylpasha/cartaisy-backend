@@ -358,8 +358,8 @@ const OrderTrackingSchema = new Schema({
   toObject: { virtuals: true }
 });
 
-// Indexes
-OrderTrackingSchema.index({ trackingNumber: 1 });
+// Indexes - removing duplicates where index: true already exists on field
+// OrderTrackingSchema.index({ trackingNumber: 1 }); // Already has index: true
 OrderTrackingSchema.index({ currentStatus: 1, estimatedDelivery: 1 });
 OrderTrackingSchema.index({ 'carrier.name': 1, currentStatus: 1 });
 OrderTrackingSchema.index({ shippedAt: -1 });
@@ -565,7 +565,7 @@ OrderTrackingSchema.pre('save', function(next) {
   }
   
   // Auto-flag for review if overdue
-  if (!this.flaggedForReview && this.isOverdue && this.currentStatus !== 'delivered') {
+  if (!this.flaggedForReview && (this as any).isOverdue && this.currentStatus !== 'delivered') {
     this.flaggedForReview = true;
   }
   

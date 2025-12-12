@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import crypto from 'crypto';
 import User from '../models/User';
+import Store from '../models/Store';
 import { generateToken, generateRefreshToken } from '../utils/jwt';
 import { sendWelcomeEmail, sendPasswordResetEmail } from '../utils/email';
 import { SUCCESS_MESSAGES } from '../utils/constants';
@@ -214,6 +215,13 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     const token = generateToken((user._id as any).toString());
     const refreshToken = generateRefreshToken((user._id as any).toString());
 
+    // Get store name if user has a storeId
+    let storeName = '';
+    if (user.storeId) {
+      const store = await Store.findById(user.storeId).select('name');
+      storeName = store?.name || '';
+    }
+
     // Prepare user data (exclude sensitive fields)
     const userData = {
       id: user._id,
@@ -221,6 +229,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       email: user.email,
       role: user.role,
       storeId: user.storeId,
+      storeName,
       isEmailVerified: user.isVerified,
       isActive: user.isActive,
       avatar: user.profile?.avatar,
@@ -362,17 +371,26 @@ export const getProfile = async (req: AuthRequest, res: Response): Promise<void>
       return;
     }
 
+    // Get store name if user has a storeId
+    let storeName = '';
+    if (req.user.storeId) {
+      const store = await Store.findById(req.user.storeId).select('name');
+      storeName = store?.name || '';
+    }
+
     // Prepare user data (exclude sensitive fields)
     const userData = {
       id: req.user._id,
       name: req.user.name,
       email: req.user.email,
       role: req.user.role,
+      storeId: req.user.storeId,
+      storeName,
       isEmailVerified: req.user.isVerified,
       isActive: req.user.isActive,
-      avatar: req.user.profile.avatar,
+      avatar: req.user.profile?.avatar,
       phone: req.user.phone,
-      dateOfBirth: req.user.profile.dateOfBirth,
+      dateOfBirth: req.user.profile?.dateOfBirth,
       addresses: req.user.addresses,
       preferences: req.user.preferences,
       totalOrdersCount: (req.user as any).totalOrdersCount,
@@ -616,6 +634,108 @@ export const changePassword = async (req: AuthRequest, res: Response): Promise<v
     res.status(500).json({
       status: 'error',
       message: 'Failed to change password. Please try again.'
+    });
+  }
+};
+
+/**
+ * Refresh access token using refresh token
+ * Returns a new access token and refresh token pair
+ */
+export const refreshToken = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { refreshToken: token } = req.body;
+
+    if (!token) {
+      res.status(400).json({
+        status: 'error',
+        message: 'Refresh token is required'
+      });
+      return;
+    }
+
+    // Verify the refresh token
+    const jwt = await import('jsonwebtoken');
+    const JWT_SECRET = process.env.JWT_SECRET || 'your-default-secret-key';
+
+    let decoded: any;
+    try {
+      decoded = jwt.default.verify(token, JWT_SECRET);
+    } catch (error) {
+      res.status(401).json({
+        status: 'error',
+        message: 'Invalid or expired refresh token'
+      });
+      return;
+    }
+
+    // Verify it's a refresh token (not an access token)
+    if (decoded.type !== 'refresh') {
+      res.status(401).json({
+        status: 'error',
+        message: 'Invalid token type'
+      });
+      return;
+    }
+
+    // Find the user
+    const user = await User.findById(decoded.userId);
+
+    if (!user) {
+      res.status(401).json({
+        status: 'error',
+        message: 'User not found'
+      });
+      return;
+    }
+
+    // Check if user is active
+    if (!user.isActive) {
+      res.status(403).json({
+        status: 'error',
+        message: 'Account is inactive'
+      });
+      return;
+    }
+
+    // Generate new tokens
+    const newAccessToken = generateToken((user._id as any).toString());
+    const newRefreshToken = generateRefreshToken((user._id as any).toString());
+
+    // Get store name if user has a storeId
+    let storeName = '';
+    if (user.storeId) {
+      const store = await Store.findById(user.storeId).select('name');
+      storeName = store?.name || '';
+    }
+
+    // Prepare user data
+    const userData = {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      storeId: user.storeId,
+      storeName,
+      isEmailVerified: user.isVerified,
+      isActive: user.isActive,
+      avatar: user.profile?.avatar
+    };
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Token refreshed successfully',
+      data: {
+        user: userData,
+        token: newAccessToken,
+        refreshToken: newRefreshToken
+      }
+    });
+  } catch (error) {
+    console.error('Refresh token error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to refresh token. Please try again.'
     });
   }
 };

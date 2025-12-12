@@ -1,6 +1,8 @@
 import { Controller, Post, Get, Patch, Delete, Body, Request, Route, Tags, Response, Security, SuccessResponse } from 'tsoa';
 import crypto from 'crypto';
+import jwt from 'jsonwebtoken';
 import User from '../models/User';
+import Store from '../models/Store';
 import { generateToken, generateRefreshToken } from '../utils/jwt';
 import { sendWelcomeEmail, sendPasswordResetEmail } from '../utils/email';
 import { SUCCESS_MESSAGES, ERROR_MESSAGES } from '../utils/constants';
@@ -20,7 +22,9 @@ import {
   ChangePasswordRequest,
   ChangePasswordResponse,
   DeleteAccountRequest,
-  DeleteAccountResponse
+  DeleteAccountResponse,
+  RefreshTokenRequest,
+  RefreshTokenResponse
 } from '../types/api/auth';
 
 /**
@@ -156,12 +160,21 @@ export class AuthController extends Controller {
       const token = generateToken((user._id as any).toString());
       const refreshToken = generateRefreshToken((user._id as any).toString());
 
+      // Get store name if user has a storeId
+      let storeName = '';
+      if (user.storeId) {
+        const store = await Store.findById(user.storeId).select('name');
+        storeName = store?.name || '';
+      }
+
       // Prepare user data (exclude sensitive fields)
       const userData = {
         id: (user._id as any).toString(),
         name: user.name,
         email: user.email,
         role: user.role,
+        storeId: user.storeId?.toString() || '',
+        storeName,
         isEmailVerified: user.isVerified,
         isActive: user.isActive,
         avatar: user.profile.avatar,
@@ -310,6 +323,117 @@ export class AuthController extends Controller {
   }
 
   /**
+   * Refresh access token
+   * @summary Get new access token using refresh token
+   * @param requestBody Refresh token
+   * @returns New access token and refresh token
+   */
+  @Post('refresh-token')
+  @SuccessResponse(200, 'Token refreshed successfully')
+  @Response(400, 'Bad Request - Refresh token required')
+  @Response(401, 'Unauthorized - Invalid or expired refresh token')
+  @Response(403, 'Forbidden - Account deactivated')
+  @Response(500, 'Internal Server Error')
+  public async refreshToken(@Body() requestBody: RefreshTokenRequest): Promise<RefreshTokenResponse> {
+    try {
+      const { refreshToken: token } = requestBody;
+
+      if (!token) {
+        this.setStatus(400);
+        return {
+          status: 'error',
+          message: 'Refresh token is required'
+        };
+      }
+
+      // Verify the refresh token
+      const JWT_SECRET = process.env.JWT_SECRET || 'your-default-secret-key';
+
+      let decoded: any;
+      try {
+        decoded = jwt.verify(token, JWT_SECRET);
+      } catch (error) {
+        this.setStatus(401);
+        return {
+          status: 'error',
+          message: 'Invalid or expired refresh token'
+        };
+      }
+
+      // Verify it's a refresh token (not an access token)
+      if (decoded.type !== 'refresh') {
+        this.setStatus(401);
+        return {
+          status: 'error',
+          message: 'Invalid token type'
+        };
+      }
+
+      // Find the user
+      const user = await User.findById(decoded.userId);
+
+      if (!user) {
+        this.setStatus(401);
+        return {
+          status: 'error',
+          message: 'User not found'
+        };
+      }
+
+      // Check if user is active
+      if (!user.isActive) {
+        this.setStatus(403);
+        return {
+          status: 'error',
+          message: 'Account is inactive'
+        };
+      }
+
+      // Generate new tokens
+      const newAccessToken = generateToken((user._id as any).toString());
+      const newRefreshToken = generateRefreshToken((user._id as any).toString());
+
+      // Get store name if user has a storeId
+      let storeName = '';
+      if (user.storeId) {
+        const store = await Store.findById(user.storeId).select('name');
+        storeName = store?.name || '';
+      }
+
+      // Prepare user data
+      const userData = {
+        id: (user._id as any).toString(),
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        storeId: user.storeId?.toString() || '',
+        storeName,
+        isEmailVerified: user.isVerified,
+        isActive: user.isActive,
+        avatar: user.profile?.avatar
+      };
+
+      this.setStatus(200);
+      return {
+        status: 'success',
+        message: 'Token refreshed successfully',
+        data: {
+          user: userData,
+          token: newAccessToken,
+          refreshToken: newRefreshToken
+        }
+      };
+    } catch (error) {
+      console.error('Refresh token error:', error);
+      this.setStatus(500);
+      return {
+        status: 'error',
+        message: 'Failed to refresh token. Please try again.'
+      };
+    }
+  }
+
+  /**
    * Get current user profile
    * @summary Get authenticated user's profile data
    * @param request Express request with authenticated user
@@ -337,6 +461,13 @@ export class AuthController extends Controller {
       // Get country from default address or from user's country field or empty string
       const country = defaultAddress?.country || (request.user as any).country || '';
 
+      // Get store name if user has a storeId
+      let storeName = '';
+      if (request.user.storeId) {
+        const store = await Store.findById(request.user.storeId).select('name');
+        storeName = store?.name || '';
+      }
+
       // Prepare user data with all required fields (empty strings if missing)
       const userData = {
         id: (request.user._id as any).toString(),
@@ -348,6 +479,8 @@ export class AuthController extends Controller {
         dateOfBirth: request.user.profile?.dateOfBirth ? new Date(request.user.profile.dateOfBirth).toISOString() : '',
         defaultAddress: defaultAddress || null,
         role: request.user.role,
+        storeId: request.user.storeId?.toString() || '',
+        storeName,
         isEmailVerified: request.user.isVerified,
         isActive: request.user.isActive,
         avatar: request.user.profile?.avatar,

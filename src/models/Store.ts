@@ -305,12 +305,12 @@ const StoreSchema = new Schema<IStore>(
 );
 
 // =============================================================================
-// INDEXES
+// INDEXES - removing duplicates where index: true already exists on field
 // =============================================================================
 
-StoreSchema.index({ slug: 1 });
-StoreSchema.index({ isActive: 1 });
-StoreSchema.index({ 'shopify.isConnected': 1 });
+// StoreSchema.index({ slug: 1 }); // Already has index: true
+// StoreSchema.index({ isActive: 1 }); // Already has index: true
+// StoreSchema.index({ 'shopify.isConnected': 1 }); // Already has index: true
 StoreSchema.index({ 'plan.type': 1 });
 StoreSchema.index({ createdAt: -1 });
 

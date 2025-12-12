@@ -130,11 +130,10 @@ const ProductSEOSchema = new Schema({
 
 const ProductSchema = new Schema<IProduct>({
   // Shopify Integration
-  shopifyProductId: { 
-    type: String, 
-    sparse: true, 
-    unique: true,
-    index: true
+  shopifyProductId: {
+    type: String,
+    sparse: true,
+    unique: true
   },
   
   // Core Product Information
@@ -149,29 +148,26 @@ const ProductSchema = new Schema<IProduct>({
     required: [true, 'Product description is required'],
     trim: true
   },
-  handle: { 
-    type: String, 
-    required: [true, 'Product handle is required'], 
-    unique: true, 
+  handle: {
+    type: String,
+    required: [true, 'Product handle is required'],
+    unique: true,
     lowercase: true,
-    trim: true,
-    index: true
+    trim: true
   },
   vendor: { type: String, default: '', trim: true },
   productType: { type: String, default: '', trim: true },
-  tags: { 
-    type: [String], 
-    default: [],
-    index: true
+  tags: {
+    type: [String],
+    default: []
   },
-  status: { 
-    type: String, 
+  status: {
+    type: String,
     enum: {
       values: ['active', 'draft', 'archived'],
       message: 'Status must be active, draft, or archived'
     },
-    default: 'draft',
-    index: true
+    default: 'draft'
   },
   
   // Pricing
