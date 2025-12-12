@@ -176,8 +176,8 @@ export const authorize = (...roles: string[]) => {
 // Convenience aliases for common middleware combinations
 export const requireAuth = authenticate;
 export const optionalAuth = optionalAuthenticate;
-export const requireAdmin = [authenticate, authorize('admin')];
-export const requireModerator = [authenticate, authorize('admin', 'moderator')];
+export const requireAdmin = [authenticate, authorize('admin', 'super_admin')];
+export const requireModerator = [authenticate, authorize('admin', 'super_admin', 'moderator')];
 export const authenticateAdmin = requireAdmin;
 
 // Multi-tenancy middleware combinations

@@ -1,6 +1,6 @@
 import express from 'express';
 import { authenticateCustomer } from '../middleware/customerAuth';
-import { requireAdmin } from '../middleware/auth';
+import { requireStoreAdmin } from '../middleware/auth';
 import {
   registerDeviceToken,
   unregisterDeviceToken,
@@ -23,18 +23,18 @@ router.patch('/preferences', authenticateCustomer, updateNotificationPreferences
 
 // Admin endpoints
 // Broadcast notification to all store customers
-router.post('/stores/:storeId/broadcast', requireAdmin as any, broadcastStoreNotification);
+router.post('/stores/:storeId/broadcast', requireStoreAdmin as any, broadcastStoreNotification);
 
 // Send test notification to specific customer
-router.post('/test', requireAdmin as any, sendTestNotificationAdmin);
+router.post('/test', requireStoreAdmin as any, sendTestNotificationAdmin);
 
 // Get notification statistics
-router.get('/stores/:storeId/stats', requireAdmin as any, getNotificationStats);
+router.get('/stores/:storeId/stats', requireStoreAdmin as any, getNotificationStats);
 
 // Get list of customers who can receive notifications
-router.get('/stores/:storeId/recipients', requireAdmin as any, getNotificationRecipients);
+router.get('/stores/:storeId/recipients', requireStoreAdmin as any, getNotificationRecipients);
 
 // Get available customer segments for targeted notifications
-router.get('/stores/:storeId/segments', requireAdmin as any, getAvailableSegments);
+router.get('/stores/:storeId/segments', requireStoreAdmin as any, getAvailableSegments);
 
 export default router;
