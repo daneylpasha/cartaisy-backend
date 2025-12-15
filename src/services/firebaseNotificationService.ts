@@ -177,6 +177,14 @@ export class FirebaseNotificationService {
         return { success: 0, failure: 0, invalidTokens: [] };
       }
 
+      // Log tokens being sent to (for debugging)
+      console.log(`📤 Sending push notification to ${validTokens.length} device(s):`);
+      console.log(`   Title: "${notification.title}"`);
+      console.log(`   Body: "${notification.body}"`);
+      validTokens.forEach((token, idx) => {
+        console.log(`   Token ${idx + 1}: ${token.substring(0, 40)}...`);
+      });
+
       // Build FCM message
       const message: admin.messaging.MulticastMessage = {
         notification: {
@@ -216,11 +224,24 @@ export class FirebaseNotificationService {
       // Send notification
       const response = await admin.messaging().sendEachForMulticast(message);
 
-      // Collect invalid tokens for cleanup
+      // Log results
+      console.log(`📱 Push notification result:`);
+      console.log(`   ✅ Success: ${response.successCount}`);
+      console.log(`   ❌ Failed: ${response.failureCount}`);
+
+      // Collect invalid tokens for cleanup and log ALL errors
       const invalidTokens: string[] = [];
       response.responses.forEach((resp, idx) => {
         if (!resp.success && validTokens[idx]) {
-          const errorCode = (resp.error as any)?.code;
+          const error = resp.error as any;
+          const errorCode = error?.code || 'unknown';
+          const errorMessage = error?.message || 'No error message';
+
+          // Log EVERY error with full details
+          console.log(`   ❌ Token ${idx + 1} failed:`);
+          console.log(`      Token: ${validTokens[idx].substring(0, 40)}...`);
+          console.log(`      Error Code: ${errorCode}`);
+          console.log(`      Error Message: ${errorMessage}`);
 
           // These error codes mean the token is invalid/expired
           if (
@@ -228,18 +249,13 @@ export class FirebaseNotificationService {
             errorCode === 'messaging/registration-token-not-registered'
           ) {
             invalidTokens.push(validTokens[idx]);
-            console.log(
-              `   🗑️  Invalid token detected: ${validTokens[idx].substring(0, 20)}...`
-            );
+            console.log(`      Action: Token marked for removal`);
           }
         }
       });
 
-      console.log(`📱 Push notification sent:`);
-      console.log(`   ✅ Success: ${response.successCount}`);
-      console.log(`   ❌ Failed: ${response.failureCount}`);
       if (invalidTokens.length > 0) {
-        console.log(`   🗑️  Invalid tokens: ${invalidTokens.length}`);
+        console.log(`   🗑️  Invalid tokens to remove: ${invalidTokens.length}`);
       }
 
       return {
@@ -247,8 +263,12 @@ export class FirebaseNotificationService {
         failure: response.failureCount,
         invalidTokens,
       };
-    } catch (error) {
-      console.error('Send push notification error:', error);
+    } catch (error: any) {
+      console.error('🔥 Firebase send error (exception):');
+      console.error(`   Error name: ${error?.name || 'Unknown'}`);
+      console.error(`   Error code: ${error?.code || 'Unknown'}`);
+      console.error(`   Error message: ${error?.message || 'No message'}`);
+      console.error(`   Full error:`, error);
       return {
         success: 0,
         failure: deviceTokens.length,
