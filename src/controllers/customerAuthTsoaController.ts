@@ -111,8 +111,10 @@ interface CustomerUpdateProfileRequest {
 }
 
 interface CustomerDeviceTokenRequest {
-  /** Push notification token */
-  token: string;
+  /** Push notification token (preferred) */
+  token?: string;
+  /** Push notification token (alternative name for mobile compatibility) */
+  deviceToken?: string;
   /** Device platform */
   platform: 'ios' | 'android';
 }
@@ -615,7 +617,9 @@ export class CustomerAuthTsoaController extends Controller {
         };
       }
 
-      const { token, platform } = requestBody;
+      // Accept both 'token' and 'deviceToken' for mobile compatibility
+      const token = requestBody.token || requestBody.deviceToken;
+      const { platform } = requestBody;
 
       if (!token || !platform) {
         this.setStatus(400);

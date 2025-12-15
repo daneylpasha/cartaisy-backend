@@ -418,7 +418,9 @@ export const updateDeviceToken = async (
 ): Promise<void> => {
   try {
     const customerId = req.customer?.id;
-    const { token, platform } = req.body;
+    // Accept both 'token' and 'deviceToken' for mobile compatibility
+    const token = req.body.token || req.body.deviceToken;
+    const { platform } = req.body;
 
     if (!customerId) {
       res.status(401).json({

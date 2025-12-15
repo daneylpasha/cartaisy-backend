@@ -702,7 +702,8 @@ const models: TsoaRoute.Models = {
     "CustomerDeviceTokenRequest": {
         "dataType": "refObject",
         "properties": {
-            "token": {"dataType":"string","required":true},
+            "token": {"dataType":"string"},
+            "deviceToken": {"dataType":"string"},
             "platform": {"dataType":"union","subSchemas":[{"dataType":"enum","enums":["ios"]},{"dataType":"enum","enums":["android"]}],"required":true},
         },
         "additionalProperties": false,

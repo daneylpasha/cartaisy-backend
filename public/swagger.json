@@ -2343,7 +2343,11 @@
 				"properties": {
 					"token": {
 						"type": "string",
-						"description": "Push notification token"
+						"description": "Push notification token (preferred)"
+					},
+					"deviceToken": {
+						"type": "string",
+						"description": "Push notification token (alternative name for mobile compatibility)"
 					},
 					"platform": {
 						"type": "string",
@@ -2355,7 +2359,6 @@
 					}
 				},
 				"required": [
-					"token",
 					"platform"
 				],
 				"type": "object",
