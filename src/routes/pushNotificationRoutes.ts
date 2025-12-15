@@ -11,6 +11,8 @@ import {
   getNotificationStats,
   getNotificationRecipients,
   getAvailableSegments,
+  getNotificationHistory,
+  getNotificationDetail,
 } from '../controllers/pushNotificationController';
 
 const router = express.Router();
@@ -36,5 +38,12 @@ router.get('/stores/:storeId/recipients', requireStoreAdmin as any, getNotificat
 
 // Get available customer segments for targeted notifications
 router.get('/stores/:storeId/segments', requireStoreAdmin as any, getAvailableSegments);
+
+// Notification history endpoints
+// Get paginated notification history for a store
+router.get('/stores/:storeId/history', requireStoreAdmin as any, getNotificationHistory);
+
+// Get single notification detail
+router.get('/stores/:storeId/history/:notificationId', requireStoreAdmin as any, getNotificationDetail);
 
 export default router;

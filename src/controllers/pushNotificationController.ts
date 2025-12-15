@@ -1,5 +1,7 @@
 import { Request, Response } from 'express';
+import mongoose from 'mongoose';
 import Customer from '../models/Customer';
+import NotificationLog from '../models/NotificationLog';
 import { FirebaseNotificationService } from '../services/firebaseNotificationService';
 import { SegmentationService, AVAILABLE_SEGMENTS } from '../services/segmentationService';
 
@@ -261,11 +263,14 @@ export const updateNotificationPreferences = async (
  *
  * Store owner uses this to send promotions, announcements, etc.
  * Supports optional segment parameter to target specific customer groups.
+ * Creates a log entry for notification history.
  */
 export const broadcastStoreNotification = async (
   req: Request,
   res: Response
 ): Promise<void> => {
+  let notificationLog: any = null;
+
   try {
     const { storeId } = req.params;
     const { title, body, imageUrl, data, segment } = req.body;
@@ -299,23 +304,50 @@ export const broadcastStoreNotification = async (
       return;
     }
 
+    // Create notification log entry with 'sending' status
+    notificationLog = await NotificationLog.create({
+      storeId: new mongoose.Types.ObjectId(storeId),
+      title,
+      body,
+      data,
+      imageUrl,
+      segment: segmentId,
+      status: 'sending',
+      sentBy: (req as any).user?._id,
+      sentByEmail: (req as any).user?.email,
+      targetCount: 0,
+      successCount: 0,
+      failureCount: 0,
+    });
+
     // Get device tokens for the segment
     const deviceTokens = await SegmentationService.getSegmentDeviceTokens(
       storeId,
       segmentId
     );
 
+    // Update target count
+    notificationLog.targetCount = deviceTokens.length;
+
     console.log(`📢 Broadcasting notification to store: ${storeId}`);
+    console.log(`   Notification ID: ${notificationLog._id}`);
     console.log(`   Segment: ${segmentId}`);
     console.log(`   Recipients: ${deviceTokens.length} device tokens`);
 
     if (deviceTokens.length === 0) {
+      notificationLog.status = 'sent';
+      notificationLog.sentAt = new Date();
+      await notificationLog.save();
+
       res.json({
         status: 'success',
         message: 'No customers match the selected segment',
         data: {
+          notificationId: notificationLog._id.toString(),
           segment: segmentId,
           recipientCount: 0,
+          successCount: 0,
+          failureCount: 0,
           timestamp: new Date(),
         },
       });
@@ -330,28 +362,65 @@ export const broadcastStoreNotification = async (
       data: {
         type: 'store_announcement',
         segment: segmentId,
+        notificationId: notificationLog._id.toString(),
         ...data,
       },
     });
+
+    // Update notification log with results
+    notificationLog.successCount = result.successCount;
+    notificationLog.failureCount = result.failureCount;
+    notificationLog.failedTokens = result.failedTokens;
+    notificationLog.sentAt = new Date();
+
+    // Determine final status
+    if (result.failureCount === 0) {
+      notificationLog.status = 'sent';
+    } else if (result.successCount === 0) {
+      notificationLog.status = 'failed';
+    } else {
+      notificationLog.status = 'partial';
+    }
+
+    await notificationLog.save();
 
     // Cleanup invalid tokens
     if (result.invalidTokens.length > 0) {
       await FirebaseNotificationService.removeInvalidTokens(result.invalidTokens);
     }
 
+    console.log(`📢 Notification logged: ${notificationLog._id} (${notificationLog.status})`);
+
     res.json({
       status: 'success',
-      message: 'Notification broadcast successfully',
+      message: `Notification sent to ${result.successCount} devices`,
       data: {
+        notificationId: notificationLog._id.toString(),
         segment: segmentId,
-        successCount: result.success,
-        failureCount: result.failure,
+        targetCount: deviceTokens.length,
+        successCount: result.successCount,
+        failureCount: result.failureCount,
+        deliveryRate: deviceTokens.length > 0
+          ? Math.round((result.successCount / deviceTokens.length) * 100)
+          : 0,
         invalidTokensRemoved: result.invalidTokens.length,
         timestamp: new Date(),
       },
     });
   } catch (error) {
     console.error('Broadcast notification error:', error);
+
+    // Update log with failure if it was created
+    if (notificationLog) {
+      notificationLog.status = 'failed';
+      notificationLog.failedTokens = [{
+        token: 'all',
+        error: (error as Error).message || 'Unknown error',
+        errorCode: 'broadcast/exception',
+      }];
+      await notificationLog.save();
+    }
+
     res.status(500).json({
       status: 'error',
       message: 'Failed to broadcast notification',
@@ -426,8 +495,8 @@ export const sendTestNotificationAdmin = async (
       status: 'success',
       message: 'Test notification sent',
       data: {
-        successCount: result.success,
-        failureCount: result.failure,
+        successCount: result.successCount,
+        failureCount: result.failureCount,
         invalidTokensRemoved: result.invalidTokens.length,
       },
     });
@@ -623,6 +692,182 @@ export const getAvailableSegments = async (
     res.status(500).json({
       status: 'error',
       message: 'Failed to fetch available segments',
+    });
+  }
+};
+
+/**
+ * Get notification history for a store
+ * GET /api/v1/notifications/stores/:storeId/history
+ *
+ * Returns paginated list of all notifications sent by the store
+ */
+export const getNotificationHistory = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { storeId } = req.params;
+    const {
+      page = '1',
+      limit = '20',
+      status,
+      segment,
+      startDate,
+      endDate,
+    } = req.query;
+
+    // Security check
+    if (req.storeId?.toString() !== storeId) {
+      res.status(403).json({
+        status: 'error',
+        message: 'Access denied',
+      });
+      return;
+    }
+
+    // Build query
+    const query: any = { storeId: new mongoose.Types.ObjectId(storeId) };
+
+    // Apply filters
+    if (status) {
+      query.status = status;
+    }
+    if (segment) {
+      query.segment = segment;
+    }
+    if (startDate || endDate) {
+      query.createdAt = {};
+      if (startDate) query.createdAt.$gte = new Date(startDate as string);
+      if (endDate) query.createdAt.$lte = new Date(endDate as string);
+    }
+
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const [notifications, total] = await Promise.all([
+      NotificationLog.find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(Number(limit))
+        .lean(),
+      NotificationLog.countDocuments(query),
+    ]);
+
+    res.json({
+      status: 'success',
+      data: {
+        notifications: notifications.map((n: any) => ({
+          id: n._id.toString(),
+          title: n.title,
+          body: n.body,
+          segment: n.segment,
+          status: n.status,
+          targetCount: n.targetCount,
+          successCount: n.successCount,
+          failureCount: n.failureCount,
+          deliveryRate:
+            n.targetCount > 0
+              ? Math.round((n.successCount / n.targetCount) * 100)
+              : 0,
+          sentAt: n.sentAt,
+          scheduledFor: n.scheduledFor,
+          sentByEmail: n.sentByEmail,
+          createdAt: n.createdAt,
+        })),
+        pagination: {
+          page: Number(page),
+          limit: Number(limit),
+          total,
+          totalPages: Math.ceil(total / Number(limit)),
+        },
+      },
+    });
+  } catch (error) {
+    console.error('Get notification history error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to fetch notification history',
+    });
+  }
+};
+
+/**
+ * Get single notification detail
+ * GET /api/v1/notifications/stores/:storeId/history/:notificationId
+ *
+ * Returns full details of a specific notification including failed tokens
+ */
+export const getNotificationDetail = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { storeId, notificationId } = req.params;
+
+    // Security check
+    if (req.storeId?.toString() !== storeId) {
+      res.status(403).json({
+        status: 'error',
+        message: 'Access denied',
+      });
+      return;
+    }
+
+    // Validate ObjectId
+    if (!mongoose.Types.ObjectId.isValid(notificationId)) {
+      res.status(400).json({
+        status: 'error',
+        message: 'Invalid notification ID',
+      });
+      return;
+    }
+
+    const notification = await NotificationLog.findOne({
+      _id: new mongoose.Types.ObjectId(notificationId),
+      storeId: new mongoose.Types.ObjectId(storeId),
+    }).lean();
+
+    if (!notification) {
+      res.status(404).json({
+        status: 'error',
+        message: 'Notification not found',
+      });
+      return;
+    }
+
+    res.json({
+      status: 'success',
+      data: {
+        id: (notification as any)._id.toString(),
+        title: notification.title,
+        body: notification.body,
+        data: notification.data,
+        imageUrl: notification.imageUrl,
+        segment: notification.segment,
+        status: notification.status,
+        targetCount: notification.targetCount,
+        successCount: notification.successCount,
+        failureCount: notification.failureCount,
+        deliveryRate:
+          notification.targetCount > 0
+            ? Math.round(
+                (notification.successCount / notification.targetCount) * 100
+              )
+            : 0,
+        failedTokens: notification.failedTokens,
+        sentAt: notification.sentAt,
+        scheduledFor: notification.scheduledFor,
+        sentBy: notification.sentBy,
+        sentByEmail: notification.sentByEmail,
+        createdAt: notification.createdAt,
+        updatedAt: notification.updatedAt,
+      },
+    });
+  } catch (error) {
+    console.error('Get notification detail error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to fetch notification detail',
     });
   }
 };

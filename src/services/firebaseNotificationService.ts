@@ -10,6 +10,26 @@ export interface PushNotification {
   imageUrl?: string;
 }
 
+/**
+ * Failed token details for logging
+ */
+export interface FailedTokenDetail {
+  token: string;
+  error: string;
+  errorCode?: string;
+}
+
+/**
+ * Detailed notification send result for logging
+ */
+export interface NotificationSendResult {
+  targetCount: number;
+  successCount: number;
+  failureCount: number;
+  failedTokens: FailedTokenDetail[];
+  invalidTokens: string[];
+}
+
 // Initialize Firebase Admin SDK
 let firebaseApp: admin.app.App | null = null;
 let isInitialized = false;
@@ -148,22 +168,29 @@ export class FirebaseNotificationService {
   /**
    * Send notification to specific device tokens
    * Use this for individual customer notifications (e.g., order updates)
+   * Returns detailed result for logging purposes
    */
   static async sendToDevices(
     deviceTokens: string[],
     notification: PushNotification
-  ): Promise<{
-    success: number;
-    failure: number;
-    invalidTokens: string[];
-  }> {
+  ): Promise<NotificationSendResult> {
+    const result: NotificationSendResult = {
+      targetCount: deviceTokens.length,
+      successCount: 0,
+      failureCount: 0,
+      failedTokens: [],
+      invalidTokens: [],
+    };
+
     if (!firebaseApp) {
       console.warn('Firebase not initialized. Cannot send notification.');
-      return {
-        success: 0,
-        failure: deviceTokens.length,
-        invalidTokens: [],
-      };
+      result.failureCount = deviceTokens.length;
+      result.failedTokens.push({
+        token: 'all',
+        error: 'Firebase not initialized',
+        errorCode: 'firebase/not-initialized',
+      });
+      return result;
     }
 
     try {
@@ -172,9 +199,11 @@ export class FirebaseNotificationService {
         (token) => token && typeof token === 'string' && token.length > 20
       );
 
+      result.targetCount = validTokens.length;
+
       if (validTokens.length === 0) {
         console.warn('No valid device tokens provided');
-        return { success: 0, failure: 0, invalidTokens: [] };
+        return result;
       }
 
       // Log tokens being sent to (for debugging)
@@ -210,12 +239,17 @@ export class FirebaseNotificationService {
         apns: {
           payload: {
             aps: {
+              alert: {
+                title: notification.title,
+                body: notification.body,
+              },
               sound: 'default',
               badge: 1,
-              contentAvailable: true,
+              'content-available': 1,
             },
           },
           headers: {
+            'apns-push-type': 'alert',
             'apns-priority': '10',
           },
         },
@@ -224,13 +258,16 @@ export class FirebaseNotificationService {
       // Send notification
       const response = await admin.messaging().sendEachForMulticast(message);
 
+      // Update result with response counts
+      result.successCount = response.successCount;
+      result.failureCount = response.failureCount;
+
       // Log results
       console.log(`📱 Push notification result:`);
       console.log(`   ✅ Success: ${response.successCount}`);
       console.log(`   ❌ Failed: ${response.failureCount}`);
 
-      // Collect invalid tokens for cleanup and log ALL errors
-      const invalidTokens: string[] = [];
+      // Collect failed token details and invalid tokens for cleanup
       response.responses.forEach((resp, idx) => {
         if (!resp.success && validTokens[idx]) {
           const error = resp.error as any;
@@ -239,41 +276,51 @@ export class FirebaseNotificationService {
 
           // Log EVERY error with full details
           console.log(`   ❌ Token ${idx + 1} failed:`);
-          console.log(`      Token: ${validTokens[idx].substring(0, 40)}...`);
+          console.log(`      Token: ${validTokens[idx].substring(0, 50)}...`);
           console.log(`      Error Code: ${errorCode}`);
           console.log(`      Error Message: ${errorMessage}`);
+          console.log(`      Full Error JSON: ${JSON.stringify(error, null, 2)}`);
+
+          // Add to failed tokens (cap at 50 to avoid huge documents)
+          if (result.failedTokens.length < 50) {
+            result.failedTokens.push({
+              token: validTokens[idx].substring(0, 30) + '...',
+              error: errorMessage,
+              errorCode: errorCode,
+            });
+          }
 
           // These error codes mean the token is invalid/expired
           if (
             errorCode === 'messaging/invalid-registration-token' ||
             errorCode === 'messaging/registration-token-not-registered'
           ) {
-            invalidTokens.push(validTokens[idx]);
+            result.invalidTokens.push(validTokens[idx]);
             console.log(`      Action: Token marked for removal`);
           }
         }
       });
 
-      if (invalidTokens.length > 0) {
-        console.log(`   🗑️  Invalid tokens to remove: ${invalidTokens.length}`);
+      if (result.invalidTokens.length > 0) {
+        console.log(`   🗑️  Invalid tokens to remove: ${result.invalidTokens.length}`);
       }
 
-      return {
-        success: response.successCount,
-        failure: response.failureCount,
-        invalidTokens,
-      };
+      return result;
     } catch (error: any) {
       console.error('🔥 Firebase send error (exception):');
       console.error(`   Error name: ${error?.name || 'Unknown'}`);
       console.error(`   Error code: ${error?.code || 'Unknown'}`);
       console.error(`   Error message: ${error?.message || 'No message'}`);
       console.error(`   Full error:`, error);
-      return {
-        success: 0,
-        failure: deviceTokens.length,
-        invalidTokens: [],
-      };
+
+      result.failureCount = deviceTokens.length;
+      result.failedTokens.push({
+        token: 'all',
+        error: error?.message || 'Batch send failed',
+        errorCode: error?.code,
+      });
+
+      return result;
     }
   }
 
