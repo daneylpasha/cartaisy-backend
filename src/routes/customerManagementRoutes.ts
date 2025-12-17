@@ -9,6 +9,12 @@ import {
   getCustomerStats,
 } from '../controllers/admin/customerManagementController';
 
+// Data Export controllers (GDPR compliance)
+import {
+  adminRequestDataExport,
+  adminGetDataExports,
+} from '../controllers/dataExportController';
+
 const router = express.Router();
 
 /**
@@ -121,5 +127,37 @@ router.get('/stores/:storeId/customers/:customerId/orders', getCustomerOrders);
  * - Event summary by type
  */
 router.get('/stores/:storeId/customers/:customerId/activity', getCustomerActivity);
+
+// =============================================================================
+// DATA EXPORT ENDPOINTS (GDPR Compliance)
+// =============================================================================
+
+/**
+ * POST /stores/:storeId/customers/:customerId/data-export
+ *
+ * Initiate GDPR data export for a customer (merchant-initiated)
+ *
+ * Returns:
+ * - Export ID, status
+ * - Complete user data export
+ *
+ * Rate limit: 1 request per 24 hours per customer
+ */
+router.post('/stores/:storeId/customers/:customerId/data-export', adminRequestDataExport);
+
+/**
+ * GET /stores/:storeId/data-exports
+ *
+ * List all data export requests for the store
+ *
+ * Query params:
+ * - limit: number (default: 20, max: 100)
+ * - offset: number (default: 0)
+ * - status: 'pending' | 'processing' | 'completed' | 'failed' | 'expired'
+ *
+ * Returns:
+ * - Paginated list of export requests with customer info
+ */
+router.get('/stores/:storeId/data-exports', adminGetDataExports);
 
 export default router;

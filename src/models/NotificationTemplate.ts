@@ -1,5 +1,19 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
+/**
+ * Deep link types for notification navigation
+ */
+export type DeepLinkType = 'product' | 'collection' | 'cart' | 'order' | 'category' | 'url' | 'home';
+
+/**
+ * Deep link configuration for templates
+ */
+export interface IDeepLink {
+  type: DeepLinkType;
+  id?: string; // For product, collection, order, category
+  url?: string; // For custom URL type
+}
+
 export interface INotificationTemplate extends Document {
   storeId: mongoose.Types.ObjectId;
   name: string;
@@ -8,6 +22,7 @@ export interface INotificationTemplate extends Document {
   image?: string;
   segment: string;
   data?: Record<string, string>;
+  deepLink?: IDeepLink;
 
   // Usage tracking
   usageCount: number;
@@ -54,6 +69,14 @@ const NotificationTemplateSchema = new Schema<INotificationTemplate>(
     },
     data: {
       type: Schema.Types.Mixed,
+    },
+    deepLink: {
+      type: {
+        type: String,
+        enum: ['product', 'collection', 'cart', 'order', 'category', 'url', 'home'],
+      },
+      id: String,
+      url: String,
     },
     usageCount: {
       type: Number,

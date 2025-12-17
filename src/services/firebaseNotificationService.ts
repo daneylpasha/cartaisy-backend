@@ -1,6 +1,20 @@
 import admin from 'firebase-admin';
 
 /**
+ * Deep link types for notification navigation
+ */
+export type DeepLinkType = 'product' | 'collection' | 'cart' | 'order' | 'category' | 'url' | 'home';
+
+/**
+ * Deep link configuration for push notifications
+ */
+export interface DeepLink {
+  type: DeepLinkType;
+  id?: string; // For product, collection, order, category
+  url?: string; // For custom URL type
+}
+
+/**
  * Push notification payload interface
  */
 export interface PushNotification {
@@ -8,6 +22,7 @@ export interface PushNotification {
   body: string;
   data?: Record<string, string>;
   imageUrl?: string;
+  deepLink?: DeepLink;
 }
 
 /**
@@ -215,6 +230,16 @@ export class FirebaseNotificationService {
         console.log(`   Token ${idx + 1}: ${token.substring(0, 40)}...`);
       });
 
+      // Build data payload with deep link
+      const dataPayload: Record<string, string> = {
+        ...(notification.data || {}),
+      };
+
+      // Add deep link to data payload as JSON string
+      if (notification.deepLink) {
+        dataPayload.deepLink = JSON.stringify(notification.deepLink);
+      }
+
       // Build FCM message
       const message: admin.messaging.MulticastMessage = {
         notification: {
@@ -222,7 +247,7 @@ export class FirebaseNotificationService {
           body: notification.body,
           ...(notification.imageUrl && { imageUrl: notification.imageUrl }),
         },
-        data: notification.data || {},
+        data: dataPayload,
         tokens: validTokens,
 
         // Android-specific configuration
@@ -349,6 +374,16 @@ export class FirebaseNotificationService {
       console.log(`   Title: "${notification.title}"`);
       console.log(`   Body: "${notification.body}"`);
       console.log(`   Image: "${notification.imageUrl || 'none'}"`);
+      console.log(`   DeepLink: "${notification.deepLink ? JSON.stringify(notification.deepLink) : 'none'}"`);
+
+      // Build data payload with deep link
+      const dataPayload: Record<string, string> = {
+        ...(notification.data || {}),
+      };
+
+      if (notification.deepLink) {
+        dataPayload.deepLink = JSON.stringify(notification.deepLink);
+      }
 
       const message: admin.messaging.Message = {
         notification: {
@@ -356,7 +391,7 @@ export class FirebaseNotificationService {
           body: notification.body,
           ...(notification.imageUrl && { imageUrl: notification.imageUrl }),
         },
-        data: notification.data || {},
+        data: dataPayload,
         topic,
 
         android: {
@@ -461,6 +496,12 @@ export class FirebaseNotificationService {
       // Build notification based on type
       let notification: PushNotification;
 
+      // Common deep link for order notifications
+      const orderDeepLink: DeepLink = {
+        type: 'order',
+        id: order._id.toString(),
+      };
+
       switch (type) {
         case 'confirmed':
           notification = {
@@ -472,6 +513,7 @@ export class FirebaseNotificationService {
               orderNumber: order.orderNumber,
               action: 'view_order',
             },
+            deepLink: orderDeepLink,
           };
           break;
 
@@ -486,6 +528,7 @@ export class FirebaseNotificationService {
               trackingNumber: order.shipping?.trackingNumber || '',
               action: 'track_order',
             },
+            deepLink: orderDeepLink,
           };
           break;
 
@@ -499,6 +542,7 @@ export class FirebaseNotificationService {
               orderNumber: order.orderNumber,
               action: 'rate_order',
             },
+            deepLink: orderDeepLink,
           };
           break;
 
@@ -512,6 +556,7 @@ export class FirebaseNotificationService {
               orderNumber: order.orderNumber,
               action: 'view_order',
             },
+            deepLink: orderDeepLink,
           };
           break;
       }

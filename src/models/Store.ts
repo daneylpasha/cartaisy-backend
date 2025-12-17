@@ -47,6 +47,15 @@ export interface IEmailPreferences {
   sendDeliveryConfirmation: boolean;
 }
 
+export interface IAbandonedCartSettings {
+  enabled: boolean;
+  abandonmentThresholdMinutes: number;
+  quietHoursStart: number; // Hour in 24-hour format (e.g., 22 for 10 PM)
+  quietHoursEnd: number; // Hour in 24-hour format (e.g., 8 for 8 AM)
+  templateId?: string;
+  maxNotificationsPerCart: number;
+}
+
 export interface IStoreEmail {
   provider: 'resend' | 'smtp';
   domain?: string;
@@ -68,6 +77,7 @@ export interface IStore extends Document {
   plan: IStorePlan;
   settings: IStoreSettings;
   email: IStoreEmail;
+  abandonedCartSettings: IAbandonedCartSettings;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -176,6 +186,43 @@ const EmailPreferencesSchema = new Schema<IEmailPreferences>(
   { _id: false }
 );
 
+const AbandonedCartSettingsSchema = new Schema<IAbandonedCartSettings>(
+  {
+    enabled: {
+      type: Boolean,
+      default: true,
+    },
+    abandonmentThresholdMinutes: {
+      type: Number,
+      default: 60,
+      min: 15,
+      max: 1440, // 24 hours
+    },
+    quietHoursStart: {
+      type: Number,
+      default: 22, // 10 PM
+      min: 0,
+      max: 23,
+    },
+    quietHoursEnd: {
+      type: Number,
+      default: 8, // 8 AM
+      min: 0,
+      max: 23,
+    },
+    templateId: {
+      type: String,
+    },
+    maxNotificationsPerCart: {
+      type: Number,
+      default: 1,
+      min: 1,
+      max: 3,
+    },
+  },
+  { _id: false }
+);
+
 const StoreEmailSchema = new Schema<IStoreEmail>(
   {
     provider: {
@@ -279,6 +326,18 @@ const StoreSchema = new Schema<IStore>(
           sendShippingUpdates: true,
           sendDeliveryConfirmation: true,
         },
+      }),
+    },
+
+    // Abandoned Cart Notification Settings
+    abandonedCartSettings: {
+      type: AbandonedCartSettingsSchema,
+      default: () => ({
+        enabled: true,
+        abandonmentThresholdMinutes: 60,
+        quietHoursStart: 22,
+        quietHoursEnd: 8,
+        maxNotificationsPerCart: 1,
       }),
     },
 

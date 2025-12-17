@@ -26,6 +26,10 @@ import {
   deleteTemplate,
   recordTemplateUsage,
   duplicateTemplate,
+  // Engagement tracking functions
+  trackNotificationOpen,
+  trackNotificationClick,
+  getNotificationEngagement,
 } from '../controllers/pushNotificationController';
 import {
   getImageUsage,
@@ -43,6 +47,10 @@ router.post('/register-token', authenticateCustomer, registerDeviceToken);
 router.post('/unregister-token', authenticateCustomer, unregisterDeviceToken);
 router.get('/preferences', authenticateCustomer, getNotificationPreferences);
 router.patch('/preferences', authenticateCustomer, updateNotificationPreferences);
+
+// Engagement tracking endpoints (customer)
+router.post('/track-open', authenticateCustomer, trackNotificationOpen);
+router.post('/track-click', authenticateCustomer, trackNotificationClick);
 
 // Admin endpoints
 // Broadcast notification to all store customers
@@ -66,6 +74,9 @@ router.get('/stores/:storeId/history', requireStoreAdmin as any, getNotification
 
 // Get single notification detail
 router.get('/stores/:storeId/history/:notificationId', requireStoreAdmin as any, getNotificationDetail);
+
+// Get engagement details for a notification
+router.get('/stores/:storeId/history/:notificationId/engagement', requireStoreAdmin as any, getNotificationEngagement);
 
 // Diagnostic endpoint for debugging push notification system
 router.get('/stores/:storeId/diagnostic', requireStoreAdmin as any, getNotificationDiagnostic);

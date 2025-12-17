@@ -72,6 +72,14 @@ import {
   getInventoryAnalytics
 } from '../controllers/analyticsController';
 
+// Data Export controllers (GDPR compliance)
+import {
+  requestDataExport,
+  getDataExportStatus,
+  getDataExportHistory,
+  downloadDataExport
+} from '../controllers/dataExportController';
+
 import { requireAuth, optionalAuth, requireAdmin } from '../middleware/auth';
 import { validateObjectId } from '../middleware/validation';
 import { storeAuth } from '../middleware/storeAuth';
@@ -458,6 +466,47 @@ router.post('/products/:productId/track-view',
 //   - GET  /api/v1/customer/search/analytics
 //   - GET  /api/v1/customer/search/collections/trending
 //   - POST /api/v1/customer/search/collections/track-view
+
+// =============================================================================
+// DATA EXPORT ROUTES (GDPR Compliance)
+// =============================================================================
+
+/**
+ * @route POST /api/v1/customer/data-export/request
+ * @desc Request a new data export
+ * @access Private (Customer)
+ * @returns Export data and metadata
+ * @rateLimit 1 request per 24 hours
+ */
+router.post('/data-export/request', authenticateCustomer, requestDataExport as any);
+
+/**
+ * @route GET /api/v1/customer/data-export/status
+ * @desc Get status of latest export and availability for new request
+ * @access Private (Customer)
+ */
+router.get('/data-export/status', authenticateCustomer, getDataExportStatus as any);
+
+/**
+ * @route GET /api/v1/customer/data-export/history
+ * @desc Get export request history
+ * @access Private (Customer)
+ * @query {number} limit - Number of records (default: 10)
+ * @query {number} offset - Pagination offset (default: 0)
+ */
+router.get('/data-export/history', authenticateCustomer, getDataExportHistory as any);
+
+/**
+ * @route GET /api/v1/customer/data-export/:exportId/download
+ * @desc Download export data as JSON
+ * @access Private (Customer)
+ * @param {string} exportId - Export ID
+ */
+router.get('/data-export/:exportId/download',
+  validateObjectId('exportId'),
+  authenticateCustomer,
+  downloadDataExport as any
+);
 
 // =============================================================================
 // SHARED/PUBLIC ROUTES

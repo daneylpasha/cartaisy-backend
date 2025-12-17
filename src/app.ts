@@ -10,6 +10,7 @@ import { tenantConfig, apiConfig, derivedConfig } from './config/tenant';
 import { FirebaseNotificationService } from './services/firebaseNotificationService';
 import { notificationScheduler } from './services/notificationScheduler';
 import { imageCleanupScheduler } from './services/imageCleanupScheduler';
+import { abandonedCartScheduler } from './services/abandonedCartScheduler';
 
 // Log Firebase status on startup
 console.log('Firebase Status:', {
@@ -24,6 +25,9 @@ notificationScheduler.start();
 
 // Start image cleanup scheduler
 imageCleanupScheduler.start();
+
+// Start abandoned cart scheduler
+abandonedCartScheduler.start();
 
 // Security middleware imports
 import { strictStoreValidation } from './middleware/strictStoreValidation';
@@ -231,6 +235,7 @@ import securityRoutes from './routes/securityRoutes';
 import emailConfigRoutes from './routes/emailConfigRoutes';
 import pushNotificationRoutes from './routes/pushNotificationRoutes';
 import customerManagementRoutes from './routes/customerManagementRoutes';
+import abandonedCartRoutes from './routes/abandonedCartRoutes';
 
 // API Routes with versioning
 app.use(`/api/${apiConfig.version}/auth`, authRoutes);
@@ -256,6 +261,8 @@ app.use(`/api/${apiConfig.version}/admin`, securityRoutes);
 app.use(`/api/${apiConfig.version}/admin`, emailConfigRoutes);
 // Customer management routes (admin)
 app.use(`/api/${apiConfig.version}/admin`, customerManagementRoutes);
+// Abandoned cart routes (admin)
+app.use(`/api/${apiConfig.version}/admin`, abandonedCartRoutes);
 app.use(`/api/${apiConfig.version}`, carouselRoutes);
 app.use(`/api/${apiConfig.version}`, categoryGridRoutes);
 app.use(`/api/${apiConfig.version}`, calloutBannerRoutes);

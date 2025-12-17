@@ -6,12 +6,27 @@ export interface IFailedToken {
   errorCode?: string;
 }
 
+/**
+ * Deep link types for notification navigation
+ */
+export type DeepLinkType = 'product' | 'collection' | 'cart' | 'order' | 'category' | 'url' | 'home';
+
+/**
+ * Deep link configuration for notifications
+ */
+export interface IDeepLink {
+  type: DeepLinkType;
+  id?: string;
+  url?: string;
+}
+
 export interface INotificationLog extends Document {
   storeId: mongoose.Types.ObjectId;
   title: string;
   body: string;
   data?: Record<string, string>;
   imageUrl?: string;
+  deepLink?: IDeepLink;
   segment: string;
   customSegmentCriteria?: Record<string, any>;
 
@@ -24,6 +39,10 @@ export interface INotificationLog extends Document {
   targetCount: number;
   successCount: number;
   failureCount: number;
+
+  // Engagement Stats
+  openedCount: number;
+  clickedCount: number;
 
   // Failed token details (for debugging, capped at 50)
   failedTokens?: IFailedToken[];
@@ -38,6 +57,8 @@ export interface INotificationLog extends Document {
 
   // Virtuals
   deliveryRate: number;
+  openRate: number;
+  clickRate: number;
 }
 
 const failedTokenSchema = new Schema<IFailedToken>(
@@ -73,6 +94,14 @@ const notificationLogSchema = new Schema<INotificationLog>(
     imageUrl: {
       type: String,
     },
+    deepLink: {
+      type: {
+        type: String,
+        enum: ['product', 'collection', 'cart', 'order', 'category', 'url', 'home'],
+      },
+      id: String,
+      url: String,
+    },
     segment: {
       type: String,
       required: true,
@@ -106,6 +135,14 @@ const notificationLogSchema = new Schema<INotificationLog>(
       type: Number,
       default: 0,
     },
+    openedCount: {
+      type: Number,
+      default: 0,
+    },
+    clickedCount: {
+      type: Number,
+      default: 0,
+    },
     failedTokens: [failedTokenSchema],
     sentBy: {
       type: Schema.Types.ObjectId,
@@ -126,6 +163,18 @@ const notificationLogSchema = new Schema<INotificationLog>(
 notificationLogSchema.virtual('deliveryRate').get(function () {
   if (this.targetCount === 0) return 0;
   return Math.round((this.successCount / this.targetCount) * 100);
+});
+
+// Virtual for open rate percentage (opens / successful deliveries)
+notificationLogSchema.virtual('openRate').get(function () {
+  if (this.successCount === 0) return 0;
+  return Math.round((this.openedCount / this.successCount) * 100);
+});
+
+// Virtual for click rate percentage (clicks / opens)
+notificationLogSchema.virtual('clickRate').get(function () {
+  if (this.openedCount === 0) return 0;
+  return Math.round((this.clickedCount / this.openedCount) * 100);
 });
 
 // Indexes for common queries

@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import Customer from '../models/Customer';
 import NotificationLog from '../models/NotificationLog';
 import NotificationTemplate from '../models/NotificationTemplate';
+import NotificationEngagement from '../models/NotificationEngagement';
 import { FirebaseNotificationService } from '../services/firebaseNotificationService';
 import { SegmentationService, AVAILABLE_SEGMENTS } from '../services/segmentationService';
 
@@ -275,7 +276,7 @@ export const broadcastStoreNotification = async (
 
   try {
     const { storeId } = req.params;
-    const { title, body, imageUrl, image, data, segment, scheduledFor } = req.body;
+    const { title, body, imageUrl, image, data, segment, scheduledFor, deepLink } = req.body;
 
     // Accept both 'image' and 'imageUrl' for compatibility
     const finalImageUrl = imageUrl || image;
@@ -290,6 +291,7 @@ export const broadcastStoreNotification = async (
     console.log('📢 [PUSH] Step 3g: Scheduled for:', scheduledFor || 'immediate');
     console.log('📢 [PUSH] Step 3h: Image URL:', finalImageUrl || 'none');
     console.log('📢 [PUSH] Step 3i: Raw image fields - imageUrl:', imageUrl, ', image:', image);
+    console.log('📢 [PUSH] Step 3j: Deep link:', deepLink ? JSON.stringify(deepLink) : 'none');
 
     // Validation
     if (!title || !body) {
@@ -352,6 +354,7 @@ export const broadcastStoreNotification = async (
         body,
         data,
         imageUrl: finalImageUrl,
+        deepLink,
         segment: segmentId,
         status: 'scheduled',
         scheduledFor: scheduleDate,
@@ -389,6 +392,7 @@ export const broadcastStoreNotification = async (
       body,
       data,
       imageUrl: finalImageUrl,
+      deepLink,
       segment: segmentId,
       status: 'sending',
       sentBy: (req as any).user?._id,
@@ -454,6 +458,7 @@ export const broadcastStoreNotification = async (
       title,
       body,
       imageUrl: finalImageUrl,
+      deepLink,
       data: {
         type: 'store_announcement',
         segment: segmentId,
@@ -622,7 +627,7 @@ export const sendTestNotificationAdmin = async (
  * Get notification statistics for store
  * GET /api/v1/notifications/stores/:storeId/stats
  *
- * Shows how many customers have devices registered, platform breakdown, etc.
+ * Shows how many customers have devices registered, platform breakdown, engagement metrics, etc.
  */
 export const getNotificationStats = async (
   req: Request,
@@ -639,6 +644,8 @@ export const getNotificationStats = async (
       });
       return;
     }
+
+    const storeObjectId = new mongoose.Types.ObjectId(storeId);
 
     // Get customers with active devices
     const customers = await Customer.find({
@@ -666,6 +673,99 @@ export const getNotificationStats = async (
       }
     });
 
+    // Get engagement statistics from NotificationLog
+    const now = new Date();
+    const last30Days = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const last7Days = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    const [
+      notificationStats,
+      last30DaysStats,
+      last7DaysStats,
+    ] = await Promise.all([
+      // All-time notification stats
+      NotificationLog.aggregate([
+        { $match: { storeId: storeObjectId, status: { $in: ['sent', 'partial'] } } },
+        {
+          $group: {
+            _id: null,
+            totalNotifications: { $sum: 1 },
+            totalTargeted: { $sum: '$targetCount' },
+            totalDelivered: { $sum: '$successCount' },
+            totalOpened: { $sum: '$openedCount' },
+            totalClicked: { $sum: '$clickedCount' },
+          },
+        },
+      ]),
+      // Last 30 days stats
+      NotificationLog.aggregate([
+        {
+          $match: {
+            storeId: storeObjectId,
+            status: { $in: ['sent', 'partial'] },
+            sentAt: { $gte: last30Days },
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            totalNotifications: { $sum: 1 },
+            totalTargeted: { $sum: '$targetCount' },
+            totalDelivered: { $sum: '$successCount' },
+            totalOpened: { $sum: '$openedCount' },
+            totalClicked: { $sum: '$clickedCount' },
+          },
+        },
+      ]),
+      // Last 7 days stats
+      NotificationLog.aggregate([
+        {
+          $match: {
+            storeId: storeObjectId,
+            status: { $in: ['sent', 'partial'] },
+            sentAt: { $gte: last7Days },
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            totalNotifications: { $sum: 1 },
+            totalTargeted: { $sum: '$targetCount' },
+            totalDelivered: { $sum: '$successCount' },
+            totalOpened: { $sum: '$openedCount' },
+            totalClicked: { $sum: '$clickedCount' },
+          },
+        },
+      ]),
+    ]);
+
+    // Calculate rates helper
+    const calculateRates = (stats: any) => {
+      const data = stats[0] || {
+        totalNotifications: 0,
+        totalTargeted: 0,
+        totalDelivered: 0,
+        totalOpened: 0,
+        totalClicked: 0,
+      };
+      return {
+        totalNotifications: data.totalNotifications,
+        totalTargeted: data.totalTargeted,
+        totalDelivered: data.totalDelivered,
+        totalOpened: data.totalOpened,
+        totalClicked: data.totalClicked,
+        deliveryRate: data.totalTargeted > 0
+          ? Math.round((data.totalDelivered / data.totalTargeted) * 100)
+          : 0,
+        openRate: data.totalDelivered > 0
+          ? Math.round((data.totalOpened / data.totalDelivered) * 100)
+          : 0,
+        clickRate: data.totalOpened > 0
+          ? Math.round((data.totalClicked / data.totalOpened) * 100)
+          : 0,
+      };
+    };
+
     res.json({
       status: 'success',
       data: {
@@ -678,6 +778,12 @@ export const getNotificationStats = async (
         pushEnabledCustomers,
         firebaseEnabled: FirebaseNotificationService.isInitialized(),
         topic: `store_${storeId}`,
+        // Engagement metrics
+        engagement: {
+          allTime: calculateRates(notificationStats),
+          last30Days: calculateRates(last30DaysStats),
+          last7Days: calculateRates(last7DaysStats),
+        },
       },
     });
   } catch (error) {
@@ -878,6 +984,17 @@ export const getNotificationHistory = async (
             n.targetCount > 0
               ? Math.round((n.successCount / n.targetCount) * 100)
               : 0,
+          // Engagement metrics
+          openedCount: n.openedCount || 0,
+          clickedCount: n.clickedCount || 0,
+          openRate:
+            n.successCount > 0
+              ? Math.round(((n.openedCount || 0) / n.successCount) * 100)
+              : 0,
+          clickRate:
+            (n.openedCount || 0) > 0
+              ? Math.round(((n.clickedCount || 0) / (n.openedCount || 1)) * 100)
+              : 0,
           sentAt: n.sentAt,
           scheduledFor: n.scheduledFor,
           sentByEmail: n.sentByEmail,
@@ -962,6 +1079,17 @@ export const getNotificationDetail = async (
             ? Math.round(
                 (notification.successCount / notification.targetCount) * 100
               )
+            : 0,
+        // Engagement metrics
+        openedCount: notification.openedCount || 0,
+        clickedCount: notification.clickedCount || 0,
+        openRate:
+          notification.successCount > 0
+            ? Math.round(((notification.openedCount || 0) / notification.successCount) * 100)
+            : 0,
+        clickRate:
+          (notification.openedCount || 0) > 0
+            ? Math.round(((notification.clickedCount || 0) / (notification.openedCount || 1)) * 100)
             : 0,
         failedTokens: notification.failedTokens,
         sentAt: notification.sentAt,
@@ -1633,6 +1761,7 @@ export const getTemplates = async (
           image: t.image,
           segment: t.segment,
           data: t.data,
+          deepLink: t.deepLink,
           usageCount: t.usageCount,
           lastUsedAt: t.lastUsedAt,
           isActive: t.isActive,
@@ -1704,6 +1833,7 @@ export const getTemplate = async (
         image: template.image,
         segment: template.segment,
         data: template.data,
+        deepLink: template.deepLink,
         usageCount: template.usageCount,
         lastUsedAt: template.lastUsedAt,
         isActive: template.isActive,
@@ -1731,7 +1861,7 @@ export const createTemplate = async (
 ): Promise<void> => {
   try {
     const { storeId } = req.params;
-    const { name, title, body, image, segment = 'all', data } = req.body;
+    const { name, title, body, image, segment = 'all', data, deepLink } = req.body;
 
     // Security check
     if (req.storeId?.toString() !== storeId) {
@@ -1774,6 +1904,7 @@ export const createTemplate = async (
       image,
       segment,
       data,
+      deepLink,
       createdBy: (req as any).user?._id,
       createdByEmail: (req as any).user?.email,
     });
@@ -1790,6 +1921,7 @@ export const createTemplate = async (
         image: template.image,
         segment: template.segment,
         data: template.data,
+        deepLink: template.deepLink,
         usageCount: template.usageCount,
         lastUsedAt: template.lastUsedAt,
         isActive: template.isActive,
@@ -1827,7 +1959,7 @@ export const updateTemplate = async (
 ): Promise<void> => {
   try {
     const { storeId, templateId } = req.params;
-    const { name, title, body, image, segment, data, isActive } = req.body;
+    const { name, title, body, image, segment, data, deepLink, isActive } = req.body;
 
     // Security check
     if (req.storeId?.toString() !== storeId) {
@@ -1875,6 +2007,7 @@ export const updateTemplate = async (
     if (image !== undefined) updateData.image = image;
     if (segment !== undefined) updateData.segment = segment;
     if (data !== undefined) updateData.data = data;
+    if (deepLink !== undefined) updateData.deepLink = deepLink;
     if (isActive !== undefined) updateData.isActive = isActive;
 
     // Check if there's anything to update
@@ -1915,6 +2048,7 @@ export const updateTemplate = async (
         image: template.image,
         segment: template.segment,
         data: template.data,
+        deepLink: template.deepLink,
         usageCount: template.usageCount,
         lastUsedAt: template.lastUsedAt,
         isActive: template.isActive,
@@ -2128,6 +2262,7 @@ export const duplicateTemplate = async (
       image: original.image,
       segment: original.segment,
       data: original.data,
+      deepLink: original.deepLink,
       createdBy: (req as any).user?._id,
       createdByEmail: (req as any).user?.email,
     });
@@ -2144,6 +2279,7 @@ export const duplicateTemplate = async (
         image: duplicate.image,
         segment: duplicate.segment,
         data: duplicate.data,
+        deepLink: duplicate.deepLink,
         usageCount: duplicate.usageCount,
         lastUsedAt: duplicate.lastUsedAt,
         isActive: duplicate.isActive,
@@ -2157,6 +2293,269 @@ export const duplicateTemplate = async (
     res.status(500).json({
       status: 'error',
       message: 'Failed to duplicate template',
+    });
+  }
+};
+
+// =============================================================================
+// NOTIFICATION ENGAGEMENT TRACKING
+// =============================================================================
+
+/**
+ * Track notification open event
+ * POST /api/v1/notifications/track-open
+ *
+ * Called by mobile app when user opens/views a notification
+ */
+export const trackNotificationOpen = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const customerId = req.customer?.id;
+    const { notificationId, openedAt, platform, deviceId } = req.body;
+
+    // Validation
+    if (!notificationId) {
+      res.status(400).json({
+        status: 'error',
+        message: 'notificationId is required',
+      });
+      return;
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(notificationId)) {
+      res.status(400).json({
+        status: 'error',
+        message: 'Invalid notification ID',
+      });
+      return;
+    }
+
+    // Find the notification
+    const notification = await NotificationLog.findById(notificationId);
+    if (!notification) {
+      res.status(404).json({
+        status: 'error',
+        message: 'Notification not found',
+      });
+      return;
+    }
+
+    // Create engagement record (will fail silently on duplicate due to unique index)
+    try {
+      await NotificationEngagement.create({
+        notificationId: new mongoose.Types.ObjectId(notificationId),
+        storeId: notification.storeId,
+        customerId: new mongoose.Types.ObjectId(customerId),
+        type: 'open',
+        timestamp: openedAt ? new Date(openedAt) : new Date(),
+        deviceInfo: {
+          platform,
+          deviceId,
+        },
+      });
+
+      // Increment open counter on NotificationLog
+      await NotificationLog.findByIdAndUpdate(notificationId, {
+        $inc: { openedCount: 1 },
+      });
+
+      console.log(`📬 [ENGAGEMENT] Open tracked: notification=${notificationId}, customer=${customerId}`);
+    } catch (error: any) {
+      // Duplicate key error means customer already opened this notification
+      if (error.code === 11000) {
+        console.log(`📬 [ENGAGEMENT] Duplicate open ignored: notification=${notificationId}, customer=${customerId}`);
+      } else {
+        throw error;
+      }
+    }
+
+    res.json({
+      status: 'success',
+      message: 'Open event tracked',
+    });
+  } catch (error) {
+    console.error('Track notification open error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to track open event',
+    });
+  }
+};
+
+/**
+ * Track notification click event
+ * POST /api/v1/notifications/track-click
+ *
+ * Called by mobile app when user clicks/interacts with a notification
+ */
+export const trackNotificationClick = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const customerId = req.customer?.id;
+    const { notificationId, clickedAt, clickTarget, platform, deviceId } = req.body;
+
+    // Validation
+    if (!notificationId) {
+      res.status(400).json({
+        status: 'error',
+        message: 'notificationId is required',
+      });
+      return;
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(notificationId)) {
+      res.status(400).json({
+        status: 'error',
+        message: 'Invalid notification ID',
+      });
+      return;
+    }
+
+    // Find the notification
+    const notification = await NotificationLog.findById(notificationId);
+    if (!notification) {
+      res.status(404).json({
+        status: 'error',
+        message: 'Notification not found',
+      });
+      return;
+    }
+
+    // Create engagement record (will fail silently on duplicate due to unique index)
+    try {
+      await NotificationEngagement.create({
+        notificationId: new mongoose.Types.ObjectId(notificationId),
+        storeId: notification.storeId,
+        customerId: new mongoose.Types.ObjectId(customerId),
+        type: 'click',
+        timestamp: clickedAt ? new Date(clickedAt) : new Date(),
+        clickTarget,
+        deviceInfo: {
+          platform,
+          deviceId,
+        },
+      });
+
+      // Increment click counter on NotificationLog
+      await NotificationLog.findByIdAndUpdate(notificationId, {
+        $inc: { clickedCount: 1 },
+      });
+
+      console.log(`📬 [ENGAGEMENT] Click tracked: notification=${notificationId}, customer=${customerId}, target=${clickTarget || 'N/A'}`);
+    } catch (error: any) {
+      // Duplicate key error means customer already clicked this notification
+      if (error.code === 11000) {
+        console.log(`📬 [ENGAGEMENT] Duplicate click ignored: notification=${notificationId}, customer=${customerId}`);
+      } else {
+        throw error;
+      }
+    }
+
+    res.json({
+      status: 'success',
+      message: 'Click event tracked',
+    });
+  } catch (error) {
+    console.error('Track notification click error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to track click event',
+    });
+  }
+};
+
+/**
+ * Get engagement details for a specific notification (Admin)
+ * GET /api/v1/notifications/stores/:storeId/history/:notificationId/engagement
+ */
+export const getNotificationEngagement = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { storeId, notificationId } = req.params;
+    const { page = '1', limit = '50' } = req.query;
+
+    // Security check
+    if (req.storeId?.toString() !== storeId) {
+      res.status(403).json({
+        status: 'error',
+        message: 'Access denied',
+      });
+      return;
+    }
+
+    // Validate ObjectId
+    if (!mongoose.Types.ObjectId.isValid(notificationId)) {
+      res.status(400).json({
+        status: 'error',
+        message: 'Invalid notification ID',
+      });
+      return;
+    }
+
+    const skip = (Number(page) - 1) * Number(limit);
+
+    // Get engagement events with customer details
+    const [engagements, total, openCount, clickCount] = await Promise.all([
+      NotificationEngagement.find({
+        notificationId: new mongoose.Types.ObjectId(notificationId),
+      })
+        .populate('customerId', 'name email')
+        .sort({ timestamp: -1 })
+        .skip(skip)
+        .limit(Number(limit))
+        .lean(),
+      NotificationEngagement.countDocuments({
+        notificationId: new mongoose.Types.ObjectId(notificationId),
+      }),
+      NotificationEngagement.countDocuments({
+        notificationId: new mongoose.Types.ObjectId(notificationId),
+        type: 'open',
+      }),
+      NotificationEngagement.countDocuments({
+        notificationId: new mongoose.Types.ObjectId(notificationId),
+        type: 'click',
+      }),
+    ]);
+
+    res.json({
+      status: 'success',
+      data: {
+        summary: {
+          totalEngagements: total,
+          opens: openCount,
+          clicks: clickCount,
+        },
+        engagements: engagements.map((e: any) => ({
+          id: e._id.toString(),
+          type: e.type,
+          timestamp: e.timestamp,
+          customer: {
+            id: e.customerId?._id?.toString() || e.customerId?.toString(),
+            name: e.customerId?.name || 'Unknown',
+            email: e.customerId?.email || 'Unknown',
+          },
+          deviceInfo: e.deviceInfo,
+          clickTarget: e.clickTarget,
+        })),
+        pagination: {
+          page: Number(page),
+          limit: Number(limit),
+          total,
+          totalPages: Math.ceil(total / Number(limit)),
+        },
+      },
+    });
+  } catch (error) {
+    console.error('Get notification engagement error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to fetch engagement data',
     });
   }
 };
