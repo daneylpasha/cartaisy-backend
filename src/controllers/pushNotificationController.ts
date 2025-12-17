@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import Customer from '../models/Customer';
 import NotificationLog from '../models/NotificationLog';
+import NotificationTemplate from '../models/NotificationTemplate';
 import { FirebaseNotificationService } from '../services/firebaseNotificationService';
 import { SegmentationService, AVAILABLE_SEGMENTS } from '../services/segmentationService';
 
@@ -1578,6 +1579,576 @@ export const updateScheduledNotification = async (
     res.status(500).json({
       status: 'error',
       message: 'Failed to update scheduled notification',
+    });
+  }
+};
+
+// =============================================================================
+// NOTIFICATION TEMPLATES
+// =============================================================================
+
+/**
+ * Get all templates for a store
+ * GET /api/v1/notifications/stores/:storeId/templates
+ */
+export const getTemplates = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { storeId } = req.params;
+
+    // Security check
+    if (req.storeId?.toString() !== storeId) {
+      res.status(403).json({
+        status: 'error',
+        message: 'Access denied',
+      });
+      return;
+    }
+
+    const templates = await NotificationTemplate.find({
+      storeId: new mongoose.Types.ObjectId(storeId),
+      isActive: true,
+    })
+      .sort({ updatedAt: -1 })
+      .lean();
+
+    res.json({
+      status: 'success',
+      data: {
+        templates: templates.map((t: any) => ({
+          id: t._id.toString(),
+          name: t.name,
+          title: t.title,
+          body: t.body,
+          image: t.image,
+          segment: t.segment,
+          data: t.data,
+          usageCount: t.usageCount,
+          lastUsedAt: t.lastUsedAt,
+          isActive: t.isActive,
+          createdByEmail: t.createdByEmail,
+          createdAt: t.createdAt,
+          updatedAt: t.updatedAt,
+        })),
+        total: templates.length,
+      },
+    });
+  } catch (error) {
+    console.error('Get templates error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to fetch templates',
+    });
+  }
+};
+
+/**
+ * Get a single template by ID
+ * GET /api/v1/notifications/stores/:storeId/templates/:templateId
+ */
+export const getTemplate = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { storeId, templateId } = req.params;
+
+    // Security check
+    if (req.storeId?.toString() !== storeId) {
+      res.status(403).json({
+        status: 'error',
+        message: 'Access denied',
+      });
+      return;
+    }
+
+    // Validate ObjectId
+    if (!mongoose.Types.ObjectId.isValid(templateId)) {
+      res.status(400).json({
+        status: 'error',
+        message: 'Invalid template ID',
+      });
+      return;
+    }
+
+    const template = await NotificationTemplate.findOne({
+      _id: new mongoose.Types.ObjectId(templateId),
+      storeId: new mongoose.Types.ObjectId(storeId),
+    }).lean();
+
+    if (!template) {
+      res.status(404).json({
+        status: 'error',
+        message: 'Template not found',
+      });
+      return;
+    }
+
+    res.json({
+      status: 'success',
+      data: {
+        id: (template as any)._id.toString(),
+        name: template.name,
+        title: template.title,
+        body: template.body,
+        image: template.image,
+        segment: template.segment,
+        data: template.data,
+        usageCount: template.usageCount,
+        lastUsedAt: template.lastUsedAt,
+        isActive: template.isActive,
+        createdByEmail: template.createdByEmail,
+        createdAt: template.createdAt,
+        updatedAt: template.updatedAt,
+      },
+    });
+  } catch (error) {
+    console.error('Get template error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to fetch template',
+    });
+  }
+};
+
+/**
+ * Create a new template
+ * POST /api/v1/notifications/stores/:storeId/templates
+ */
+export const createTemplate = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { storeId } = req.params;
+    const { name, title, body, image, segment = 'all', data } = req.body;
+
+    // Security check
+    if (req.storeId?.toString() !== storeId) {
+      res.status(403).json({
+        status: 'error',
+        message: 'Access denied',
+      });
+      return;
+    }
+
+    // Validation
+    if (!name || !title || !body) {
+      res.status(400).json({
+        status: 'error',
+        message: 'Name, title, and body are required',
+      });
+      return;
+    }
+
+    // Check for duplicate name
+    const existing = await NotificationTemplate.findOne({
+      storeId: new mongoose.Types.ObjectId(storeId),
+      name: name.trim(),
+      isActive: true,
+    });
+
+    if (existing) {
+      res.status(400).json({
+        status: 'error',
+        message: 'A template with this name already exists',
+      });
+      return;
+    }
+
+    const template = await NotificationTemplate.create({
+      storeId: new mongoose.Types.ObjectId(storeId),
+      name: name.trim(),
+      title,
+      body,
+      image,
+      segment,
+      data,
+      createdBy: (req as any).user?._id,
+      createdByEmail: (req as any).user?.email,
+    });
+
+    console.log(`📝 [TEMPLATE] Created: "${name}" for store ${storeId}`);
+
+    res.status(201).json({
+      status: 'success',
+      data: {
+        id: template._id.toString(),
+        name: template.name,
+        title: template.title,
+        body: template.body,
+        image: template.image,
+        segment: template.segment,
+        data: template.data,
+        usageCount: template.usageCount,
+        lastUsedAt: template.lastUsedAt,
+        isActive: template.isActive,
+        createdByEmail: template.createdByEmail,
+        createdAt: template.createdAt,
+        updatedAt: template.updatedAt,
+      },
+    });
+  } catch (error: any) {
+    console.error('Create template error:', error);
+
+    // Handle duplicate key error
+    if (error.code === 11000) {
+      res.status(400).json({
+        status: 'error',
+        message: 'A template with this name already exists',
+      });
+      return;
+    }
+
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to create template',
+    });
+  }
+};
+
+/**
+ * Update a template
+ * PATCH /api/v1/notifications/stores/:storeId/templates/:templateId
+ */
+export const updateTemplate = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { storeId, templateId } = req.params;
+    const { name, title, body, image, segment, data, isActive } = req.body;
+
+    // Security check
+    if (req.storeId?.toString() !== storeId) {
+      res.status(403).json({
+        status: 'error',
+        message: 'Access denied',
+      });
+      return;
+    }
+
+    // Validate ObjectId
+    if (!mongoose.Types.ObjectId.isValid(templateId)) {
+      res.status(400).json({
+        status: 'error',
+        message: 'Invalid template ID',
+      });
+      return;
+    }
+
+    // Build update object
+    const updateData: any = {};
+
+    if (name !== undefined) {
+      // Check for duplicate name
+      const existing = await NotificationTemplate.findOne({
+        storeId: new mongoose.Types.ObjectId(storeId),
+        name: name.trim(),
+        _id: { $ne: new mongoose.Types.ObjectId(templateId) },
+        isActive: true,
+      });
+
+      if (existing) {
+        res.status(400).json({
+          status: 'error',
+          message: 'A template with this name already exists',
+        });
+        return;
+      }
+
+      updateData.name = name.trim();
+    }
+
+    if (title !== undefined) updateData.title = title;
+    if (body !== undefined) updateData.body = body;
+    if (image !== undefined) updateData.image = image;
+    if (segment !== undefined) updateData.segment = segment;
+    if (data !== undefined) updateData.data = data;
+    if (isActive !== undefined) updateData.isActive = isActive;
+
+    // Check if there's anything to update
+    if (Object.keys(updateData).length === 0) {
+      res.status(400).json({
+        status: 'error',
+        message: 'No fields to update',
+      });
+      return;
+    }
+
+    const template = await NotificationTemplate.findOneAndUpdate(
+      {
+        _id: new mongoose.Types.ObjectId(templateId),
+        storeId: new mongoose.Types.ObjectId(storeId),
+      },
+      { $set: updateData },
+      { new: true }
+    );
+
+    if (!template) {
+      res.status(404).json({
+        status: 'error',
+        message: 'Template not found',
+      });
+      return;
+    }
+
+    console.log(`📝 [TEMPLATE] Updated: "${template.name}" (${templateId})`);
+
+    res.json({
+      status: 'success',
+      data: {
+        id: template._id.toString(),
+        name: template.name,
+        title: template.title,
+        body: template.body,
+        image: template.image,
+        segment: template.segment,
+        data: template.data,
+        usageCount: template.usageCount,
+        lastUsedAt: template.lastUsedAt,
+        isActive: template.isActive,
+        createdByEmail: template.createdByEmail,
+        createdAt: template.createdAt,
+        updatedAt: template.updatedAt,
+      },
+    });
+  } catch (error: any) {
+    console.error('Update template error:', error);
+
+    // Handle duplicate key error
+    if (error.code === 11000) {
+      res.status(400).json({
+        status: 'error',
+        message: 'A template with this name already exists',
+      });
+      return;
+    }
+
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to update template',
+    });
+  }
+};
+
+/**
+ * Delete a template (soft delete)
+ * DELETE /api/v1/notifications/stores/:storeId/templates/:templateId
+ */
+export const deleteTemplate = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { storeId, templateId } = req.params;
+
+    // Security check
+    if (req.storeId?.toString() !== storeId) {
+      res.status(403).json({
+        status: 'error',
+        message: 'Access denied',
+      });
+      return;
+    }
+
+    // Validate ObjectId
+    if (!mongoose.Types.ObjectId.isValid(templateId)) {
+      res.status(400).json({
+        status: 'error',
+        message: 'Invalid template ID',
+      });
+      return;
+    }
+
+    const template = await NotificationTemplate.findOneAndUpdate(
+      {
+        _id: new mongoose.Types.ObjectId(templateId),
+        storeId: new mongoose.Types.ObjectId(storeId),
+      },
+      { isActive: false },
+      { new: true }
+    );
+
+    if (!template) {
+      res.status(404).json({
+        status: 'error',
+        message: 'Template not found',
+      });
+      return;
+    }
+
+    console.log(`📝 [TEMPLATE] Deleted: "${template.name}" (${templateId})`);
+
+    res.json({
+      status: 'success',
+      message: 'Template deleted successfully',
+    });
+  } catch (error) {
+    console.error('Delete template error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to delete template',
+    });
+  }
+};
+
+/**
+ * Record template usage (called when template is used to send notification)
+ * POST /api/v1/notifications/stores/:storeId/templates/:templateId/use
+ */
+export const recordTemplateUsage = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { storeId, templateId } = req.params;
+
+    // Security check
+    if (req.storeId?.toString() !== storeId) {
+      res.status(403).json({
+        status: 'error',
+        message: 'Access denied',
+      });
+      return;
+    }
+
+    // Validate ObjectId
+    if (!mongoose.Types.ObjectId.isValid(templateId)) {
+      res.status(400).json({
+        status: 'error',
+        message: 'Invalid template ID',
+      });
+      return;
+    }
+
+    const result = await NotificationTemplate.findOneAndUpdate(
+      {
+        _id: new mongoose.Types.ObjectId(templateId),
+        storeId: new mongoose.Types.ObjectId(storeId),
+      },
+      {
+        $inc: { usageCount: 1 },
+        $set: { lastUsedAt: new Date() },
+      }
+    );
+
+    if (!result) {
+      res.status(404).json({
+        status: 'error',
+        message: 'Template not found',
+      });
+      return;
+    }
+
+    res.json({
+      status: 'success',
+      message: 'Template usage recorded',
+    });
+  } catch (error) {
+    console.error('Record template usage error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to record template usage',
+    });
+  }
+};
+
+/**
+ * Duplicate a template
+ * POST /api/v1/notifications/stores/:storeId/templates/:templateId/duplicate
+ */
+export const duplicateTemplate = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { storeId, templateId } = req.params;
+
+    // Security check
+    if (req.storeId?.toString() !== storeId) {
+      res.status(403).json({
+        status: 'error',
+        message: 'Access denied',
+      });
+      return;
+    }
+
+    // Validate ObjectId
+    if (!mongoose.Types.ObjectId.isValid(templateId)) {
+      res.status(400).json({
+        status: 'error',
+        message: 'Invalid template ID',
+      });
+      return;
+    }
+
+    const original = await NotificationTemplate.findOne({
+      _id: new mongoose.Types.ObjectId(templateId),
+      storeId: new mongoose.Types.ObjectId(storeId),
+    });
+
+    if (!original) {
+      res.status(404).json({
+        status: 'error',
+        message: 'Template not found',
+      });
+      return;
+    }
+
+    // Generate unique name
+    let newName = `${original.name} (Copy)`;
+    let counter = 1;
+    while (
+      await NotificationTemplate.findOne({
+        storeId: new mongoose.Types.ObjectId(storeId),
+        name: newName,
+        isActive: true,
+      })
+    ) {
+      counter++;
+      newName = `${original.name} (Copy ${counter})`;
+    }
+
+    const duplicate = await NotificationTemplate.create({
+      storeId: new mongoose.Types.ObjectId(storeId),
+      name: newName,
+      title: original.title,
+      body: original.body,
+      image: original.image,
+      segment: original.segment,
+      data: original.data,
+      createdBy: (req as any).user?._id,
+      createdByEmail: (req as any).user?.email,
+    });
+
+    console.log(`📝 [TEMPLATE] Duplicated: "${original.name}" -> "${newName}"`);
+
+    res.status(201).json({
+      status: 'success',
+      data: {
+        id: duplicate._id.toString(),
+        name: duplicate.name,
+        title: duplicate.title,
+        body: duplicate.body,
+        image: duplicate.image,
+        segment: duplicate.segment,
+        data: duplicate.data,
+        usageCount: duplicate.usageCount,
+        lastUsedAt: duplicate.lastUsedAt,
+        isActive: duplicate.isActive,
+        createdByEmail: duplicate.createdByEmail,
+        createdAt: duplicate.createdAt,
+        updatedAt: duplicate.updatedAt,
+      },
+    });
+  } catch (error) {
+    console.error('Duplicate template error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to duplicate template',
     });
   }
 };

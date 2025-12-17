@@ -9,6 +9,7 @@ import { tenantConfig, apiConfig, derivedConfig } from './config/tenant';
 // Firebase initialization
 import { FirebaseNotificationService } from './services/firebaseNotificationService';
 import { notificationScheduler } from './services/notificationScheduler';
+import { imageCleanupScheduler } from './services/imageCleanupScheduler';
 
 // Log Firebase status on startup
 console.log('Firebase Status:', {
@@ -20,6 +21,9 @@ console.log('Firebase Status:', {
 
 // Start notification scheduler
 notificationScheduler.start();
+
+// Start image cleanup scheduler
+imageCleanupScheduler.start();
 
 // Security middleware imports
 import { strictStoreValidation } from './middleware/strictStoreValidation';

@@ -18,7 +18,23 @@ import {
   cancelScheduledNotification,
   sendScheduledNow,
   updateScheduledNotification,
+  // Template functions
+  getTemplates,
+  getTemplate,
+  createTemplate,
+  updateTemplate,
+  deleteTemplate,
+  recordTemplateUsage,
+  duplicateTemplate,
 } from '../controllers/pushNotificationController';
+import {
+  getImageUsage,
+  getUploadSignature,
+  registerImage,
+  markImageUsed,
+  deleteImage,
+  getImages,
+} from '../controllers/imageController';
 
 const router = express.Router();
 
@@ -66,5 +82,52 @@ router.post('/stores/:storeId/scheduled/:notificationId/send-now', requireStoreA
 
 // Update a scheduled notification
 router.patch('/stores/:storeId/scheduled/:notificationId', requireStoreAdmin as any, updateScheduledNotification);
+
+// =============================================================================
+// NOTIFICATION TEMPLATES
+// =============================================================================
+
+// Get all templates for a store
+router.get('/stores/:storeId/templates', requireStoreAdmin as any, getTemplates);
+
+// Get a single template by ID
+router.get('/stores/:storeId/templates/:templateId', requireStoreAdmin as any, getTemplate);
+
+// Create a new template
+router.post('/stores/:storeId/templates', requireStoreAdmin as any, createTemplate);
+
+// Update a template
+router.patch('/stores/:storeId/templates/:templateId', requireStoreAdmin as any, updateTemplate);
+
+// Delete a template (soft delete)
+router.delete('/stores/:storeId/templates/:templateId', requireStoreAdmin as any, deleteTemplate);
+
+// Record template usage
+router.post('/stores/:storeId/templates/:templateId/use', requireStoreAdmin as any, recordTemplateUsage);
+
+// Duplicate a template
+router.post('/stores/:storeId/templates/:templateId/duplicate', requireStoreAdmin as any, duplicateTemplate);
+
+// =============================================================================
+// IMAGE MANAGEMENT
+// =============================================================================
+
+// Get image usage for a store
+router.get('/stores/:storeId/images/usage', requireStoreAdmin as any, getImageUsage);
+
+// Get upload signature for client-side Cloudinary upload
+router.get('/stores/:storeId/images/signature', requireStoreAdmin as any, getUploadSignature);
+
+// Register an uploaded image (after client-side upload)
+router.post('/stores/:storeId/images/register', requireStoreAdmin as any, registerImage);
+
+// Mark image as used in template or notification
+router.post('/stores/:storeId/images/:imageId/use', requireStoreAdmin as any, markImageUsed);
+
+// Delete an image
+router.delete('/stores/:storeId/images/:imageId', requireStoreAdmin as any, deleteImage);
+
+// Get all images for a store (for image picker)
+router.get('/stores/:storeId/images', requireStoreAdmin as any, getImages);
 
 export default router;

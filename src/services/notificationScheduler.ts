@@ -1,4 +1,4 @@
-import cron from 'node-cron';
+import * as cron from 'node-cron';
 import mongoose from 'mongoose';
 import NotificationLog from '../models/NotificationLog';
 import { FirebaseNotificationService } from './firebaseNotificationService';
