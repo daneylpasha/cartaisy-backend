@@ -210,6 +210,7 @@ export class FirebaseNotificationService {
       console.log(`📤 Sending push notification to ${validTokens.length} device(s):`);
       console.log(`   Title: "${notification.title}"`);
       console.log(`   Body: "${notification.body}"`);
+      console.log(`   Image: "${notification.imageUrl || 'none'}"`);
       validTokens.forEach((token, idx) => {
         console.log(`   Token ${idx + 1}: ${token.substring(0, 40)}...`);
       });
@@ -219,7 +220,7 @@ export class FirebaseNotificationService {
         notification: {
           title: notification.title,
           body: notification.body,
-          imageUrl: notification.imageUrl,
+          ...(notification.imageUrl && { imageUrl: notification.imageUrl }),
         },
         data: notification.data || {},
         tokens: validTokens,
@@ -232,6 +233,7 @@ export class FirebaseNotificationService {
             priority: 'high',
             channelId: 'orders', // Must be created in mobile app
             clickAction: 'FLUTTER_NOTIFICATION_CLICK',
+            ...(notification.imageUrl && { imageUrl: notification.imageUrl }),
           },
         },
 
@@ -245,12 +247,15 @@ export class FirebaseNotificationService {
               },
               sound: 'default',
               badge: 1,
-              'content-available': 1,
+              'mutable-content': 1, // Required for iOS to display images
             },
           },
           headers: {
             'apns-push-type': 'alert',
             'apns-priority': '10',
+          },
+          fcmOptions: {
+            ...(notification.imageUrl && { imageUrl: notification.imageUrl }),
           },
         },
       };
@@ -340,11 +345,16 @@ export class FirebaseNotificationService {
     try {
       const topic = `store_${storeId}`;
 
+      console.log(`📤 Sending push notification to topic: ${topic}`);
+      console.log(`   Title: "${notification.title}"`);
+      console.log(`   Body: "${notification.body}"`);
+      console.log(`   Image: "${notification.imageUrl || 'none'}"`);
+
       const message: admin.messaging.Message = {
         notification: {
           title: notification.title,
           body: notification.body,
-          imageUrl: notification.imageUrl,
+          ...(notification.imageUrl && { imageUrl: notification.imageUrl }),
         },
         data: notification.data || {},
         topic,
@@ -354,6 +364,7 @@ export class FirebaseNotificationService {
           notification: {
             sound: 'default',
             priority: 'high',
+            ...(notification.imageUrl && { imageUrl: notification.imageUrl }),
           },
         },
 
@@ -362,7 +373,11 @@ export class FirebaseNotificationService {
             aps: {
               sound: 'default',
               badge: 1,
+              'mutable-content': 1, // Required for iOS to display images
             },
+          },
+          fcmOptions: {
+            ...(notification.imageUrl && { imageUrl: notification.imageUrl }),
           },
         },
       };
