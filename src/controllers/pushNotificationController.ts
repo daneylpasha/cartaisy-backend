@@ -275,7 +275,10 @@ export const broadcastStoreNotification = async (
 
   try {
     const { storeId } = req.params;
-    const { title, body, imageUrl, data, segment, scheduledFor } = req.body;
+    const { title, body, imageUrl, image, data, segment, scheduledFor } = req.body;
+
+    // Accept both 'image' and 'imageUrl' for compatibility
+    const finalImageUrl = imageUrl || image;
 
     console.log('📢 [PUSH] Step 3: Broadcast request received');
     console.log('📢 [PUSH] Step 3a: Store ID from params:', storeId);
@@ -285,6 +288,8 @@ export const broadcastStoreNotification = async (
     console.log('📢 [PUSH] Step 3e: Body:', body);
     console.log('📢 [PUSH] Step 3f: Firebase initialized:', FirebaseNotificationService.isInitialized());
     console.log('📢 [PUSH] Step 3g: Scheduled for:', scheduledFor || 'immediate');
+    console.log('📢 [PUSH] Step 3h: Image URL:', finalImageUrl || 'none');
+    console.log('📢 [PUSH] Step 3i: Raw image fields - imageUrl:', imageUrl, ', image:', image);
 
     // Validation
     if (!title || !body) {
@@ -346,7 +351,7 @@ export const broadcastStoreNotification = async (
         title,
         body,
         data,
-        imageUrl,
+        imageUrl: finalImageUrl,
         segment: segmentId,
         status: 'scheduled',
         scheduledFor: scheduleDate,
@@ -383,7 +388,7 @@ export const broadcastStoreNotification = async (
       title,
       body,
       data,
-      imageUrl,
+      imageUrl: finalImageUrl,
       segment: segmentId,
       status: 'sending',
       sentBy: (req as any).user?._id,
@@ -448,7 +453,7 @@ export const broadcastStoreNotification = async (
     const result = await FirebaseNotificationService.sendToDevices(deviceTokens, {
       title,
       body,
-      imageUrl,
+      imageUrl: finalImageUrl,
       data: {
         type: 'store_announcement',
         segment: segmentId,
@@ -540,7 +545,10 @@ export const sendTestNotificationAdmin = async (
   res: Response
 ): Promise<void> => {
   try {
-    const { customerId, title, body, imageUrl } = req.body;
+    const { customerId, title, body, imageUrl, image } = req.body;
+
+    // Accept both 'image' and 'imageUrl' for compatibility
+    const finalImageUrl = imageUrl || image;
 
     if (!customerId || !title || !body) {
       res.status(400).json({
@@ -583,7 +591,7 @@ export const sendTestNotificationAdmin = async (
     const result = await FirebaseNotificationService.sendToDevices(deviceTokens, {
       title,
       body,
-      imageUrl,
+      imageUrl: finalImageUrl,
       data: { type: 'test' },
     });
 
