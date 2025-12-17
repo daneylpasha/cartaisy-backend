@@ -422,7 +422,14 @@ export const updateDeviceToken = async (
     const token = req.body.token || req.body.deviceToken;
     const { platform } = req.body;
 
+    console.log('📱 [PUSH] Step 1: Received device token registration');
+    console.log('📱 [PUSH] Step 1a: Customer ID:', customerId);
+    console.log('📱 [PUSH] Step 1b: Token:', token ? token.substring(0, 40) + '...' : 'MISSING');
+    console.log('📱 [PUSH] Step 1c: Platform:', platform);
+    console.log('📱 [PUSH] Step 1d: Token type:', token?.startsWith('ExponentPushToken') ? 'EXPO (WARNING: will not work with Firebase!)' : 'NATIVE_FCM');
+
     if (!customerId) {
+      console.log('📱 [PUSH] ERROR: Customer not authenticated');
       res.status(401).json({
         status: 'error',
         message: 'User not authenticated',
@@ -431,6 +438,7 @@ export const updateDeviceToken = async (
     }
 
     if (!token || !platform) {
+      console.log('📱 [PUSH] ERROR: Missing token or platform');
       res.status(400).json({
         status: 'error',
         message: 'Token and platform are required.',
@@ -439,6 +447,7 @@ export const updateDeviceToken = async (
     }
 
     if (!['ios', 'android'].includes(platform)) {
+      console.log('📱 [PUSH] ERROR: Invalid platform:', platform);
       res.status(400).json({
         status: 'error',
         message: 'Platform must be either ios or android.',
@@ -457,17 +466,21 @@ export const updateDeviceToken = async (
         deviceTokens: {
           token,
           platform,
+          active: true,
+          lastUsed: new Date(),
           createdAt: new Date(),
         },
       },
     });
+
+    console.log('📱 [PUSH] Step 2: Token saved to database successfully');
 
     res.status(200).json({
       status: 'success',
       message: 'Device token updated',
     });
   } catch (error) {
-    console.error('Update device token error:', error);
+    console.error('📱 [PUSH] ERROR: Update device token failed:', error);
     res.status(500).json({
       status: 'error',
       message: 'Failed to update device token. Please try again.',

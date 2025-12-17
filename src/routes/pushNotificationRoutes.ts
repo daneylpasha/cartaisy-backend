@@ -13,6 +13,11 @@ import {
   getAvailableSegments,
   getNotificationHistory,
   getNotificationDetail,
+  getNotificationDiagnostic,
+  getScheduledNotifications,
+  cancelScheduledNotification,
+  sendScheduledNow,
+  updateScheduledNotification,
 } from '../controllers/pushNotificationController';
 
 const router = express.Router();
@@ -45,5 +50,21 @@ router.get('/stores/:storeId/history', requireStoreAdmin as any, getNotification
 
 // Get single notification detail
 router.get('/stores/:storeId/history/:notificationId', requireStoreAdmin as any, getNotificationDetail);
+
+// Diagnostic endpoint for debugging push notification system
+router.get('/stores/:storeId/diagnostic', requireStoreAdmin as any, getNotificationDiagnostic);
+
+// Scheduled notifications endpoints
+// Get all scheduled notifications for a store
+router.get('/stores/:storeId/scheduled', requireStoreAdmin as any, getScheduledNotifications);
+
+// Cancel a scheduled notification
+router.post('/stores/:storeId/scheduled/:notificationId/cancel', requireStoreAdmin as any, cancelScheduledNotification);
+
+// Send a scheduled notification immediately
+router.post('/stores/:storeId/scheduled/:notificationId/send-now', requireStoreAdmin as any, sendScheduledNow);
+
+// Update a scheduled notification
+router.patch('/stores/:storeId/scheduled/:notificationId', requireStoreAdmin as any, updateScheduledNotification);
 
 export default router;

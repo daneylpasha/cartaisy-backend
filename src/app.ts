@@ -8,6 +8,7 @@ import { tenantConfig, apiConfig, derivedConfig } from './config/tenant';
 
 // Firebase initialization
 import { FirebaseNotificationService } from './services/firebaseNotificationService';
+import { notificationScheduler } from './services/notificationScheduler';
 
 // Log Firebase status on startup
 console.log('Firebase Status:', {
@@ -16,6 +17,9 @@ console.log('Firebase Status:', {
     ? 'Push notifications enabled ✅'
     : 'Push notifications disabled (no credentials) ⚠️'
 });
+
+// Start notification scheduler
+notificationScheduler.start();
 
 // Security middleware imports
 import { strictStoreValidation } from './middleware/strictStoreValidation';

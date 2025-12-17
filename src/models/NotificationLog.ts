@@ -16,7 +16,7 @@ export interface INotificationLog extends Document {
   customSegmentCriteria?: Record<string, any>;
 
   // Scheduling
-  status: 'draft' | 'scheduled' | 'sending' | 'sent' | 'partial' | 'failed';
+  status: 'draft' | 'scheduled' | 'sending' | 'sent' | 'partial' | 'failed' | 'cancelled';
   scheduledFor?: Date;
   sentAt?: Date;
 
@@ -83,7 +83,7 @@ const notificationLogSchema = new Schema<INotificationLog>(
     },
     status: {
       type: String,
-      enum: ['draft', 'scheduled', 'sending', 'sent', 'partial', 'failed'],
+      enum: ['draft', 'scheduled', 'sending', 'sent', 'partial', 'failed', 'cancelled'],
       default: 'draft',
       index: true,
     },

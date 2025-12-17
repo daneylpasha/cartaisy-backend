@@ -1,1 +1,2 @@
-npm run prepush
+# Fast type-check only (tsoa spec moved to pre-push)
+npm run type-check

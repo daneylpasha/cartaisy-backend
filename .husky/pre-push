@@ -1,2 +1,3 @@
 #!/bin/sh
-# Disabled - using pre-commit instead
+# Generate OpenAPI spec before pushing (ensures swagger.json is up to date)
+npm run prepush
