@@ -548,6 +548,12 @@ const OrderSchema = new Schema<IOrder>({
     enum: ['stripe', 'shopify', 'paypal', 'cash', 'other'],
     default: 'stripe'
   },
+  // Specific payment method type for analytics (card, apple_pay, google_pay, etc.)
+  paymentMethodType: {
+    type: String,
+    enum: ['card', 'apple_pay', 'google_pay', 'link', 'other'],
+    default: 'card'
+  },
   paymentStatus: {
     type: String,
     enum: ['pending', 'paid', 'failed', 'refunded'],

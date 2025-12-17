@@ -230,6 +230,7 @@ import orderManagementRoutes from './routes/orderManagementRoutes';
 import securityRoutes from './routes/securityRoutes';
 import emailConfigRoutes from './routes/emailConfigRoutes';
 import pushNotificationRoutes from './routes/pushNotificationRoutes';
+import customerManagementRoutes from './routes/customerManagementRoutes';
 
 // API Routes with versioning
 app.use(`/api/${apiConfig.version}/auth`, authRoutes);
@@ -253,6 +254,8 @@ app.use(`/api/${apiConfig.version}/admin`, orderManagementRoutes);
 app.use(`/api/${apiConfig.version}/admin`, securityRoutes);
 // Email configuration routes (admin)
 app.use(`/api/${apiConfig.version}/admin`, emailConfigRoutes);
+// Customer management routes (admin)
+app.use(`/api/${apiConfig.version}/admin`, customerManagementRoutes);
 app.use(`/api/${apiConfig.version}`, carouselRoutes);
 app.use(`/api/${apiConfig.version}`, categoryGridRoutes);
 app.use(`/api/${apiConfig.version}`, calloutBannerRoutes);

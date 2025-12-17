@@ -1373,6 +1373,33 @@ export class CheckoutController extends Controller {
       session.paymentStatus = 'succeeded';
       await session.save();
 
+      // Extract payment method type for analytics (card, apple_pay, google_pay, etc.)
+      let paymentMethodType: 'card' | 'apple_pay' | 'google_pay' | 'link' | 'other' = 'card';
+      if (confirmedIntent.payment_method && typeof confirmedIntent.payment_method === 'string') {
+        // Fetch the payment method to get the type
+        const pm = await stripeService.getPaymentMethod(confirmedIntent.payment_method);
+        if (pm.type === 'card' && pm.card?.wallet) {
+          // Card with wallet - determine which wallet type
+          const walletType = pm.card.wallet.type;
+          if (walletType === 'apple_pay') {
+            paymentMethodType = 'apple_pay';
+          } else if (walletType === 'google_pay') {
+            paymentMethodType = 'google_pay';
+          } else if (walletType === 'link') {
+            paymentMethodType = 'link';
+          } else {
+            paymentMethodType = 'card';
+          }
+        } else if (pm.type === 'link') {
+          paymentMethodType = 'link';
+        } else if (pm.type === 'card') {
+          paymentMethodType = 'card';
+        } else {
+          paymentMethodType = 'other';
+        }
+      }
+      console.log(`💳 Payment method type detected: ${paymentMethodType}`);
+
       // Get shipping address and normalize for Shopify
       const shippingAddress = user.addresses?.[session.shippingAddressId || 0];
 
@@ -1469,6 +1496,8 @@ export class CheckoutController extends Controller {
         shippingCost: session.shippingCost || 0,
         totalPrice: session.grandTotal,
         currency: session.currency,
+        paymentMethod: 'stripe',
+        paymentMethodType: paymentMethodType,
         financial: {
           status: 'paid',
           method: 'stripe',
@@ -1610,10 +1639,12 @@ export class CheckoutController extends Controller {
             // Payment Details - Complete
             payment: {
               method: 'stripe',
+              methodType: paymentMethodType, // 'card', 'apple_pay', 'google_pay', 'link', or 'other'
               status: 'succeeded',
               transactionId: paymentIntent.id,
               cardBrand: stripePaymentMethod.card?.brand || null,
               last4: stripePaymentMethod.card?.last4 || null,
+              wallet: stripePaymentMethod.card?.wallet?.type || null, // e.g., 'apple_pay', 'google_pay'
               amount: orderData.totalPrice,
               currency: orderData.currency || 'USD',
               paidAt: new Date().toISOString(),

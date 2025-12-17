@@ -668,6 +668,7 @@ export interface IOrder extends Document {
   totalPrice: number;
   currency: string;
   paymentMethod?: 'stripe' | 'shopify' | 'paypal' | 'cash' | 'other';
+  paymentMethodType?: 'card' | 'apple_pay' | 'google_pay' | 'link' | 'other';
   paymentStatus?: 'pending' | 'paid' | 'failed' | 'refunded';
   billingAddress: IOrderAddress;
   shippingAddress: IOrderAddress;
