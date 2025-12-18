@@ -18,7 +18,7 @@ export interface IAddress {
 }
 
 export interface ICartItem {
-  productId: mongoose.Types.ObjectId;
+  productId: mongoose.Types.ObjectId | string;  // Can be MongoDB ObjectId or Shopify product ID
   variantId?: string;
   quantity: number;
   addedAt: Date;
@@ -118,7 +118,7 @@ const addressSchema = new Schema<IAddress>(
 
 const cartItemSchema = new Schema<ICartItem>(
   {
-    productId: { type: Schema.Types.ObjectId, ref: 'Product', required: true },
+    productId: { type: Schema.Types.Mixed, required: true },  // Accept both ObjectId and String (Shopify IDs)
     variantId: { type: String },
     quantity: { type: Number, required: true, min: 1 },
     addedAt: { type: Date, default: Date.now },
