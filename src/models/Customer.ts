@@ -79,6 +79,7 @@ export interface ICustomer extends Document {
   orderCount: number;
   totalSpent: number;
   stripeCustomerId?: string;
+  shopifyCartId?: string;  // Shopify cart ID for cart persistence across sessions
   isActive: boolean;
   isVerified: boolean;
   verificationToken?: string;
@@ -208,6 +209,10 @@ const customerSchema = new Schema<ICustomer>(
     stripeCustomerId: {
       type: String,
       sparse: true,
+    },
+    shopifyCartId: {
+      type: String,
+      required: false,
     },
     isActive: {
       type: Boolean,

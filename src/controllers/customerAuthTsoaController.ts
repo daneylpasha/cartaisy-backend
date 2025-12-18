@@ -36,6 +36,7 @@ interface CustomerData {
   isActive: boolean;
   createdAt: Date;
   lastLoginAt?: Date;
+  shopifyCartId?: string;  // Shopify cart ID for cart persistence
 }
 
 /**
@@ -58,6 +59,7 @@ const formatCustomerResponse = (customer: ICustomer): CustomerData => {
     isActive: customer.isActive,
     createdAt: customer.createdAt,
     lastLoginAt: customer.lastLoginAt,
+    shopifyCartId: customer.shopifyCartId,  // Include saved Shopify cart ID
   };
 };
 

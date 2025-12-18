@@ -1,6 +1,7 @@
-import { Get, Post, Put, Delete, Route, Tags, Response, Path, Body, Security, Request, Query } from 'tsoa';
+import { Get, Post, Put, Delete, Route, Tags, Response, Path, Body, Security, Request, Query, Header } from 'tsoa';
 import { Controller } from '@tsoa/runtime';
 import shopifyStorefront from '../services/shopifyStorefrontService';
+import Customer from '../models/Customer';
 import {
   CartResponse,
   CartCreateRequest,
@@ -10,6 +11,11 @@ import {
   CartData,
   CartLineItem,
 } from '../types/api/cart';
+
+interface SaveCartResponse {
+  status: string;
+  message: string;
+}
 
 /**
  * Cart Controller
@@ -430,6 +436,87 @@ export class CartController extends Controller {
       }
 
       throw error;
+    }
+  }
+
+  /**
+   * Save Shopify cart ID to customer profile for persistence across sessions
+   * Call this after creating/updating cart to enable cart recovery on next login
+   * @summary Save cart to customer profile
+   * @param cartId - Shopify cart ID (URL encoded)
+   * @param request - Request object with authenticated user
+   */
+  @Post('{cartId}/save')
+  @Security('jwt')
+  @Response<SaveCartResponse>(200, 'Cart saved successfully')
+  @Response<SaveCartResponse>(401, 'Unauthorized')
+  @Response<SaveCartResponse>(500, 'Internal Server Error')
+  public async saveCartToProfile(
+    @Path() cartId: string,
+    @Request() request: any
+  ): Promise<SaveCartResponse> {
+    try {
+      const customerId = request.user?.id || request.user?._id;
+
+      if (!customerId) {
+        this.setStatus(401);
+        return { status: 'error', message: 'Authentication required' };
+      }
+
+      // Decode the cartId (it comes URL encoded)
+      const decodedCartId = decodeURIComponent(cartId);
+
+      // Update customer's shopifyCartId
+      await Customer.findByIdAndUpdate(
+        customerId,
+        { shopifyCartId: decodedCartId },
+        { new: true }
+      );
+
+      console.log(`[CartController] Saved cartId for customer ${customerId}: ${decodedCartId}`);
+
+      return { status: 'success', message: 'Cart saved to profile' };
+    } catch (error) {
+      console.error('[CartController] Error saving cart to profile:', error);
+      this.setStatus(500);
+      return { status: 'error', message: 'Failed to save cart' };
+    }
+  }
+
+  /**
+   * Clear saved cart ID from customer profile
+   * Call this after checkout completion to remove stale cart reference
+   * @summary Clear saved cart from profile
+   * @param request - Request object with authenticated user
+   */
+  @Delete('saved')
+  @Security('jwt')
+  @Response<SaveCartResponse>(200, 'Saved cart cleared')
+  @Response<SaveCartResponse>(401, 'Unauthorized')
+  @Response<SaveCartResponse>(500, 'Internal Server Error')
+  public async clearSavedCart(
+    @Request() request: any
+  ): Promise<SaveCartResponse> {
+    try {
+      const customerId = request.user?.id || request.user?._id;
+
+      if (!customerId) {
+        this.setStatus(401);
+        return { status: 'error', message: 'Authentication required' };
+      }
+
+      await Customer.findByIdAndUpdate(
+        customerId,
+        { $unset: { shopifyCartId: 1 } }
+      );
+
+      console.log(`[CartController] Cleared saved cartId for customer ${customerId}`);
+
+      return { status: 'success', message: 'Saved cart cleared' };
+    } catch (error) {
+      console.error('[CartController] Error clearing saved cart:', error);
+      this.setStatus(500);
+      return { status: 'error', message: 'Failed to clear saved cart' };
     }
   }
 

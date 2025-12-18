@@ -1557,6 +1557,14 @@ export class CheckoutController extends Controller {
       session.completeStep(3);
       await session.save();
 
+      // Clear saved Shopify cart ID from customer profile after successful checkout
+      // This prevents stale cart references on next login
+      if (!user.isUser) {
+        // Customer model - clear shopifyCartId
+        await Customer.findByIdAndUpdate(userId, { $unset: { shopifyCartId: 1 } });
+        console.log(`[Checkout] Cleared saved cartId for customer ${userId} after successful order`);
+      }
+
       // Get payment method details from Stripe for complete response
       const stripePaymentMethod = await stripeService.getPaymentMethod((session as any).paymentMethodId);
 

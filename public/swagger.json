@@ -2194,6 +2194,9 @@
 					"lastLoginAt": {
 						"type": "string",
 						"format": "date-time"
+					},
+					"shopifyCartId": {
+						"type": "string"
 					}
 				},
 				"required": [
@@ -3880,6 +3883,22 @@
 				},
 				"required": [
 					"success",
+					"message"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"SaveCartResponse": {
+				"properties": {
+					"status": {
+						"type": "string"
+					},
+					"message": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"status",
 					"message"
 				],
 				"type": "object",
@@ -8223,6 +8242,112 @@
 						}
 					}
 				]
+			}
+		},
+		"/cart/{cartId}/save": {
+			"post": {
+				"operationId": "SaveCartToProfile",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SaveCartResponse"
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "Unauthorized",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SaveCartResponse"
+								}
+							}
+						}
+					},
+					"500": {
+						"description": "Internal Server Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SaveCartResponse"
+								}
+							}
+						}
+					}
+				},
+				"description": "Save Shopify cart ID to customer profile for persistence across sessions\nCall this after creating/updating cart to enable cart recovery on next login",
+				"summary": "Save cart to customer profile",
+				"tags": [
+					"Cart"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": [
+					{
+						"description": "- Shopify cart ID (URL encoded)",
+						"in": "path",
+						"name": "cartId",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				]
+			}
+		},
+		"/cart/saved": {
+			"delete": {
+				"operationId": "ClearSavedCart",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SaveCartResponse"
+								}
+							}
+						}
+					},
+					"401": {
+						"description": "Unauthorized",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SaveCartResponse"
+								}
+							}
+						}
+					},
+					"500": {
+						"description": "Internal Server Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SaveCartResponse"
+								}
+							}
+						}
+					}
+				},
+				"description": "Clear saved cart ID from customer profile\nCall this after checkout completion to remove stale cart reference",
+				"summary": "Clear saved cart from profile",
+				"tags": [
+					"Cart"
+				],
+				"security": [
+					{
+						"jwt": []
+					}
+				],
+				"parameters": []
 			}
 		},
 		"/auth/register": {
