@@ -6,6 +6,7 @@ import Order from '../models/Order';
 import ProductReview from '../models/ProductReview';
 import shopifyAnalyticsService from '../services/shopifyAnalyticsService';
 import appAnalyticsService from '../services/appAnalyticsService';
+import * as sessionTrackingService from '../services/sessionTrackingService';
 
 export const getDashboardAnalytics = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -1188,5 +1189,154 @@ export const getUserJourney = async (req: Request, res: Response): Promise<void>
   } catch (error) {
     console.error('Error getting user journey:', error);
     res.status(500).json({ success: false, message: 'Failed to get user journey' });
+  }
+};
+
+// =============================================================================
+// SESSION TRACKING (DAU/MAU)
+// =============================================================================
+
+/**
+ * Record app session event (app_open, app_close, app_backgrounded)
+ * POST /api/v1/customer/analytics/session
+ *
+ * Rate limited: Max 1 app_open per device per 5 minutes
+ */
+export const recordSession = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const storeId = (req as any).storeId;
+    const customerId = (req as any).customerId; // Can be undefined for guests
+
+    const { event, deviceId, timestamp, sessionId, platform, appVersion } = req.body;
+
+    // Validate required fields
+    if (!event || !deviceId || !timestamp || !platform || !appVersion) {
+      res.status(400).json({
+        success: false,
+        error: 'Missing required fields: event, deviceId, timestamp, platform, appVersion',
+      });
+      return;
+    }
+
+    // Validate event type
+    if (!['app_open', 'app_close', 'app_backgrounded'].includes(event)) {
+      res.status(400).json({
+        success: false,
+        error: 'Invalid event type. Must be: app_open, app_close, or app_backgrounded',
+      });
+      return;
+    }
+
+    // Validate platform
+    if (!['ios', 'android'].includes(platform)) {
+      res.status(400).json({
+        success: false,
+        error: 'Invalid platform. Must be: ios or android',
+      });
+      return;
+    }
+
+    const result = await sessionTrackingService.recordSessionEvent(storeId, customerId, {
+      event,
+      deviceId,
+      timestamp,
+      sessionId,
+      platform,
+      appVersion,
+    });
+
+    if (!result.success) {
+      const statusCode = result.retryAfter ? 429 : 400;
+      res.status(statusCode).json({
+        success: false,
+        error: result.error,
+        retryAfter: result.retryAfter,
+      });
+      return;
+    }
+
+    res.json({
+      success: true,
+      data: {
+        sessionId: result.sessionId,
+      },
+    });
+  } catch (error: any) {
+    console.error('Error recording session:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to record session',
+    });
+  }
+};
+
+/**
+ * Get app engagement metrics (DAU/MAU) for admin dashboard
+ * GET /api/v1/admin/stores/:storeId/analytics/app-engagement
+ */
+export const getAppEngagementMetrics = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { storeId } = req.params;
+    const {
+      startDate,
+      endDate,
+      granularity = 'day',
+    } = req.query;
+
+    // Default to last 30 days if no dates provided
+    const end = endDate ? new Date(endDate as string) : new Date();
+    const start = startDate
+      ? new Date(startDate as string)
+      : new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    // Validate granularity
+    if (!['day', 'week', 'month'].includes(granularity as string)) {
+      res.status(400).json({
+        success: false,
+        error: 'Invalid granularity. Must be: day, week, or month',
+      });
+      return;
+    }
+
+    const data = await sessionTrackingService.getAppEngagement(
+      storeId,
+      start,
+      end,
+      granularity as 'day' | 'week' | 'month'
+    );
+
+    res.json({
+      success: true,
+      data,
+    });
+  } catch (error: any) {
+    console.error('Error getting app engagement metrics:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to get app engagement metrics',
+    });
+  }
+};
+
+/**
+ * Get quick DAU/MAU stats for dashboard widget
+ * GET /api/v1/admin/stores/:storeId/analytics/app-stats
+ */
+export const getAppQuickStats = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { storeId } = req.params;
+
+    const stats = await sessionTrackingService.getQuickStats(storeId);
+
+    res.json({
+      success: true,
+      data: stats,
+    });
+  } catch (error: any) {
+    console.error('Error getting app quick stats:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to get app stats',
+    });
   }
 };

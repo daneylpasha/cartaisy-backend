@@ -94,10 +94,17 @@ class ShopifyStorefrontService {
 
   /**
    * Get a collection by its ID with products
+   * @param collectionId - Shopify collection ID
+   * @param productsLimit - Number of products to fetch
+   * @param countryCode - ISO country code for multi-currency pricing (e.g., 'US', 'GB', 'CA')
    */
-  async getCollectionById(collectionId: string, productsLimit: number = 20): Promise<ShopifyCollectionByIdResponse> {
+  async getCollectionById(
+    collectionId: string,
+    productsLimit: number = 20,
+    countryCode?: string
+  ): Promise<ShopifyCollectionByIdResponse> {
     const query = `
-      query getCollectionById($id: ID!, $productsLimit: Int!) {
+      query getCollectionById($id: ID!, $productsLimit: Int!, $country: CountryCode) @inContext(country: $country) {
         collection(id: $id) {
           id
           title
@@ -179,11 +186,14 @@ class ShopifyStorefrontService {
     return this.query<ShopifyCollectionByIdResponse>(query, {
       id: formattedId,
       productsLimit,
+      country: countryCode || null,
     });
   }
 
   /**
    * Get collection products with pagination, filtering, and sorting
+   * @param collectionId - Shopify collection ID
+   * @param options - Pagination, sorting, and filtering options including countryCode for multi-currency
    */
   async getCollectionProducts(
     collectionId: string,
@@ -193,12 +203,13 @@ class ShopifyStorefrontService {
       sortKey?: string;
       reverse?: boolean;
       filters?: any[];
+      countryCode?: string;
     } = {}
   ): Promise<any> {
-    const { limit = 20, cursor, sortKey = 'COLLECTION_DEFAULT', reverse = false, filters = [] } = options;
+    const { limit = 20, cursor, sortKey = 'COLLECTION_DEFAULT', reverse = false, filters = [], countryCode } = options;
 
     const query = `
-      query getCollectionProducts($id: ID!, $limit: Int!, $cursor: String, $sortKey: ProductCollectionSortKeys, $reverse: Boolean, $filters: [ProductFilter!]) {
+      query getCollectionProducts($id: ID!, $limit: Int!, $cursor: String, $sortKey: ProductCollectionSortKeys, $reverse: Boolean, $filters: [ProductFilter!], $country: CountryCode) @inContext(country: $country) {
         collection(id: $id) {
           id
           title
@@ -285,19 +296,25 @@ class ShopifyStorefrontService {
       sortKey,
       reverse,
       filters: filters.length > 0 ? filters : null,
+      country: countryCode || null,
     });
   }
 
   /**
    * Get products with optional filtering
+   * @param limit - Number of products to fetch
+   * @param query - Filter query string
+   * @param sortKey - Sort key for ordering
+   * @param countryCode - ISO country code for multi-currency pricing (e.g., 'US', 'GB', 'CA')
    */
   async getProducts(
     limit: number = 20,
     query?: string,
-    sortKey?: string
+    sortKey?: string,
+    countryCode?: string
   ): Promise<ShopifyProductsQueryResponse> {
     const graphqlQuery = `
-      query getProducts($limit: Int!, $query: String, $sortKey: ProductSortKeys) {
+      query getProducts($limit: Int!, $query: String, $sortKey: ProductSortKeys, $country: CountryCode) @inContext(country: $country) {
         products(first: $limit, query: $query, sortKey: $sortKey) {
           edges {
             node {
@@ -360,6 +377,7 @@ class ShopifyStorefrontService {
       limit,
       query,
       sortKey,
+      country: countryCode || null,
     });
   }
 
@@ -393,15 +411,17 @@ class ShopifyStorefrontService {
   /**
    * Get a single product by ID with full details including variants
    * Note: Metafields are fetched separately via Admin API
+   * @param productId - Shopify product ID
+   * @param countryCode - ISO country code for multi-currency pricing (e.g., 'US', 'GB', 'CA')
    */
-  async getProductById(productId: string): Promise<any> {
+  async getProductById(productId: string, countryCode?: string): Promise<any> {
     // Format ID to Shopify GID format if needed
     const formattedId = productId.startsWith('gid://shopify/Product/')
       ? productId
       : `gid://shopify/Product/${productId}`;
 
     const query = `
-      query getProductById($id: ID!) {
+      query getProductById($id: ID!, $country: CountryCode) @inContext(country: $country) {
         product(id: $id) {
           id
           title
@@ -467,7 +487,7 @@ class ShopifyStorefrontService {
       }
     `;
 
-    return this.query<any>(query, { id: formattedId });
+    return this.query<any>(query, { id: formattedId, country: countryCode || null });
   }
 
   /**
@@ -586,10 +606,15 @@ class ShopifyStorefrontService {
 
   /**
    * Create a new cart with optional items
+   * @param items - Optional array of items to add to cart
+   * @param countryCode - ISO country code for multi-currency pricing (e.g., 'US', 'GB', 'CA')
    */
-  async createCart(items?: Array<{ merchandiseId: string; quantity: number }>): Promise<any> {
+  async createCart(
+    items?: Array<{ merchandiseId: string; quantity: number }>,
+    countryCode?: string
+  ): Promise<any> {
     const query = `
-      mutation cartCreate($input: CartInput!) {
+      mutation cartCreate($input: CartInput!, $country: CountryCode) @inContext(country: $country) {
         cartCreate(input: $input) {
           cart {
             id
@@ -650,15 +675,24 @@ class ShopifyStorefrontService {
       }));
     }
 
-    return this.query<any>(query, { input });
+    // Add buyerIdentity with countryCode if provided
+    if (countryCode) {
+      input.buyerIdentity = {
+        countryCode,
+      };
+    }
+
+    return this.query<any>(query, { input, country: countryCode || null });
   }
 
   /**
    * Get cart by ID
+   * @param cartId - Shopify cart ID
+   * @param countryCode - ISO country code for multi-currency pricing (e.g., 'US', 'GB', 'CA')
    */
-  async getCart(cartId: string): Promise<any> {
+  async getCart(cartId: string, countryCode?: string): Promise<any> {
     const query = `
-      query getCart($cartId: ID!) {
+      query getCart($cartId: ID!, $country: CountryCode) @inContext(country: $country) {
         cart(id: $cartId) {
           id
           lines(first: 100) {
@@ -705,18 +739,22 @@ class ShopifyStorefrontService {
       }
     `;
 
-    return this.query<any>(query, { cartId });
+    return this.query<any>(query, { cartId, country: countryCode || null });
   }
 
   /**
    * Add items to cart
+   * @param cartId - Shopify cart ID
+   * @param lines - Array of items to add
+   * @param countryCode - ISO country code for multi-currency pricing (e.g., 'US', 'GB', 'CA')
    */
   async addCartLines(
     cartId: string,
-    lines: Array<{ merchandiseId: string; quantity: number }>
+    lines: Array<{ merchandiseId: string; quantity: number }>,
+    countryCode?: string
   ): Promise<any> {
     const query = `
-      mutation cartLinesAdd($cartId: ID!, $lines: [CartLineInput!]!) {
+      mutation cartLinesAdd($cartId: ID!, $lines: [CartLineInput!]!, $country: CountryCode) @inContext(country: $country) {
         cartLinesAdd(cartId: $cartId, lines: $lines) {
           cart {
             id
@@ -769,18 +807,22 @@ class ShopifyStorefrontService {
       }
     `;
 
-    return this.query<any>(query, { cartId, lines });
+    return this.query<any>(query, { cartId, lines, country: countryCode || null });
   }
 
   /**
    * Update cart line quantity
+   * @param cartId - Shopify cart ID
+   * @param lines - Array of line items to update
+   * @param countryCode - ISO country code for multi-currency pricing (e.g., 'US', 'GB', 'CA')
    */
   async updateCartLines(
     cartId: string,
-    lines: Array<{ id: string; quantity: number }>
+    lines: Array<{ id: string; quantity: number }>,
+    countryCode?: string
   ): Promise<any> {
     const query = `
-      mutation cartLinesUpdate($cartId: ID!, $lines: [CartLineUpdateInput!]!) {
+      mutation cartLinesUpdate($cartId: ID!, $lines: [CartLineUpdateInput!]!, $country: CountryCode) @inContext(country: $country) {
         cartLinesUpdate(cartId: $cartId, lines: $lines) {
           cart {
             id
@@ -833,15 +875,18 @@ class ShopifyStorefrontService {
       }
     `;
 
-    return this.query<any>(query, { cartId, lines });
+    return this.query<any>(query, { cartId, lines, country: countryCode || null });
   }
 
   /**
    * Remove lines from cart
+   * @param cartId - Shopify cart ID
+   * @param lineIds - Array of line IDs to remove
+   * @param countryCode - ISO country code for multi-currency pricing (e.g., 'US', 'GB', 'CA')
    */
-  async removeCartLines(cartId: string, lineIds: string[]): Promise<any> {
+  async removeCartLines(cartId: string, lineIds: string[], countryCode?: string): Promise<any> {
     const query = `
-      mutation cartLinesRemove($cartId: ID!, $lineIds: [ID!]!) {
+      mutation cartLinesRemove($cartId: ID!, $lineIds: [ID!]!, $country: CountryCode) @inContext(country: $country) {
         cartLinesRemove(cartId: $cartId, lineIds: $lineIds) {
           cart {
             id
@@ -894,17 +939,22 @@ class ShopifyStorefrontService {
       }
     `;
 
-    return this.query<any>(query, { cartId, lineIds });
+    return this.query<any>(query, { cartId, lineIds, country: countryCode || null });
   }
 
   /**
    * Associate cart with customer (when user logs in)
-   * @param cartId Cart ID
-   * @param customerAccessToken Shopify customer access token
+   * @param cartId - Cart ID
+   * @param customerAccessToken - Shopify customer access token
+   * @param countryCode - ISO country code for multi-currency pricing (e.g., 'US', 'GB', 'CA')
    */
-  async associateCartWithCustomer(cartId: string, customerAccessToken: string): Promise<any> {
+  async associateCartWithCustomer(
+    cartId: string,
+    customerAccessToken: string,
+    countryCode?: string
+  ): Promise<any> {
     const query = `
-      mutation cartBuyerIdentityUpdate($cartId: ID!, $buyerIdentity: CartBuyerIdentityInput!) {
+      mutation cartBuyerIdentityUpdate($cartId: ID!, $buyerIdentity: CartBuyerIdentityInput!, $country: CountryCode) @inContext(country: $country) {
         cartBuyerIdentityUpdate(cartId: $cartId, buyerIdentity: $buyerIdentity) {
           cart {
             id
@@ -972,6 +1022,7 @@ class ShopifyStorefrontService {
       buyerIdentity: {
         customerAccessToken,
       },
+      country: countryCode || null,
     });
   }
 
@@ -979,11 +1030,16 @@ class ShopifyStorefrontService {
    * Predictive Search - for autocomplete/suggestions
    * @param query - Search query string
    * @param limit - Number of results per type (default: 10)
+   * @param countryCode - ISO country code for multi-currency pricing (e.g., 'US', 'GB', 'CA')
    * @returns Shopify predictive search response with products and collections
    */
-  async predictiveSearch(query: string, limit: number = 10): Promise<ShopifyPredictiveSearchResponse> {
+  async predictiveSearch(
+    searchQuery: string,
+    limit: number = 10,
+    countryCode?: string
+  ): Promise<ShopifyPredictiveSearchResponse> {
     const graphqlQuery = `
-      query PredictiveSearch($query: String!, $limit: Int!) {
+      query PredictiveSearch($query: String!, $limit: Int!, $country: CountryCode) @inContext(country: $country) {
         predictiveSearch(
           query: $query
           limit: $limit
@@ -1027,14 +1083,18 @@ class ShopifyStorefrontService {
       }
     `;
 
-    return this.query<ShopifyPredictiveSearchResponse>(graphqlQuery, { query, limit });
+    return this.query<ShopifyPredictiveSearchResponse>(graphqlQuery, {
+      query: searchQuery,
+      limit,
+      country: countryCode || null,
+    });
   }
 
   /**
    * Full Product Search - for search results page
    * Per Shopify docs: https://shopify.dev/docs/api/storefront/latest/queries/products
    * @param query - Search query string (supports Shopify search syntax)
-   * @param options - Pagination and sorting options
+   * @param options - Pagination, sorting, and countryCode for multi-currency
    * @returns Paginated product search results
    */
   async searchProducts(
@@ -1044,12 +1104,13 @@ class ShopifyStorefrontService {
       cursor?: string;
       sortKey?: SearchSortKey;
       reverse?: boolean;
+      countryCode?: string;
     } = {}
   ): Promise<ShopifySearchProductsResponse> {
-    const { limit = 20, cursor, sortKey = 'RELEVANCE', reverse = false } = options;
+    const { limit = 20, cursor, sortKey = 'RELEVANCE', reverse = false, countryCode } = options;
 
     const graphqlQuery = `
-      query SearchProducts($query: String!, $limit: Int!, $cursor: String, $sortKey: ProductSortKeys!, $reverse: Boolean!) {
+      query SearchProducts($query: String!, $limit: Int!, $cursor: String, $sortKey: ProductSortKeys!, $reverse: Boolean!, $country: CountryCode) @inContext(country: $country) {
         products(first: $limit, after: $cursor, query: $query, sortKey: $sortKey, reverse: $reverse) {
           edges {
             node {
@@ -1123,6 +1184,7 @@ class ShopifyStorefrontService {
       cursor,
       sortKey,
       reverse,
+      country: countryCode || null,
     });
   }
 
@@ -1149,8 +1211,9 @@ class ShopifyStorefrontService {
   ): Promise<any> {
     // Use cartBuyerIdentityUpdate with full delivery address
     // Shopify needs complete address (city, province, zip, country) to calculate accurate shipping rates
+    // The country from the address is used for @inContext to get localized prices
     const query = `
-      mutation cartBuyerIdentityUpdate($cartId: ID!, $buyerIdentity: CartBuyerIdentityInput!) {
+      mutation cartBuyerIdentityUpdate($cartId: ID!, $buyerIdentity: CartBuyerIdentityInput!, $country: CountryCode) @inContext(country: $country) {
         cartBuyerIdentityUpdate(cartId: $cartId, buyerIdentity: $buyerIdentity) {
           cart {
             id
@@ -1236,6 +1299,7 @@ class ShopifyStorefrontService {
           },
         ],
       },
+      country: deliveryAddress.country || null,
     });
   }
 
@@ -1244,11 +1308,12 @@ class ShopifyStorefrontService {
    * Shopify supports stackable discount codes as of 2025-01 API
    * @param cartId - Shopify cart ID
    * @param discountCodes - Array of discount codes to apply
+   * @param countryCode - ISO country code for multi-currency pricing (e.g., 'US', 'GB', 'CA')
    * @returns Cart with applied discounts
    */
-  async applyDiscountCodes(cartId: string, discountCodes: string[]): Promise<any> {
+  async applyDiscountCodes(cartId: string, discountCodes: string[], countryCode?: string): Promise<any> {
     const query = `
-      mutation cartDiscountCodesUpdate($cartId: ID!, $discountCodes: [String!]) {
+      mutation cartDiscountCodesUpdate($cartId: ID!, $discountCodes: [String!], $country: CountryCode) @inContext(country: $country) {
         cartDiscountCodesUpdate(cartId: $cartId, discountCodes: $discountCodes) {
           cart {
             id
@@ -1316,7 +1381,7 @@ class ShopifyStorefrontService {
       }
     `;
 
-    return this.query<any>(query, { cartId, discountCodes });
+    return this.query<any>(query, { cartId, discountCodes, country: countryCode || null });
   }
 
   /**

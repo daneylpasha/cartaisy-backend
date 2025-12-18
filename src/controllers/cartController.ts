@@ -1,4 +1,4 @@
-import { Get, Post, Put, Delete, Route, Tags, Response, Path, Body, Security, Request } from 'tsoa';
+import { Get, Post, Put, Delete, Route, Tags, Response, Path, Body, Security, Request, Query } from 'tsoa';
 import { Controller } from '@tsoa/runtime';
 import shopifyStorefront from '../services/shopifyStorefrontService';
 import {
@@ -21,11 +21,15 @@ export class CartController extends Controller {
   /**
    * Create a new shopping cart
    * @param requestBody - Optional initial items to add to cart
+   * @param country - ISO 3166-1 alpha-2 country code for multi-currency pricing (e.g., 'US', 'GB', 'CA')
    */
   @Post('create')
   @Response(400, 'Bad Request')
   @Response(500, 'Internal Server Error')
-  public async createCart(@Body() requestBody?: CartCreateRequest): Promise<CartResponse> {
+  public async createCart(
+    @Body() requestBody?: CartCreateRequest,
+    @Query() country?: string
+  ): Promise<CartResponse> {
     try {
       if (!shopifyStorefront.isConfigured()) {
         this.setStatus(500);
@@ -33,7 +37,7 @@ export class CartController extends Controller {
       }
 
       const items = requestBody?.items;
-      const shopifyResponse = await shopifyStorefront.createCart(items);
+      const shopifyResponse = await shopifyStorefront.createCart(items, country);
 
       if (shopifyResponse?.data?.cartCreate?.userErrors?.length > 0) {
         this.setStatus(400);
@@ -72,18 +76,22 @@ export class CartController extends Controller {
   /**
    * Get cart by ID
    * @param cartId - Shopify cart ID
+   * @param country - ISO 3166-1 alpha-2 country code for multi-currency pricing (e.g., 'US', 'GB', 'CA')
    */
   @Get('{cartId}')
   @Response(404, 'Cart not found')
   @Response(500, 'Internal Server Error')
-  public async getCart(@Path() cartId: string): Promise<CartResponse> {
+  public async getCart(
+    @Path() cartId: string,
+    @Query() country?: string
+  ): Promise<CartResponse> {
     try {
       if (!shopifyStorefront.isConfigured()) {
         this.setStatus(500);
         throw new Error('Shopify not configured');
       }
 
-      const shopifyResponse = await shopifyStorefront.getCart(cartId);
+      const shopifyResponse = await shopifyStorefront.getCart(cartId, country);
 
       if (!shopifyResponse?.data?.cart) {
         this.setStatus(404);

@@ -2081,6 +2081,7 @@ export function RegisterRoutes(app: Router) {
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsProductDetailController_getProductDetail: Record<string, TsoaRoute.ParameterSchema> = {
                 productId: {"in":"path","name":"productId","required":true,"dataType":"string"},
+                country: {"in":"query","name":"country","dataType":"string"},
         };
         app.get('/api/v1/products/:productId',
             ...(fetchMiddlewares<RequestHandler>(ProductDetailController)),
@@ -3132,6 +3133,7 @@ export function RegisterRoutes(app: Router) {
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsCartController_createCart: Record<string, TsoaRoute.ParameterSchema> = {
                 requestBody: {"in":"body","name":"requestBody","ref":"CartCreateRequest"},
+                country: {"in":"query","name":"country","dataType":"string"},
         };
         app.post('/api/v1/cart/create',
             ...(fetchMiddlewares<RequestHandler>(CartController)),
@@ -3162,6 +3164,7 @@ export function RegisterRoutes(app: Router) {
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsCartController_getCart: Record<string, TsoaRoute.ParameterSchema> = {
                 cartId: {"in":"path","name":"cartId","required":true,"dataType":"string"},
+                country: {"in":"query","name":"country","dataType":"string"},
         };
         app.get('/api/v1/cart/:cartId',
             ...(fetchMiddlewares<RequestHandler>(CartController)),

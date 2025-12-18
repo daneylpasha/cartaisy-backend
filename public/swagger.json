@@ -5982,6 +5982,15 @@
 						"schema": {
 							"type": "string"
 						}
+					},
+					{
+						"description": "- ISO 3166-1 alpha-2 country code for multi-currency pricing (e.g., 'US', 'GB', 'CA')",
+						"in": "query",
+						"name": "country",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
 					}
 				]
 			}
@@ -7897,7 +7906,17 @@
 					"Cart"
 				],
 				"security": [],
-				"parameters": [],
+				"parameters": [
+					{
+						"description": "- ISO 3166-1 alpha-2 country code for multi-currency pricing (e.g., 'US', 'GB', 'CA')",
+						"in": "query",
+						"name": "country",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
 				"requestBody": {
 					"description": "- Optional initial items to add to cart",
 					"required": false,
@@ -7944,6 +7963,15 @@
 						"in": "path",
 						"name": "cartId",
 						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"description": "- ISO 3166-1 alpha-2 country code for multi-currency pricing (e.g., 'US', 'GB', 'CA')",
+						"in": "query",
+						"name": "country",
+						"required": false,
 						"schema": {
 							"type": "string"
 						}

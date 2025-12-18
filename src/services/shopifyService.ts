@@ -4,15 +4,21 @@ import Product from '../models/Product';
 import User from '../models/User';
 import Order from '../models/Order';
 import crypto from 'crypto';
-import { 
-  IShopifyProduct, 
-  IShopifyCustomer, 
+import {
+  IShopifyProduct,
+  IShopifyCustomer,
   IAddress,
   IShippingInfo,
   IOrderLineItem,
-  IMobileStatusHistory 
+  IMobileStatusHistory
 } from '../types/index';
 import { ApiError } from '../utils/errors';
+
+/**
+ * Default currency for new user preferences.
+ * Configurable via STORE_CURRENCY environment variable.
+ */
+const DEFAULT_STORE_CURRENCY = process.env.STORE_CURRENCY || 'USD';
 
 interface ShopifyResponse<T = any> {
   body: T;
@@ -347,7 +353,7 @@ export const syncCustomers = async (): Promise<SyncResult> => {
             // Preserve existing preferences or set defaults
             preferences: existingUser?.preferences || {
               notifications: { email: true, push: true, sms: false },
-              currency: 'USD',
+              currency: DEFAULT_STORE_CURRENCY,
               language: 'en',
               wishlistItemsCount: 0
             }

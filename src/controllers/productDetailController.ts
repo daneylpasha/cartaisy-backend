@@ -1,4 +1,4 @@
-import { Get, Route, Tags, Response, Path } from 'tsoa';
+import { Get, Route, Tags, Response, Path, Query } from 'tsoa';
 import { Controller } from '@tsoa/runtime';
 import shopifyStorefront from '../services/shopifyStorefrontService';
 import ProductMetrics from '../models/ProductMetrics';
@@ -21,12 +21,14 @@ export class ProductDetailController extends Controller {
   /**
    * Get detailed product information by ID
    * @param productId - Shopify product ID (numeric or GID format)
+   * @param country - ISO 3166-1 alpha-2 country code for multi-currency pricing (e.g., 'US', 'GB', 'CA')
    */
   @Get('{productId}')
   @Response(404, 'Product not found')
   @Response(500, 'Internal Server Error')
   public async getProductDetail(
-    @Path() productId: string
+    @Path() productId: string,
+    @Query() country?: string
   ): Promise<ProductDetailResponse> {
     try {
       if (!shopifyStorefront.isConfigured()) {
@@ -34,8 +36,8 @@ export class ProductDetailController extends Controller {
         throw new Error('Shopify not configured');
       }
 
-      // Fetch product from Shopify
-      const shopifyResponse = await shopifyStorefront.getProductById(productId);
+      // Fetch product from Shopify with country context for multi-currency pricing
+      const shopifyResponse = await shopifyStorefront.getProductById(productId, country);
 
       if (!shopifyResponse?.data?.product) {
         this.setStatus(404);

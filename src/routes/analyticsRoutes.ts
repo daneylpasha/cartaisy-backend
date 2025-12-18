@@ -46,8 +46,20 @@ router.get('/inventory/low-stock', authenticateAdmin as any, analyticsController
 router.get('/inventory/analytics', authenticateAdmin as any, analyticsController.getInventoryAnalytics);
 
 // ============================================
+// SESSION TRACKING (DAU/MAU) - PUBLIC
+// ============================================
+
+// Record session event (app_open, app_close, app_backgrounded)
+// Rate limited: Max 1 app_open per device per 5 minutes
+router.post('/session', analyticsController.recordSession);
+
+// ============================================
 // APP ANALYTICS (Admin only)
 // ============================================
+
+// DAU/MAU Engagement Metrics
+router.get('/app-engagement', authenticateAdmin as any, analyticsController.getAppEngagementMetrics);
+router.get('/app-stats', authenticateAdmin as any, analyticsController.getAppQuickStats);
 
 // Engagement
 router.get('/app/engagement', authenticateAdmin as any, analyticsController.getEngagementMetrics);

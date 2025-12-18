@@ -7,6 +7,13 @@ import Product from '../models/Product';
 import shopifyStorefront from '../services/shopifyStorefrontService';
 import stripeService from '../services/stripeService';
 import { normalizeAddressForShopify } from '../utils/addressHelper';
+import { getCurrencyForCountry } from '../utils/currency';
+
+/**
+ * Get the default currency based on store configuration.
+ * This is used as a last resort fallback when no currency data is available.
+ */
+const DEFAULT_STORE_CURRENCY = process.env.STORE_CURRENCY || 'USD';
 
 /**
  * Helper function to find user by ID in both User and Customer collections
@@ -141,8 +148,9 @@ export class CheckoutController extends Controller {
       }
 
       // Create new checkout session
+      // Currency comes from Shopify cart (which now uses @inContext for localized pricing)
       const subtotal = parseFloat(cart.estimatedCost?.subtotalAmount?.amount || '0');
-      const currency = cart.estimatedCost?.subtotalAmount?.currencyCode || 'USD';
+      const currency = cart.estimatedCost?.subtotalAmount?.currencyCode || DEFAULT_STORE_CURRENCY;
 
       const session = new CheckoutSession({
         userId,
@@ -1051,7 +1059,7 @@ export class CheckoutController extends Controller {
             couponDiscount: currentDiscount,
             tax: currentTax,
             grandTotal: currentGrandTotal,
-            currency: cart.estimatedCost?.subtotalAmount?.currencyCode || session.currency || 'USD',
+            currency: cart.estimatedCost?.subtotalAmount?.currencyCode || session.currency || DEFAULT_STORE_CURRENCY,
           },
           deliveryInstructions: session.deliveryInstructions,
           promoCode: session.promoCode,
@@ -1135,7 +1143,7 @@ export class CheckoutController extends Controller {
                 orderNumber: existingOrder.orderNumber,
                 shopifyOrderId: existingOrder.shopifyOrderId,
                 totalPrice: existingOrder.totalPrice,
-                currency: existingOrder.currency || 'USD',
+                currency: existingOrder.currency || DEFAULT_STORE_CURRENCY,
                 status: (existingOrder as any).status || 'completed',
               },
               payment: {
@@ -1567,7 +1575,7 @@ export class CheckoutController extends Controller {
             confirmationNumber: orderData.confirmationNumber || `CONF-${Date.now()}`,
             shopifyOrderId: orderData.shopifyOrderId || null,
             totalPrice: orderData.totalPrice,
-            currency: orderData.currency || 'USD',
+            currency: orderData.currency || DEFAULT_STORE_CURRENCY,
             status: orderData.status || 'pending',
             email: orderData.email,
             phone: sessionData.contactNumber || shippingAddress.phone,
@@ -1595,7 +1603,7 @@ export class CheckoutController extends Controller {
               discount: orderData.discount || 0,
               tax: orderData.totalTax,
               totalPrice: orderData.totalPrice,
-              currency: orderData.currency || 'USD',
+              currency: orderData.currency || DEFAULT_STORE_CURRENCY,
             },
 
             // Discount Information (if applied)
@@ -1646,7 +1654,7 @@ export class CheckoutController extends Controller {
               last4: stripePaymentMethod.card?.last4 || null,
               wallet: stripePaymentMethod.card?.wallet?.type || null, // e.g., 'apple_pay', 'google_pay'
               amount: orderData.totalPrice,
-              currency: orderData.currency || 'USD',
+              currency: orderData.currency || DEFAULT_STORE_CURRENCY,
               paidAt: new Date().toISOString(),
             },
 

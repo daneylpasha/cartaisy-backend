@@ -1,6 +1,7 @@
 import cron from 'node-cron';
 import { scheduledSync } from './syncService';
 import { updateInventoryLevels, getLowStockProducts } from './inventoryService';
+import { aggregateAllStoresDaily } from './sessionTrackingService';
 import Product from '../models/Product';
 import Order from '../models/Order';
 import { ApiError } from '../utils/errors';
@@ -87,6 +88,12 @@ class BackgroundJobManager {
     this.scheduleJob('low-stock-alerts', '0 8 * * *', async () => {
       console.log('⚠️ Checking for low stock products...');
       await this.checkLowStockAlerts();
+    });
+
+    // Every day at midnight - DAU/MAU aggregation
+    this.scheduleJob('dau-mau-aggregation', '0 0 * * *', async () => {
+      console.log('📊 Running DAU/MAU daily aggregation...');
+      await this.aggregateDailyActiveUsers();
     });
 
     // Every week on Sunday at 3 AM - Data cleanup
@@ -227,6 +234,31 @@ class BackgroundJobManager {
   }
 
   /**
+   * Aggregate daily active users for DAU/MAU metrics
+   */
+  private async aggregateDailyActiveUsers(): Promise<void> {
+    try {
+      // Aggregate yesterday's data (current day might not be complete)
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      yesterday.setHours(0, 0, 0, 0);
+
+      const result = await aggregateAllStoresDaily(yesterday);
+
+      console.log(
+        `📊 DAU/MAU aggregation completed: ${result.processed} stores processed, ${result.failed} failed`
+      );
+
+      if (result.errors.length > 0) {
+        console.error('DAU/MAU aggregation errors:', result.errors.slice(0, 5));
+      }
+    } catch (error) {
+      console.error('Error aggregating DAU/MAU metrics:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Perform weekly data cleanup tasks
    */
   private async performDataCleanup(): Promise<void> {
@@ -323,6 +355,7 @@ class BackgroundJobManager {
       'order-processing': 15 * 60 * 1000,       // 15 minutes
       'analytics-update': 60 * 60 * 1000,       // 1 hour
       'low-stock-alerts': 24 * 60 * 60 * 1000,  // 24 hours
+      'dau-mau-aggregation': 24 * 60 * 60 * 1000, // 24 hours (midnight)
       'data-cleanup': 7 * 24 * 60 * 60 * 1000,  // 7 days
       'health-check': 5 * 60 * 1000             // 5 minutes
     };
@@ -378,6 +411,7 @@ class BackgroundJobManager {
       'order-processing': () => processOrderQueue(),
       'analytics-update': () => this.updateProductAnalytics(),
       'low-stock-alerts': () => this.checkLowStockAlerts(),
+      'dau-mau-aggregation': () => this.aggregateDailyActiveUsers(),
       'data-cleanup': () => this.performDataCleanup(),
       'health-check': () => this.performHealthCheck()
     };
