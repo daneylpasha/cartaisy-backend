@@ -24,6 +24,7 @@ const formatCustomerResponse = (customer: ICustomer) => {
     isActive: customer.isActive,
     createdAt: customer.createdAt,
     lastLoginAt: customer.lastLoginAt,
+    shopifyCartId: customer.shopifyCartId,  // Include saved Shopify cart ID for cart persistence
   };
 };
 
