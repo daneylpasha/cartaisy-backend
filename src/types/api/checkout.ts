@@ -245,6 +245,9 @@ export interface CompleteCheckoutRequest {
   sessionId: string;
   // Optional: For handling 3D Secure confirmation
   paymentIntentId?: string;
+  // Optional: For Google Pay / Apple Pay - one-time use payment method
+  // When provided, creates and confirms payment intent immediately without attaching to customer
+  paymentMethodId?: string;
 }
 
 /**

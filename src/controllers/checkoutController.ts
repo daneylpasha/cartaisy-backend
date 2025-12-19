@@ -1109,7 +1109,11 @@ export class CheckoutController extends Controller {
   ): Promise<CompleteCheckoutResponse | CheckoutRequiresActionResponse> {
     try {
       const userId = request.user._id;
-      const { sessionId } = requestBody;
+      const { sessionId, paymentMethodId: platformPayMethodId } = requestBody;
+
+      // Flag to track if this is a platform pay (Google Pay / Apple Pay) checkout
+      // Platform pay methods are one-time use and cannot be attached to customers
+      const isPlatformPay = !!platformPayMethodId;
 
       if (!sessionId) {
         this.setStatus(400);
@@ -1166,11 +1170,14 @@ export class CheckoutController extends Controller {
       });
 
       // Validate all required fields (allow retrying failed sessions)
+      // For platform pay (Google Pay / Apple Pay), we don't require session.paymentMethodId
+      // as the payment method is passed directly in the request
+      const hasPaymentMethod = !!session.paymentMethodId || isPlatformPay;
       const canProceed = (
         (session.shippingAddressId !== undefined && session.shippingAddressId !== null) &&
         !!session.selectedShippingRate &&
-        !!session.paymentMethodId &&
-        (session.status === 'step3' || session.status === 'failed')
+        hasPaymentMethod &&
+        (session.status === 'step2' || session.status === 'step3' || session.status === 'failed')
       );
 
       if (!canProceed) {
@@ -1178,9 +1185,9 @@ export class CheckoutController extends Controller {
         const missing = [];
         if (session.shippingAddressId === undefined || session.shippingAddressId === null) missing.push('shipping address');
         if (!session.selectedShippingRate) missing.push('shipping method');
-        if (!session.paymentMethodId) missing.push('payment method');
-        if (session.status !== 'step3' && session.status !== 'failed') {
-          missing.push(`status is '${session.status}' (must be 'step3' or 'failed' to retry)`);
+        if (!hasPaymentMethod) missing.push('payment method');
+        if (session.status !== 'step2' && session.status !== 'step3' && session.status !== 'failed') {
+          missing.push(`status is '${session.status}' (must be 'step2', 'step3' or 'failed' to retry)`);
         }
 
         throw new Error(`Please complete all checkout steps before proceeding. Missing: ${missing.join(', ')}`);
@@ -1201,12 +1208,18 @@ export class CheckoutController extends Controller {
         throw new Error('User not found');
       }
 
-      // paymentMethodId is a string (Stripe PM ID like "pm_xxx")
-      const paymentMethodId = session.paymentMethodId;
+      // Determine which payment method to use:
+      // 1. Platform pay (Google Pay / Apple Pay): use paymentMethodId from request body
+      // 2. Regular card flow: use paymentMethodId saved in session from step2
+      const paymentMethodId = isPlatformPay ? platformPayMethodId : session.paymentMethodId;
       if (!paymentMethodId) {
         this.setStatus(400);
         throw new Error('Payment method not found');
       }
+
+      // Log the payment flow type
+      console.log(`💳 Payment flow: ${isPlatformPay ? 'Platform Pay (Google Pay / Apple Pay)' : 'Regular Card'}`);
+      console.log(`💳 Using payment method: ${paymentMethodId}`);
 
       // Get cart from Shopify for final validation and pricing
       // Use try-catch with retry logic for Shopify API calls
@@ -1308,43 +1321,74 @@ export class CheckoutController extends Controller {
       session.status = 'payment_processing';
       await session.save();
 
-      // Create Stripe customer if not exists
-      let stripeCustomerId = user.stripeCustomerId;
-      if (!stripeCustomerId) {
-        const stripeCustomer = await stripeService.createCustomer(user.email, {
-          userId: userId.toString(),
-          name: user.name || '',
-        });
-        stripeCustomerId = stripeCustomer.id;
+      // Different payment flows for platform pay vs regular cards
+      let paymentIntent;
+      let confirmedIntent;
 
-        // Save stripeCustomerId to the appropriate model
-        if (user.isUser) {
-          await User.findByIdAndUpdate(userId, { stripeCustomerId });
-        } else {
-          await Customer.findByIdAndUpdate(userId, { stripeCustomerId });
+      if (isPlatformPay) {
+        // Platform Pay flow (Google Pay / Apple Pay)
+        // Platform pay methods are one-time use and cannot be attached to customers
+        // Create and confirm payment intent in a single step
+        console.log('🔄 Processing Platform Pay payment...');
+
+        confirmedIntent = await stripeService.createPlatformPayPaymentIntent(
+          stripeService.dollarsToCents(session.grandTotal),
+          session.currency.toLowerCase(),
+          paymentMethodId,
+          {
+            sessionId: session._id.toString(),
+            userId: userId.toString(),
+            orderType: 'shopify_draft',
+          }
+        );
+        paymentIntent = confirmedIntent; // For platform pay, create returns confirmed intent
+
+        // Save payment intent ID to session
+        session.stripePaymentIntentId = confirmedIntent.id;
+        session.stripeClientSecret = confirmedIntent.client_secret || undefined;
+        await session.save();
+
+        console.log(`✅ Platform Pay payment intent created: ${confirmedIntent.id}`);
+      } else {
+        // Regular card flow - requires Stripe customer
+        // Create Stripe customer if not exists
+        let stripeCustomerId = user.stripeCustomerId;
+        if (!stripeCustomerId) {
+          const stripeCustomer = await stripeService.createCustomer(user.email, {
+            userId: userId.toString(),
+            name: user.name || '',
+          });
+          stripeCustomerId = stripeCustomer.id;
+
+          // Save stripeCustomerId to the appropriate model
+          if (user.isUser) {
+            await User.findByIdAndUpdate(userId, { stripeCustomerId });
+          } else {
+            await Customer.findByIdAndUpdate(userId, { stripeCustomerId });
+          }
         }
+
+        // Create payment intent
+        paymentIntent = await stripeService.createPaymentIntent(
+          stripeService.dollarsToCents(session.grandTotal),
+          session.currency.toLowerCase(),
+          stripeCustomerId,
+          paymentMethodId, // paymentMethodId is the Stripe PM ID string (e.g., "pm_xxx")
+          {
+            sessionId: session._id.toString(),
+            userId: userId.toString(),
+            orderType: 'shopify_draft',
+          }
+        );
+
+        // Save payment intent ID
+        session.stripePaymentIntentId = paymentIntent.id;
+        session.stripeClientSecret = paymentIntent.client_secret || undefined;
+        await session.save();
+
+        // Confirm payment
+        confirmedIntent = await stripeService.confirmPaymentIntent(paymentIntent.id);
       }
-
-      // Create payment intent
-      const paymentIntent = await stripeService.createPaymentIntent(
-        stripeService.dollarsToCents(session.grandTotal),
-        session.currency.toLowerCase(),
-        stripeCustomerId,
-        paymentMethodId, // paymentMethodId is the Stripe PM ID string (e.g., "pm_xxx")
-        {
-          sessionId: session._id.toString(),
-          userId: userId.toString(),
-          orderType: 'shopify_draft',
-        }
-      );
-
-      // Save payment intent ID
-      session.stripePaymentIntentId = paymentIntent.id;
-      session.stripeClientSecret = paymentIntent.client_secret || undefined;
-      await session.save();
-
-      // Confirm payment
-      const confirmedIntent = await stripeService.confirmPaymentIntent(paymentIntent.id);
 
       // Check if requires action (3D Secure)
       if (stripeService.requiresAction(confirmedIntent)) {

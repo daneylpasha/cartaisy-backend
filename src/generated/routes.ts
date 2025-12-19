@@ -1054,6 +1054,7 @@ const models: TsoaRoute.Models = {
         "properties": {
             "sessionId": {"dataType":"string","required":true},
             "paymentIntentId": {"dataType":"string"},
+            "paymentMethodId": {"dataType":"string"},
         },
         "additionalProperties": false,
     },

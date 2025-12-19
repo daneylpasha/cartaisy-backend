@@ -244,6 +244,53 @@ class StripeService {
   }
 
   /**
+   * Create payment intent for platform pay (Google Pay / Apple Pay)
+   * Platform pay methods are one-time use and cannot be attached to a customer
+   * or saved for future use.
+   *
+   * @param amount - Amount in cents (e.g., 1000 = $10.00)
+   * @param currency - Currency code (e.g., 'usd')
+   * @param paymentMethodId - Platform pay payment method ID (from Google Pay / Apple Pay)
+   * @param metadata - Additional metadata
+   * @returns Payment intent (created and confirmed)
+   */
+  async createPlatformPayPaymentIntent(
+    amount: number,
+    currency: string,
+    paymentMethodId: string,
+    metadata?: Record<string, string>
+  ): Promise<Stripe.PaymentIntent> {
+    this.ensureConfigured();
+
+    try {
+      // Platform pay methods (Google Pay / Apple Pay) are one-time use
+      // Do NOT attach to customer or set setup_future_usage
+      const paymentIntent = await this.stripe!.paymentIntents.create({
+        amount: Math.round(amount),
+        currency: currency.toLowerCase(),
+        payment_method: paymentMethodId,
+        confirm: true, // Confirm immediately for platform pay
+        automatic_payment_methods: {
+          enabled: true,
+          allow_redirects: 'never',
+        },
+        metadata: {
+          ...metadata,
+          paymentType: 'platform_pay',
+        },
+        capture_method: 'automatic',
+        // Note: No 'customer' field - platform pay methods are one-time use
+        // Note: No 'setup_future_usage' - cannot save platform pay methods
+      });
+
+      return paymentIntent;
+    } catch (error) {
+      console.error('Stripe createPlatformPayPaymentIntent error:', error);
+      throw new Error(`Failed to create platform pay payment intent: ${(error as Error).message}`);
+    }
+  }
+
+  /**
    * Confirm payment intent
    * @param paymentIntentId - Payment intent ID
    * @param paymentMethodId - Optional payment method if not set during creation

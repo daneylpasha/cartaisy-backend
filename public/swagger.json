@@ -3689,6 +3689,9 @@
 					},
 					"paymentIntentId": {
 						"type": "string"
+					},
+					"paymentMethodId": {
+						"type": "string"
 					}
 				},
 				"required": [
