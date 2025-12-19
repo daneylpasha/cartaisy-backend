@@ -1752,15 +1752,23 @@ export class CheckoutController extends Controller {
         },
         message: 'Order created successfully',
       };
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error completing checkout:', error);
+
+      // Extract meaningful error message
+      let errorMessage = 'Payment processing failed';
+      if (error.type === 'StripeInvalidRequestError' || error.type === 'StripeCardError') {
+        errorMessage = error.message || 'Payment failed';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
 
       // Update session status on error
       try {
         const session = await CheckoutSession.findById(requestBody.sessionId) as ICheckoutSessionDocument | null;
         if (session) {
           (session as any).status = 'failed';
-          (session as any).paymentError = (error as Error).message;
+          (session as any).paymentError = errorMessage;
           await session.save();
         }
       } catch (updateError) {
@@ -1771,7 +1779,10 @@ export class CheckoutController extends Controller {
         this.setStatus(500);
       }
 
-      throw error;
+      // Throw error with meaningful message
+      const customError = new Error(errorMessage);
+      (customError as any).originalError = error;
+      throw customError;
     }
   }
 }

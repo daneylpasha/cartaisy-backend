@@ -307,14 +307,21 @@ interface CustomError extends Error {
 }
 
 // Error handling middleware (catches all errors)
-const errorHandler: ErrorRequestHandler = (err: CustomError, _req: Request, res: Response, _next: NextFunction) => {
+const errorHandler: ErrorRequestHandler = (err: CustomError, req: Request, res: Response, _next: NextFunction) => {
   console.error('Error details:', err);
-  
+
+  // Determine if error message should be shown to user
+  // Show meaningful messages for checkout/payment errors even in production
+  const isCheckoutError = req.path.includes('/checkout');
+  const isPaymentError = err.message?.includes('payment') ||
+                         err.message?.includes('Payment') ||
+                         err.message?.includes('Stripe') ||
+                         err.message?.includes('card');
+  const showMessage = !derivedConfig.isProduction || isCheckoutError || isPaymentError;
+
   res.status(err.status || 500).json({
     status: 'error',
-    message: derivedConfig.isProduction 
-      ? 'Something went wrong!' 
-      : err.message,
+    message: showMessage ? err.message : 'Something went wrong!',
     ...(derivedConfig.isDevelopment && { stack: err.stack })
   });
 };
