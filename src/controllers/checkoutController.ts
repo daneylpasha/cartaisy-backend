@@ -1610,7 +1610,8 @@ export class CheckoutController extends Controller {
       }
 
       // Get payment method details from Stripe for complete response
-      const stripePaymentMethod = await stripeService.getPaymentMethod((session as any).paymentMethodId);
+      // Use paymentMethodId variable (works for both platform pay and regular cards)
+      const stripePaymentMethod = await stripeService.getPaymentMethod(paymentMethodId);
 
       // Cast session and order to any for type flexibility
       const sessionData = session as any;
