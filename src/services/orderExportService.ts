@@ -271,6 +271,32 @@ export class OrderExportService {
         }
       }
 
+      // Build today's query (start of today to now)
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const todayQuery: any = { ...query };
+      if (!todayQuery.createdAt) {
+        todayQuery.createdAt = {};
+      }
+      todayQuery.createdAt = { $gte: todayStart };
+      if (storeId) {
+        todayQuery.storeId = storeId;
+      }
+
+      // Build unfulfilled query
+      const unfulfilledQuery: any = {};
+      if (storeId) {
+        unfulfilledQuery.storeId = storeId;
+      }
+      unfulfilledQuery.fulfillmentStatus = { $in: ['unfulfilled', 'partial'] };
+
+      // Build pending orders query (orders that need attention)
+      const pendingQuery: any = {};
+      if (storeId) {
+        pendingQuery.storeId = storeId;
+      }
+      pendingQuery['mobileStatus.current'] = { $in: ['placed', 'confirmed', 'processing'] };
+
       const [
         totalOrders,
         totalRevenue,
@@ -279,6 +305,10 @@ export class OrderExportService {
         paymentStatusCounts,
         fulfillmentStatusCounts,
         sourceBreakdown,
+        todayOrdersCount,
+        todayRevenueResult,
+        unfulfilledOrdersCount,
+        pendingOrdersCount,
       ] = await Promise.all([
         Order.countDocuments(query),
         Order.aggregate([
@@ -305,13 +335,28 @@ export class OrderExportService {
           { $match: query },
           { $group: { _id: '$source', count: { $sum: 1 }, revenue: { $sum: '$totalPrice' } } },
         ]),
+        // Today's orders count
+        Order.countDocuments(todayQuery),
+        // Today's revenue
+        Order.aggregate([
+          { $match: todayQuery },
+          { $group: { _id: null, total: { $sum: '$totalPrice' } } },
+        ]),
+        // Unfulfilled orders count
+        Order.countDocuments(unfulfilledQuery),
+        // Pending orders count (needs attention)
+        Order.countDocuments(pendingQuery),
       ]);
 
       return {
         summary: {
           totalOrders,
           totalRevenue: totalRevenue[0]?.total || 0,
-          avgOrderValue: avgOrderValue[0]?.avg || 0,
+          avgOrderValue: Math.round((avgOrderValue[0]?.avg || 0) * 100) / 100,
+          todayOrders: todayOrdersCount,
+          todayRevenue: todayRevenueResult[0]?.total || 0,
+          unfulfilledOrders: unfulfilledOrdersCount,
+          pendingOrders: pendingOrdersCount,
         },
         statusBreakdown: statusCounts.reduce((acc: any, item) => {
           acc[item._id || 'unknown'] = item.count;
