@@ -168,29 +168,77 @@ export const getOrderDetails = async (req: AuthenticatedRequest, res: Response):
 
 /**
  * Update order status and tracking information
+ *
+ * Supports action-based updates for convenience:
+ * - action: "fulfill" → Sets fulfillmentStatus to "fulfilled" and status to "shipped"
+ * - action: "ship" → Sets status to "shipped"
+ * - action: "cancel" → Sets status to "cancelled"
+ * - action: "deliver" → Sets status to "delivered"
  */
 export const updateOrderStatus = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { orderId } = req.params as { orderId: string };
-    const {
+    let {
+      action,
       status,
       paymentStatus,
       fulfillmentStatus,
       trackingNumber,
       trackingUrl,
       carrier,
+      trackingCompany, // Alias for carrier (dashboard compatibility)
       estimatedDelivery,
       merchantNote,
+      notifyCustomer,
     } = req.body as {
+      action?: string;
       status?: string;
       paymentStatus?: string;
       fulfillmentStatus?: string;
       trackingNumber?: string;
       trackingUrl?: string;
       carrier?: string;
+      trackingCompany?: string;
       estimatedDelivery?: string;
       merchantNote?: string;
+      notifyCustomer?: boolean;
     };
+
+    // Handle action-based updates (convenience shortcuts)
+    if (action) {
+      switch (action.toLowerCase()) {
+        case 'fulfill':
+          // Fulfill order: set fulfillment status and optionally ship
+          fulfillmentStatus = fulfillmentStatus || 'fulfilled';
+          status = status || 'shipped';
+          break;
+        case 'ship':
+          status = 'shipped';
+          break;
+        case 'cancel':
+          status = 'cancelled';
+          fulfillmentStatus = fulfillmentStatus || 'cancelled';
+          break;
+        case 'deliver':
+          status = 'delivered';
+          fulfillmentStatus = fulfillmentStatus || 'fulfilled';
+          break;
+        case 'confirm':
+          status = 'confirmed';
+          break;
+        case 'process':
+          status = 'processing';
+          break;
+        default:
+          // Unknown action, ignore and use explicit fields
+          break;
+      }
+    }
+
+    // Use trackingCompany as carrier if carrier not provided
+    if (!carrier && trackingCompany) {
+      carrier = trackingCompany;
+    }
 
     const order = await Order.findById(orderId);
     if (!order) {
