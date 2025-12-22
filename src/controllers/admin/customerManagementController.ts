@@ -810,43 +810,67 @@ export const getCustomerStats = async (req: Request, res: Response): Promise<voi
     const now = new Date();
     const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
+    // Get customer IDs for this store
+    const storeCustomerIds = await Customer.find({ storeId: storeObjectId })
+      .select('_id')
+      .lean();
+    const customerIds = storeCustomerIds.map((c: any) => c._id);
+
     // Run aggregations in parallel
     const [
       totalCustomers,
-      customersWithOrders,
-      highValueCustomers,
       newCustomersThisMonth,
+      orderStats,
     ] = await Promise.all([
       // Total customers
       Customer.countDocuments({ storeId: storeObjectId }),
-
-      // Customers who have placed at least one order
-      Customer.countDocuments({
-        storeId: storeObjectId,
-        orderCount: { $gt: 0 },
-      }),
-
-      // High value customers (totalSpent >= 500)
-      Customer.countDocuments({
-        storeId: storeObjectId,
-        totalSpent: { $gte: 500 },
-      }),
 
       // New customers this month
       Customer.countDocuments({
         storeId: storeObjectId,
         createdAt: { $gte: firstDayOfMonth },
       }),
+
+      // Calculate order stats from Orders collection
+      Order.aggregate([
+        // Match orders for customers of this store
+        {
+          $match: {
+            customer: { $in: customerIds },
+          },
+        },
+        // Group by customer to get their order stats
+        {
+          $group: {
+            _id: '$customer',
+            totalOrders: { $sum: 1 },
+            totalSpent: { $sum: '$totalPrice' },
+          },
+        },
+        // Final aggregation to count customers with orders and high value customers
+        {
+          $group: {
+            _id: null,
+            customersWithOrders: { $sum: 1 },
+            highValueCustomers: {
+              $sum: { $cond: [{ $gte: ['$totalSpent', 500] }, 1, 0] },
+            },
+          },
+        },
+      ]),
     ]);
+
+    // Extract order stats (default to 0 if no orders exist)
+    const stats = orderStats[0] || { customersWithOrders: 0, highValueCustomers: 0 };
 
     // Return in dashboard expected format
     res.json({
       success: true,
       data: {
         totalCustomers,
-        customersWithOrders,
-        customersWithoutOrders: totalCustomers - customersWithOrders,
-        highValueCustomers,
+        customersWithOrders: stats.customersWithOrders,
+        customersWithoutOrders: totalCustomers - stats.customersWithOrders,
+        highValueCustomers: stats.highValueCustomers,
         newCustomersThisMonth,
       },
     });
