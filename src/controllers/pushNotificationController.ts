@@ -2383,24 +2383,28 @@ export const trackNotificationEvent = async (
 
     // Create engagement record (with duplicate prevention)
     try {
-      await NotificationEngagement.create({
-        notificationId: notification._id,
-        storeId: notification.storeId,
-        customerId: customerId ? new mongoose.Types.ObjectId(customerId) : undefined,
-        type: engagementType,
-        timestamp: timestamp ? new Date(timestamp) : new Date(),
-        deviceInfo: {
-          deviceId,
-        },
-        metadata: metadata || {},
-      });
+      // Only create engagement record if we have a customer or can identify by device
+      // For anonymous tracking, we still update the count but skip detailed engagement
+      if (customerId) {
+        await NotificationEngagement.create({
+          notificationId: notification._id,
+          storeId: notification.storeId,
+          customerId: new mongoose.Types.ObjectId(customerId),
+          type: engagementType,
+          timestamp: timestamp ? new Date(timestamp) : new Date(),
+          deviceInfo: {
+            deviceId,
+          },
+          metadata: metadata || {},
+        });
+      }
 
-      // Increment count on notification log
+      // Always increment count on notification log (even for anonymous users)
       await NotificationLog.findByIdAndUpdate(notificationId, {
         $inc: { [countField]: 1 },
       });
 
-      console.log(`[Track] ${normalizedEventType} event recorded for notification ${notificationId}`);
+      console.log(`[Track] ${normalizedEventType} event recorded for notification ${notificationId}${customerId ? ` (customer: ${customerId})` : ' (anonymous)'}`);
     } catch (error: any) {
       // Handle duplicate key error (customer already tracked this event)
       if (error.code === 11000) {

@@ -1,5 +1,5 @@
 import express from 'express';
-import { authenticateCustomer } from '../middleware/customerAuth';
+import { authenticateCustomer, optionalCustomerAuth } from '../middleware/customerAuth';
 import { requireStoreAdmin } from '../middleware/auth';
 import {
   registerDeviceToken,
@@ -51,7 +51,8 @@ router.patch('/preferences', authenticateCustomer, updateNotificationPreferences
 
 // Engagement tracking endpoints (customer)
 // Unified tracking endpoint - handles delivered, opened, clicked events
-router.post('/track', authenticateCustomer, trackNotificationEvent);
+// Uses optional auth - works with or without login (tracks by device if not logged in)
+router.post('/track', optionalCustomerAuth, trackNotificationEvent);
 // Legacy endpoints (deprecated - use /track with eventType instead)
 router.post('/track-open', authenticateCustomer, trackNotificationOpen);
 router.post('/track-click', authenticateCustomer, trackNotificationClick);
