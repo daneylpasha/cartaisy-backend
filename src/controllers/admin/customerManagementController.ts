@@ -23,9 +23,13 @@ import AnalyticsEvent from '../../models/AnalyticsEvent';
 // =============================================================================
 
 interface CustomerListQuery {
+  page?: string;
   limit?: string;
   offset?: string;
-  sortBy?: 'createdAt' | 'lastOrderDate' | 'totalSpent' | 'orderCount';
+  search?: string;
+  q?: string; // Alias for search - dashboard compatibility
+  filter?: 'all' | 'has_orders' | 'no_orders' | 'high_value';
+  sortBy?: 'name' | 'email' | 'orders' | 'spent' | 'lastOrder' | 'joined' | 'createdAt' | 'lastOrderDate' | 'totalSpent' | 'orderCount';
   sortOrder?: 'asc' | 'desc';
   dateFrom?: string;
   dateTo?: string;
@@ -36,46 +40,44 @@ interface CustomerListQuery {
 interface CustomerListItem {
   id: string;
   email: string;
-  name: string | null;
+  firstName: string;
+  lastName: string;
   phone: string | null;
-  createdAt: Date;
-  lastOrderDate: Date | null;
-  orderCount: number;
+  totalOrders: number;
   totalSpent: number;
-  platform: 'ios' | 'android' | 'unknown';
-  isActive: boolean;
+  currency: string;
+  lastOrderDate: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+  acceptsMarketing: boolean;
+  tags: string[];
+  defaultAddress: any | null;
+  deviceCount: number;
+  platforms: string[];
 }
 
 interface CustomerDetail {
   id: string;
   email: string;
-  name: string | null;
+  firstName: string;
+  lastName: string;
   phone: string | null;
-  avatar: string | null;
-  gender: string | null;
-  dateOfBirth: Date | null;
-  country: string | null;
+  totalOrders: number;
+  totalSpent: number;
+  currency: string;
+  lastOrderDate: Date | null;
   createdAt: Date;
   updatedAt: Date;
-  isActive: boolean;
-  isVerified: boolean;
+  acceptsMarketing: boolean;
+  tags: string[];
   addresses: any[];
-  paymentMethodCount: number;
-  orderSummary: {
-    count: number;
-    totalSpent: number;
+  orders: any[];
+  recentActivity: any[];
+  metrics: {
     averageOrderValue: number;
-    lastOrderDate: Date | null;
+    daysSinceLastOrder: number | null;
+    lifetimeValue: number;
   };
-  engagement: {
-    lastActive: Date | null;
-    notificationPreferences: any;
-    deviceInfo: {
-      platforms: string[];
-      activeDevices: number;
-    };
-  };
-  preferences: any;
 }
 
 interface OrderListItem {
@@ -190,17 +192,71 @@ export const listCustomers = async (req: Request, res: Response): Promise<void> 
       return;
     }
 
-    // Parse pagination
+    // Parse pagination - support both page/limit and offset/limit
     const limit = Math.min(parseInt(query.limit || '20', 10), 100);
-    const offset = parseInt(query.offset || '0', 10);
+    const page = parseInt(query.page || '1', 10);
+    const offset = query.offset ? parseInt(query.offset, 10) : (page - 1) * limit;
 
-    // Parse sorting
-    const sortBy = query.sortBy || 'createdAt';
+    // Parse sorting - map dashboard fields to database fields
+    const sortFieldMap: Record<string, string> = {
+      'name': 'name',
+      'email': 'email',
+      'orders': 'orderCount',
+      'spent': 'totalSpent',
+      'lastOrder': 'lastOrderDate',
+      'joined': 'createdAt',
+      'createdAt': 'createdAt',
+      'lastOrderDate': 'lastOrderDate',
+      'totalSpent': 'totalSpent',
+      'orderCount': 'orderCount',
+    };
+    const sortBy = sortFieldMap[query.sortBy || 'joined'] || 'createdAt';
     const sortOrder = query.sortOrder === 'asc' ? 1 : -1;
     const sortOptions: any = { [sortBy]: sortOrder };
 
     // Build filter
     const filter: any = { storeId: new mongoose.Types.ObjectId(storeId) };
+
+    // Search filter - support both 'search' and 'q' parameters
+    const searchParam = query.search || query.q;
+    if (searchParam && searchParam.trim()) {
+      const searchTerm = searchParam.trim();
+      const searchRegex = new RegExp(searchTerm, 'i');
+      filter.$or = [
+        { name: searchRegex },
+        { email: searchRegex },
+        { phone: searchRegex },
+      ];
+    }
+
+    // Filter by order status (new dashboard format)
+    if (query.filter === 'has_orders') {
+      filter.orderCount = { $gt: 0 };
+    } else if (query.filter === 'no_orders') {
+      // Use $and to combine with existing $or (search) if present
+      const noOrdersCondition = {
+        $or: [
+          { orderCount: { $eq: 0 } },
+          { orderCount: { $exists: false } },
+        ],
+      };
+      if (filter.$or) {
+        // Combine search $or with no_orders condition using $and
+        filter.$and = [{ $or: filter.$or }, noOrdersCondition];
+        delete filter.$or;
+      } else {
+        filter.$or = noOrdersCondition.$or;
+      }
+    } else if (query.filter === 'high_value') {
+      filter.totalSpent = { $gte: 500 };
+    }
+
+    // Legacy hasOrders filter support
+    if (query.hasOrders === 'true') {
+      filter.orderCount = { $gt: 0 };
+    } else if (query.hasOrders === 'false') {
+      filter.orderCount = 0;
+    }
 
     // Date range filter
     if (query.dateFrom || query.dateTo) {
@@ -213,13 +269,6 @@ export const listCustomers = async (req: Request, res: Response): Promise<void> 
       }
     }
 
-    // Has orders filter
-    if (query.hasOrders === 'true') {
-      filter.orderCount = { $gt: 0 };
-    } else if (query.hasOrders === 'false') {
-      filter.orderCount = 0;
-    }
-
     // Segment filter
     if (query.segment && query.segment !== 'all') {
       const segmentFilter = getSegmentFilter(query.segment);
@@ -230,7 +279,7 @@ export const listCustomers = async (req: Request, res: Response): Promise<void> 
     const [customers, totalCount] = await Promise.all([
       Customer.find(filter)
         .select(
-          'email name phone createdAt lastOrderDate orderCount totalSpent deviceTokens isActive'
+          'email name phone createdAt updatedAt lastOrderDate orderCount totalSpent deviceTokens isActive addresses notificationPreferences preferences'
         )
         .sort(sortOptions)
         .skip(offset)
@@ -239,29 +288,52 @@ export const listCustomers = async (req: Request, res: Response): Promise<void> 
       Customer.countDocuments(filter),
     ]);
 
-    // Transform results
-    const customerList: CustomerListItem[] = customers.map((customer: any) => ({
-      id: customer._id.toString(),
-      email: customer.email,
-      name: customer.name || null,
-      phone: customer.phone || null,
-      createdAt: customer.createdAt,
-      lastOrderDate: customer.lastOrderDate || null,
-      orderCount: customer.orderCount || 0,
-      totalSpent: customer.totalSpent || 0,
-      platform: getPrimaryPlatform(customer.deviceTokens),
-      isActive: customer.isActive,
-    }));
+    // Transform results to match dashboard expected format
+    const customerList: CustomerListItem[] = customers.map((customer: any) => {
+      // Parse name into firstName and lastName
+      const nameParts = (customer.name || '').split(' ');
+      const firstName = nameParts[0] || '';
+      const lastName = nameParts.slice(1).join(' ') || '';
+
+      // Get platforms from device tokens
+      const activeTokens = (customer.deviceTokens || []).filter((dt: any) => dt.active);
+      const platforms = [...new Set(activeTokens.map((dt: any) => dt.platform))].filter(Boolean);
+
+      // Get default address
+      const defaultAddress = (customer.addresses || []).find((addr: any) => addr.isDefault) ||
+                            (customer.addresses || [])[0] || null;
+
+      return {
+        id: customer._id.toString(),
+        email: customer.email || '',
+        firstName,
+        lastName,
+        phone: customer.phone || null,
+        totalOrders: customer.orderCount || 0,
+        totalSpent: customer.totalSpent || 0,
+        currency: customer.preferences?.currency || 'USD',
+        lastOrderDate: customer.lastOrderDate || null,
+        createdAt: customer.createdAt,
+        updatedAt: customer.updatedAt || customer.createdAt,
+        acceptsMarketing: customer.notificationPreferences?.promotions !== false,
+        tags: [],
+        defaultAddress,
+        deviceCount: activeTokens.length,
+        platforms: platforms as string[],
+      };
+    });
+
+    const totalPages = Math.ceil(totalCount / limit);
 
     res.json({
       success: true,
       data: {
         customers: customerList,
         pagination: {
-          total: totalCount,
+          page,
           limit,
-          offset,
-          hasMore: offset + limit < totalCount,
+          total: totalCount,
+          totalPages,
         },
       },
     });
@@ -313,24 +385,45 @@ export const searchCustomers = async (req: Request, res: Response): Promise<void
 
     const customers = await Customer.find(filter)
       .select(
-        'email name phone createdAt lastOrderDate orderCount totalSpent deviceTokens isActive'
+        'email firstName lastName name phone createdAt updatedAt lastOrderDate orderCount totalSpent deviceTokens isActive acceptsMarketing tags addresses'
       )
       .limit(limit)
       .lean();
 
     // Transform results
-    const customerList: CustomerListItem[] = customers.map((customer: any) => ({
-      id: customer._id.toString(),
-      email: customer.email,
-      name: customer.name || null,
-      phone: customer.phone || null,
-      createdAt: customer.createdAt,
-      lastOrderDate: customer.lastOrderDate || null,
-      orderCount: customer.orderCount || 0,
-      totalSpent: customer.totalSpent || 0,
-      platform: getPrimaryPlatform(customer.deviceTokens),
-      isActive: customer.isActive,
-    }));
+    const customerList: CustomerListItem[] = customers.map((customer: any) => {
+      // Extract first and last name
+      let firstName = customer.firstName || '';
+      let lastName = customer.lastName || '';
+      if (!firstName && !lastName && customer.name) {
+        const nameParts = customer.name.split(' ');
+        firstName = nameParts[0] || '';
+        lastName = nameParts.slice(1).join(' ') || '';
+      }
+
+      // Get device info
+      const deviceTokens = customer.deviceTokens || [];
+      const platforms = [...new Set(deviceTokens.map((d: any) => d.platform).filter(Boolean))] as string[];
+
+      return {
+        id: customer._id.toString(),
+        email: customer.email,
+        firstName,
+        lastName,
+        phone: customer.phone || null,
+        totalOrders: customer.orderCount || 0,
+        totalSpent: customer.totalSpent || 0,
+        currency: 'GBP',
+        lastOrderDate: customer.lastOrderDate || null,
+        createdAt: customer.createdAt,
+        updatedAt: customer.updatedAt || customer.createdAt,
+        acceptsMarketing: customer.acceptsMarketing || false,
+        tags: customer.tags || [],
+        defaultAddress: customer.addresses?.find((a: any) => a.isDefault) || customer.addresses?.[0] || null,
+        deviceCount: deviceTokens.length,
+        platforms,
+      };
+    });
 
     res.json({
       success: true,
@@ -389,68 +482,57 @@ export const getCustomerDetail = async (req: Request, res: Response): Promise<vo
       return;
     }
 
-    // Get order summary
-    const orderStats = await Order.aggregate([
-      {
-        $match: {
-          customer: new mongoose.Types.ObjectId(customerId),
-        },
-      },
-      {
-        $group: {
-          _id: null,
-          count: { $sum: 1 },
-          totalSpent: { $sum: '$totalPrice' },
-          avgOrderValue: { $avg: '$totalPrice' },
-          lastOrderDate: { $max: '$createdAt' },
-        },
-      },
-    ]);
+    // Get recent orders
+    const orders = await Order.find({
+      customer: new mongoose.Types.ObjectId(customerId),
+    })
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .select('orderNumber totalPrice mobileStatus createdAt')
+      .lean();
 
-    const orderSummary = orderStats[0] || {
-      count: 0,
-      totalSpent: 0,
-      avgOrderValue: 0,
-      lastOrderDate: null,
-    };
+    // Parse name into firstName and lastName
+    const nameParts = (customer.name || '').split(' ');
+    const firstName = nameParts[0] || '';
+    const lastName = nameParts.slice(1).join(' ') || '';
 
-    // Get device info
-    const activeDevices = (customer.deviceTokens || []).filter(
-      (dt: any) => dt.active
-    );
-    const platforms = [...new Set(activeDevices.map((dt: any) => dt.platform))];
+    // Calculate metrics
+    const totalOrders = customer.orderCount || 0;
+    const totalSpent = customer.totalSpent || 0;
+    const avgOrderValue = totalOrders > 0 ? totalSpent / totalOrders : 0;
+    const daysSinceLastOrder = customer.lastOrderDate
+      ? Math.floor((Date.now() - new Date(customer.lastOrderDate).getTime()) / (1000 * 60 * 60 * 24))
+      : null;
 
     // Build customer detail response
     const customerDetail: CustomerDetail = {
       id: (customer as any)._id.toString(),
-      email: customer.email,
-      name: customer.name || null,
+      email: customer.email || '',
+      firstName,
+      lastName,
       phone: customer.phone || null,
-      avatar: customer.avatar || null,
-      gender: customer.gender || null,
-      dateOfBirth: customer.dateOfBirth || null,
-      country: customer.country || null,
+      totalOrders,
+      totalSpent,
+      currency: customer.preferences?.currency || 'USD',
+      lastOrderDate: customer.lastOrderDate || null,
       createdAt: customer.createdAt,
       updatedAt: customer.updatedAt,
-      isActive: customer.isActive,
-      isVerified: customer.isVerified,
+      acceptsMarketing: customer.notificationPreferences?.promotions !== false,
+      tags: [],
       addresses: customer.addresses || [],
-      paymentMethodCount: customer.stripeCustomerId ? 1 : 0, // We don't store card details
-      orderSummary: {
-        count: orderSummary.count,
-        totalSpent: orderSummary.totalSpent,
-        averageOrderValue: Math.round(orderSummary.avgOrderValue * 100) / 100,
-        lastOrderDate: orderSummary.lastOrderDate,
+      orders: orders.map((o: any) => ({
+        id: o._id.toString(),
+        orderNumber: o.orderNumber,
+        total: o.totalPrice,
+        status: o.mobileStatus?.current || 'unknown',
+        createdAt: o.createdAt,
+      })),
+      recentActivity: [], // TODO: Implement activity tracking
+      metrics: {
+        averageOrderValue: Math.round(avgOrderValue * 100) / 100,
+        daysSinceLastOrder,
+        lifetimeValue: totalSpent,
       },
-      engagement: {
-        lastActive: customer.lastLoginAt || null,
-        notificationPreferences: customer.notificationPreferences,
-        deviceInfo: {
-          platforms: platforms as string[],
-          activeDevices: activeDevices.length,
-        },
-      },
-      preferences: customer.preferences,
     };
 
     res.json({
@@ -522,30 +604,20 @@ export const getCustomerOrders = async (req: Request, res: Response): Promise<vo
       Order.countDocuments({ customer: customerId }),
     ]);
 
-    // Transform results
-    const orderList: OrderListItem[] = orders.map((order: any) => ({
+    // Transform results - match dashboard expected format
+    const orderList = orders.map((order: any) => ({
       id: order._id.toString(),
       orderNumber: order.orderNumber,
-      date: order.createdAt,
-      status: order.mobileStatus?.current || 'unknown',
       total: order.totalPrice || 0,
-      itemCount: order.lineItems?.reduce(
-        (sum: number, item: any) => sum + (item.quantity || 0),
-        0
-      ) || 0,
-      currency: order.currency || 'USD',
+      status: order.mobileStatus?.current || 'unknown',
+      createdAt: order.createdAt,
     }));
 
     res.json({
       success: true,
       data: {
         orders: orderList,
-        pagination: {
-          total: totalCount,
-          limit,
-          offset,
-          hasMore: offset + limit < totalCount,
-        },
+        total: totalCount,
       },
     });
   } catch (error) {
@@ -598,49 +670,30 @@ export const getCustomerActivity = async (req: Request, res: Response): Promise<
       return;
     }
 
-    const limit = Math.min(parseInt(limitStr as string || '50', 10), 200);
+    const limit = Math.min(parseInt(limitStr as string || '20', 10), 200);
 
-    // Get analytics events for this customer
-    // Note: AnalyticsEvent uses userId which could be Customer or User
-    const events = await AnalyticsEvent.find({
-      userId: customerId,
-      storeId: new mongoose.Types.ObjectId(storeId),
+    // Get orders as activity (primary activity for now)
+    const orders = await Order.find({
+      customer: new mongoose.Types.ObjectId(customerId),
     })
-      .select('eventType timestamp platform eventData')
-      .sort({ timestamp: -1 })
+      .sort({ createdAt: -1 })
       .limit(limit)
+      .select('orderNumber totalPrice createdAt')
       .lean();
 
-    // Transform results
-    const activityList: ActivityItem[] = events.map((event: any) => ({
-      id: event._id.toString(),
-      eventType: event.eventType,
-      timestamp: event.timestamp,
-      platform: event.platform,
-      details: {
-        productId: event.eventData?.productId,
-        productTitle: event.eventData?.productTitle,
-        searchQuery: event.eventData?.searchQuery,
-        categoryTitle: event.eventData?.categoryTitle,
-        collectionTitle: event.eventData?.collectionTitle,
-        quantity: event.eventData?.quantity,
-        price: event.eventData?.price,
-        screenName: event.eventData?.screenName,
-      },
+    // Transform orders to activity format
+    const activities = orders.map((o: any) => ({
+      id: o._id.toString(),
+      type: 'order_placed',
+      description: `Placed order #${o.orderNumber} for $${o.totalPrice}`,
+      createdAt: o.createdAt,
     }));
-
-    // Group events by type for summary
-    const eventSummary: Record<string, number> = {};
-    events.forEach((event: any) => {
-      eventSummary[event.eventType] = (eventSummary[event.eventType] || 0) + 1;
-    });
 
     res.json({
       success: true,
       data: {
-        activity: activityList,
-        summary: eventSummary,
-        count: activityList.length,
+        activities,
+        total: activities.length,
       },
     });
   } catch (error) {
@@ -672,40 +725,19 @@ export const getCustomerStats = async (req: Request, res: Response): Promise<voi
 
     const storeObjectId = new mongoose.Types.ObjectId(storeId);
 
+    // Get first day of current month
     const now = new Date();
-    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
     // Run aggregations in parallel
     const [
       totalCustomers,
-      activeCustomers,
-      newCustomersThisMonth,
-      newCustomersThisWeek,
       customersWithOrders,
-      platformStats,
-      revenueStats,
+      highValueCustomers,
+      newCustomersThisMonth,
     ] = await Promise.all([
       // Total customers
       Customer.countDocuments({ storeId: storeObjectId }),
-
-      // Active customers (logged in within last 30 days)
-      Customer.countDocuments({
-        storeId: storeObjectId,
-        lastLoginAt: { $gte: thirtyDaysAgo },
-      }),
-
-      // New customers this month
-      Customer.countDocuments({
-        storeId: storeObjectId,
-        createdAt: { $gte: thirtyDaysAgo },
-      }),
-
-      // New customers this week
-      Customer.countDocuments({
-        storeId: storeObjectId,
-        createdAt: { $gte: sevenDaysAgo },
-      }),
 
       // Customers who have placed at least one order
       Customer.countDocuments({
@@ -713,69 +745,28 @@ export const getCustomerStats = async (req: Request, res: Response): Promise<voi
         orderCount: { $gt: 0 },
       }),
 
-      // Platform breakdown
-      Customer.aggregate([
-        { $match: { storeId: storeObjectId } },
-        { $unwind: { path: '$deviceTokens', preserveNullAndEmptyArrays: true } },
-        {
-          $group: {
-            _id: '$deviceTokens.platform',
-            count: { $sum: 1 },
-          },
-        },
-      ]),
+      // High value customers (totalSpent >= 500)
+      Customer.countDocuments({
+        storeId: storeObjectId,
+        totalSpent: { $gte: 500 },
+      }),
 
-      // Revenue stats
-      Customer.aggregate([
-        { $match: { storeId: storeObjectId, orderCount: { $gt: 0 } } },
-        {
-          $group: {
-            _id: null,
-            totalRevenue: { $sum: '$totalSpent' },
-            avgCustomerValue: { $avg: '$totalSpent' },
-            avgOrderCount: { $avg: '$orderCount' },
-          },
-        },
-      ]),
+      // New customers this month
+      Customer.countDocuments({
+        storeId: storeObjectId,
+        createdAt: { $gte: firstDayOfMonth },
+      }),
     ]);
 
-    // Transform platform stats
-    const platforms: Record<string, number> = { ios: 0, android: 0, unknown: 0 };
-    platformStats.forEach((stat: any) => {
-      if (stat._id === 'ios' || stat._id === 'android') {
-        platforms[stat._id] = stat.count;
-      } else {
-        platforms.unknown += stat.count;
-      }
-    });
-
-    const revenue = revenueStats[0] || {
-      totalRevenue: 0,
-      avgCustomerValue: 0,
-      avgOrderCount: 0,
-    };
-
+    // Return in dashboard expected format
     res.json({
       success: true,
       data: {
-        overview: {
-          totalCustomers,
-          activeCustomers,
-          newThisMonth: newCustomersThisMonth,
-          newThisWeek: newCustomersThisWeek,
-          withOrders: customersWithOrders,
-          conversionRate:
-            totalCustomers > 0
-              ? Math.round((customersWithOrders / totalCustomers) * 100)
-              : 0,
-        },
-        platforms,
-        revenue: {
-          total: Math.round(revenue.totalRevenue * 100) / 100,
-          averageCustomerValue: Math.round(revenue.avgCustomerValue * 100) / 100,
-          averageOrdersPerCustomer: Math.round(revenue.avgOrderCount * 10) / 10,
-        },
-        generatedAt: new Date().toISOString(),
+        totalCustomers,
+        customersWithOrders,
+        customersWithoutOrders: totalCustomers - customersWithOrders,
+        highValueCustomers,
+        newCustomersThisMonth,
       },
     });
   } catch (error) {
