@@ -275,6 +275,8 @@ app.use(`/api/${apiConfig.version}/analytics`, analyticsRoutes);
 app.use('/api/analytics', analyticsRoutes); // Also support without version
 // Push notification routes (customer)
 app.use(`/api/${apiConfig.version}/notifications`, pushNotificationRoutes);
+// Alias: /customer/notifications also works (mobile app compatibility)
+app.use(`/api/${apiConfig.version}/customer/notifications`, pushNotificationRoutes);
 
 // tsoa generated routes (auto-generated, includes controllers with decorators)
 try {
