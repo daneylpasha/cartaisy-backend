@@ -488,7 +488,7 @@ export const getCustomerDetail = async (req: Request, res: Response): Promise<vo
     })
       .sort({ createdAt: -1 })
       .limit(10)
-      .select('orderNumber totalPrice mobileStatus createdAt')
+      .select('orderNumber totalPrice mobileStatus createdAt lineItems paymentMethod paymentMethodType fulfillmentStatus paymentStatus')
       .lean();
 
     // Parse name into firstName and lastName
@@ -526,6 +526,11 @@ export const getCustomerDetail = async (req: Request, res: Response): Promise<vo
         total: o.totalPrice,
         status: o.mobileStatus?.current || 'unknown',
         createdAt: o.createdAt,
+        itemCount: (o.lineItems || []).reduce((sum: number, item: any) => sum + (item.quantity || 0), 0),
+        paymentMethod: o.paymentMethodType || 'card',
+        fulfillmentStatus: o.fulfillmentStatus || 'unfulfilled',
+        paymentGateway: o.paymentMethod || 'stripe',
+        paymentStatus: o.paymentStatus || 'pending',
       })),
       recentActivity: [], // TODO: Implement activity tracking
       metrics: {
@@ -596,7 +601,7 @@ export const getCustomerOrders = async (req: Request, res: Response): Promise<vo
     // Get orders
     const [orders, totalCount] = await Promise.all([
       Order.find({ customer: customerId })
-        .select('orderNumber createdAt mobileStatus totalPrice lineItems currency')
+        .select('orderNumber createdAt mobileStatus totalPrice lineItems currency paymentMethod paymentMethodType fulfillmentStatus paymentStatus')
         .sort({ createdAt: -1 })
         .skip(offset)
         .limit(limit)
@@ -611,6 +616,11 @@ export const getCustomerOrders = async (req: Request, res: Response): Promise<vo
       total: order.totalPrice || 0,
       status: order.mobileStatus?.current || 'unknown',
       createdAt: order.createdAt,
+      itemCount: (order.lineItems || []).reduce((sum: number, item: any) => sum + (item.quantity || 0), 0),
+      paymentMethod: order.paymentMethodType || 'card',
+      fulfillmentStatus: order.fulfillmentStatus || 'unfulfilled',
+      paymentGateway: order.paymentMethod || 'stripe',
+      paymentStatus: order.paymentStatus || 'pending',
     }));
 
     res.json({
