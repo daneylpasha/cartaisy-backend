@@ -41,6 +41,7 @@ export interface INotificationLog extends Document {
   failureCount: number;
 
   // Engagement Stats
+  deliveredCount: number;
   openedCount: number;
   clickedCount: number;
 
@@ -132,6 +133,10 @@ const notificationLogSchema = new Schema<INotificationLog>(
       default: 0,
     },
     failureCount: {
+      type: Number,
+      default: 0,
+    },
+    deliveredCount: {
       type: Number,
       default: 0,
     },

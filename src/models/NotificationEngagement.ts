@@ -7,7 +7,7 @@ import mongoose, { Document, Schema } from 'mongoose';
  * Used for detailed analytics and customer behavior tracking.
  */
 
-export type EngagementType = 'open' | 'click';
+export type EngagementType = 'delivered' | 'open' | 'click';
 
 export interface INotificationEngagement extends Document {
   notificationId: mongoose.Types.ObjectId;
@@ -22,6 +22,11 @@ export interface INotificationEngagement extends Document {
     deviceId?: string;
   };
   clickTarget?: string; // URL or action that was clicked
+  metadata?: {
+    title?: string;
+    actionId?: string;
+    source?: 'foreground' | 'background' | 'cold_start';
+  };
 
   createdAt: Date;
 }
@@ -48,7 +53,7 @@ const notificationEngagementSchema = new Schema<INotificationEngagement>(
     },
     type: {
       type: String,
-      enum: ['open', 'click'],
+      enum: ['delivered', 'open', 'click'],
       required: true,
       index: true,
     },
@@ -66,6 +71,14 @@ const notificationEngagementSchema = new Schema<INotificationEngagement>(
     },
     clickTarget: {
       type: String,
+    },
+    metadata: {
+      title: String,
+      actionId: String,
+      source: {
+        type: String,
+        enum: ['foreground', 'background', 'cold_start'],
+      },
     },
   },
   {

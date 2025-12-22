@@ -2302,10 +2302,138 @@ export const duplicateTemplate = async (
 // =============================================================================
 
 /**
+ * Unified notification tracking endpoint
+ * POST /api/v1/notifications/track
+ *
+ * Handles all notification events: delivered, opened, clicked
+ * This is the primary endpoint for mobile app notification tracking
+ */
+export const trackNotificationEvent = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const customerId = req.customer?.id;
+    const { notificationId, eventType, timestamp, deviceId, metadata } = req.body;
+
+    // Validation
+    if (!notificationId) {
+      res.status(400).json({
+        success: false,
+        message: 'notificationId is required',
+      });
+      return;
+    }
+
+    if (!eventType) {
+      res.status(400).json({
+        success: false,
+        message: 'eventType is required',
+      });
+      return;
+    }
+
+    // Validate eventType
+    const validEventTypes = ['delivered', 'opened', 'clicked'];
+    const normalizedEventType = eventType.toLowerCase();
+    if (!validEventTypes.includes(normalizedEventType)) {
+      res.status(400).json({
+        success: false,
+        message: `Invalid eventType. Valid values: ${validEventTypes.join(', ')}`,
+      });
+      return;
+    }
+
+    // Map eventType to engagement type
+    const typeMap: Record<string, 'delivered' | 'open' | 'click'> = {
+      'delivered': 'delivered',
+      'opened': 'open',
+      'clicked': 'click',
+    };
+    const engagementType = typeMap[normalizedEventType];
+
+    // Map eventType to count field
+    const countFieldMap: Record<string, string> = {
+      'delivered': 'deliveredCount',
+      'opened': 'openedCount',
+      'clicked': 'clickedCount',
+    };
+    const countField = countFieldMap[normalizedEventType];
+
+    if (!mongoose.Types.ObjectId.isValid(notificationId)) {
+      res.status(400).json({
+        success: false,
+        message: 'Invalid notification ID',
+      });
+      return;
+    }
+
+    // Find the notification
+    const notification = await NotificationLog.findById(notificationId);
+    if (!notification) {
+      // Silently accept tracking for unknown notifications
+      // This can happen if notification was deleted or ID is from a different system
+      console.log(`[Track] Notification ${notificationId} not found, accepting event silently`);
+      res.json({
+        success: true,
+        message: 'Event tracked successfully',
+      });
+      return;
+    }
+
+    // Create engagement record (with duplicate prevention)
+    try {
+      await NotificationEngagement.create({
+        notificationId: notification._id,
+        storeId: notification.storeId,
+        customerId: customerId ? new mongoose.Types.ObjectId(customerId) : undefined,
+        type: engagementType,
+        timestamp: timestamp ? new Date(timestamp) : new Date(),
+        deviceInfo: {
+          deviceId,
+        },
+        metadata: metadata || {},
+      });
+
+      // Increment count on notification log
+      await NotificationLog.findByIdAndUpdate(notificationId, {
+        $inc: { [countField]: 1 },
+      });
+
+      console.log(`[Track] ${normalizedEventType} event recorded for notification ${notificationId}`);
+    } catch (error: any) {
+      // Handle duplicate key error (customer already tracked this event)
+      if (error.code === 11000) {
+        console.log(`[Track] Duplicate ${normalizedEventType} event ignored for notification ${notificationId}`);
+        // Still return success - duplicate is not an error from client perspective
+        res.json({
+          success: true,
+          message: 'Event tracked successfully',
+        });
+        return;
+      }
+      throw error;
+    }
+
+    res.json({
+      success: true,
+      message: 'Event tracked successfully',
+    });
+  } catch (error) {
+    console.error('Track notification event error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to track event',
+    });
+  }
+};
+
+/**
  * Track notification open event
  * POST /api/v1/notifications/track-open
  *
  * Called by mobile app when user opens/views a notification
+ * @deprecated Use POST /api/v1/notifications/track with eventType: "opened" instead
  */
 export const trackNotificationOpen = async (
   req: Request,

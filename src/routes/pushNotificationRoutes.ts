@@ -27,6 +27,7 @@ import {
   recordTemplateUsage,
   duplicateTemplate,
   // Engagement tracking functions
+  trackNotificationEvent,
   trackNotificationOpen,
   trackNotificationClick,
   getNotificationEngagement,
@@ -49,6 +50,9 @@ router.get('/preferences', authenticateCustomer, getNotificationPreferences);
 router.patch('/preferences', authenticateCustomer, updateNotificationPreferences);
 
 // Engagement tracking endpoints (customer)
+// Unified tracking endpoint - handles delivered, opened, clicked events
+router.post('/track', authenticateCustomer, trackNotificationEvent);
+// Legacy endpoints (deprecated - use /track with eventType instead)
 router.post('/track-open', authenticateCustomer, trackNotificationOpen);
 router.post('/track-click', authenticateCustomer, trackNotificationClick);
 
