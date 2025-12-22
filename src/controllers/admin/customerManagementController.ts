@@ -212,81 +212,133 @@ export const listCustomers = async (req: Request, res: Response): Promise<void> 
     };
     const sortBy = sortFieldMap[query.sortBy || 'joined'] || 'createdAt';
     const sortOrder = query.sortOrder === 'asc' ? 1 : -1;
-    const sortOptions: any = { [sortBy]: sortOrder };
 
-    // Build filter
-    const filter: any = { storeId: new mongoose.Types.ObjectId(storeId) };
+    // Build initial match filter (before order stats calculation)
+    const initialMatch: any = { storeId: new mongoose.Types.ObjectId(storeId) };
 
     // Search filter - support both 'search' and 'q' parameters
     const searchParam = query.search || query.q;
     if (searchParam && searchParam.trim()) {
       const searchTerm = searchParam.trim();
       const searchRegex = new RegExp(searchTerm, 'i');
-      filter.$or = [
+      initialMatch.$or = [
         { name: searchRegex },
         { email: searchRegex },
         { phone: searchRegex },
       ];
     }
 
-    // Filter by order status (new dashboard format)
-    if (query.filter === 'has_orders') {
-      filter.orderCount = { $gt: 0 };
-    } else if (query.filter === 'no_orders') {
-      // Use $and to combine with existing $or (search) if present
-      const noOrdersCondition = {
-        $or: [
-          { orderCount: { $eq: 0 } },
-          { orderCount: { $exists: false } },
-        ],
-      };
-      if (filter.$or) {
-        // Combine search $or with no_orders condition using $and
-        filter.$and = [{ $or: filter.$or }, noOrdersCondition];
-        delete filter.$or;
-      } else {
-        filter.$or = noOrdersCondition.$or;
-      }
-    } else if (query.filter === 'high_value') {
-      filter.totalSpent = { $gte: 500 };
-    }
-
-    // Legacy hasOrders filter support
-    if (query.hasOrders === 'true') {
-      filter.orderCount = { $gt: 0 };
-    } else if (query.hasOrders === 'false') {
-      filter.orderCount = 0;
-    }
-
-    // Date range filter
+    // Date range filter (on customer createdAt)
     if (query.dateFrom || query.dateTo) {
-      filter.createdAt = {};
+      initialMatch.createdAt = {};
       if (query.dateFrom) {
-        filter.createdAt.$gte = new Date(query.dateFrom);
+        initialMatch.createdAt.$gte = new Date(query.dateFrom);
       }
       if (query.dateTo) {
-        filter.createdAt.$lte = new Date(query.dateTo);
+        initialMatch.createdAt.$lte = new Date(query.dateTo);
       }
     }
 
-    // Segment filter
-    if (query.segment && query.segment !== 'all') {
-      const segmentFilter = getSegmentFilter(query.segment);
-      Object.assign(filter, segmentFilter);
+    // Build post-lookup filter (after order stats are calculated)
+    const postLookupMatch: any = {};
+
+    // Filter by order status (new dashboard format)
+    if (query.filter === 'has_orders' || query.hasOrders === 'true') {
+      postLookupMatch.calculatedOrderCount = { $gt: 0 };
+    } else if (query.filter === 'no_orders' || query.hasOrders === 'false') {
+      postLookupMatch.calculatedOrderCount = { $eq: 0 };
+    } else if (query.filter === 'high_value') {
+      postLookupMatch.calculatedTotalSpent = { $gte: 500 };
     }
 
-    // Execute query
-    const [customers, totalCount] = await Promise.all([
-      Customer.find(filter)
-        .select(
-          'email name phone createdAt updatedAt lastOrderDate orderCount totalSpent deviceTokens isActive addresses notificationPreferences preferences'
-        )
-        .sort(sortOptions)
-        .skip(offset)
-        .limit(limit)
-        .lean(),
-      Customer.countDocuments(filter),
-    ]);
+    // Segment filter (applied after order stats calculation)
+    if (query.segment && query.segment !== 'all') {
+      const now = new Date();
+      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+      switch (query.segment) {
+        case 'new':
+          postLookupMatch.createdAt = { $gte: sevenDaysAgo };
+          break;
+        case 'returning':
+          postLookupMatch.calculatedOrderCount = { $gt: 1 };
+          break;
+        case 'high_value':
+          postLookupMatch.$or = [
+            { calculatedTotalSpent: { $gte: 500 } },
+            { calculatedOrderCount: { $gte: 5 } },
+          ];
+          break;
+        case 'at_risk':
+          postLookupMatch.calculatedOrderCount = { $gt: 0 };
+          postLookupMatch.calculatedLastOrderDate = { $lt: thirtyDaysAgo, $ne: null };
+          break;
+        case 'inactive':
+          postLookupMatch.$or = [
+            { calculatedOrderCount: { $eq: 0 } },
+            { calculatedLastOrderDate: { $lt: ninetyDaysAgo } },
+            { calculatedLastOrderDate: null },
+          ];
+          break;
+      }
+    }
+
+    // Map sort fields to calculated fields
+    const calculatedSortFieldMap: Record<string, string> = {
+      'orders': 'calculatedOrderCount',
+      'spent': 'calculatedTotalSpent',
+      'lastOrder': 'calculatedLastOrderDate',
+      'orderCount': 'calculatedOrderCount',
+      'totalSpent': 'calculatedTotalSpent',
+      'lastOrderDate': 'calculatedLastOrderDate',
+    };
+    const actualSortBy = calculatedSortFieldMap[sortBy] || sortBy;
+
+    // Build aggregation pipeline
+    const pipeline: any[] = [
+      { $match: initialMatch },
+      // Lookup orders for each customer
+      {
+        $lookup: {
+          from: 'orders',
+          localField: '_id',
+          foreignField: 'customer',
+          as: 'customerOrders',
+        },
+      },
+      // Calculate order stats
+      {
+        $addFields: {
+          calculatedOrderCount: { $size: '$customerOrders' },
+          calculatedTotalSpent: { $sum: '$customerOrders.totalPrice' },
+          calculatedLastOrderDate: { $max: '$customerOrders.createdAt' },
+        },
+      },
+      // Remove orders array to reduce memory
+      { $project: { customerOrders: 0 } },
+    ];
+
+    // Add post-lookup filter if any
+    if (Object.keys(postLookupMatch).length > 0) {
+      pipeline.push({ $match: postLookupMatch });
+    }
+
+    // Get total count before pagination
+    const countPipeline = [...pipeline, { $count: 'total' }];
+    const countResult = await Customer.aggregate(countPipeline);
+    const totalCount = countResult[0]?.total || 0;
+
+    // Add sort, skip, limit for final results
+    pipeline.push(
+      { $sort: { [actualSortBy]: sortOrder } },
+      { $skip: offset },
+      { $limit: limit }
+    );
+
+    // Execute aggregation
+    const customers = await Customer.aggregate(pipeline);
 
     // Transform results to match dashboard expected format
     const customerList: CustomerListItem[] = customers.map((customer: any) => {
@@ -309,10 +361,11 @@ export const listCustomers = async (req: Request, res: Response): Promise<void> 
         firstName,
         lastName,
         phone: customer.phone || null,
-        totalOrders: customer.orderCount || 0,
-        totalSpent: customer.totalSpent || 0,
+        // Use calculated values from aggregation
+        totalOrders: customer.calculatedOrderCount || 0,
+        totalSpent: customer.calculatedTotalSpent || 0,
         currency: customer.preferences?.currency || 'USD',
-        lastOrderDate: customer.lastOrderDate || null,
+        lastOrderDate: customer.calculatedLastOrderDate || null,
         createdAt: customer.createdAt,
         updatedAt: customer.updatedAt || customer.createdAt,
         acceptsMarketing: customer.notificationPreferences?.promotions !== false,
@@ -482,14 +535,34 @@ export const getCustomerDetail = async (req: Request, res: Response): Promise<vo
       return;
     }
 
-    // Get recent orders
-    const orders = await Order.find({
-      customer: new mongoose.Types.ObjectId(customerId),
-    })
-      .sort({ createdAt: -1 })
-      .limit(10)
-      .select('orderNumber totalPrice mobileStatus createdAt lineItems paymentMethod paymentMethodType fulfillmentStatus paymentStatus')
-      .lean();
+    // Get recent orders and order stats in parallel
+    const [orders, orderStats] = await Promise.all([
+      Order.find({
+        customer: new mongoose.Types.ObjectId(customerId),
+      })
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .select('orderNumber totalPrice mobileStatus createdAt lineItems paymentMethod paymentMethodType fulfillmentStatus paymentStatus')
+        .lean(),
+      // Calculate order stats from orders collection
+      Order.aggregate([
+        { $match: { customer: new mongoose.Types.ObjectId(customerId) } },
+        {
+          $group: {
+            _id: null,
+            totalOrders: { $sum: 1 },
+            totalSpent: { $sum: '$totalPrice' },
+            lastOrderDate: { $max: '$createdAt' },
+          },
+        },
+      ]),
+    ]);
+
+    // Extract order stats
+    const stats = orderStats[0] || { totalOrders: 0, totalSpent: 0, lastOrderDate: null };
+    const totalOrders = stats.totalOrders;
+    const totalSpent = stats.totalSpent;
+    const lastOrderDate = stats.lastOrderDate;
 
     // Parse name into firstName and lastName
     const nameParts = (customer.name || '').split(' ');
@@ -497,11 +570,9 @@ export const getCustomerDetail = async (req: Request, res: Response): Promise<vo
     const lastName = nameParts.slice(1).join(' ') || '';
 
     // Calculate metrics
-    const totalOrders = customer.orderCount || 0;
-    const totalSpent = customer.totalSpent || 0;
     const avgOrderValue = totalOrders > 0 ? totalSpent / totalOrders : 0;
-    const daysSinceLastOrder = customer.lastOrderDate
-      ? Math.floor((Date.now() - new Date(customer.lastOrderDate).getTime()) / (1000 * 60 * 60 * 24))
+    const daysSinceLastOrder = lastOrderDate
+      ? Math.floor((Date.now() - new Date(lastOrderDate).getTime()) / (1000 * 60 * 60 * 24))
       : null;
 
     // Build customer detail response
@@ -514,7 +585,7 @@ export const getCustomerDetail = async (req: Request, res: Response): Promise<vo
       totalOrders,
       totalSpent,
       currency: customer.preferences?.currency || 'USD',
-      lastOrderDate: customer.lastOrderDate || null,
+      lastOrderDate: lastOrderDate || null,
       createdAt: customer.createdAt,
       updatedAt: customer.updatedAt,
       acceptsMarketing: customer.notificationPreferences?.promotions !== false,
