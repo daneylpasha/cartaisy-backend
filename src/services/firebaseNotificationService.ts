@@ -256,8 +256,8 @@ export class FirebaseNotificationService {
           notification: {
             sound: 'default',
             priority: 'high',
-            channelId: 'orders', // Must be created in mobile app
-            clickAction: 'FLUTTER_NOTIFICATION_CLICK',
+            channelId: 'default',
+            clickAction: 'FCM_PLUGIN_ACTIVITY', // Required for app to open when killed
             ...(notification.imageUrl && { imageUrl: notification.imageUrl }),
           },
         },
@@ -399,6 +399,8 @@ export class FirebaseNotificationService {
           notification: {
             sound: 'default',
             priority: 'high',
+            channelId: 'default',
+            clickAction: 'FCM_PLUGIN_ACTIVITY', // Required for app to open when killed
             ...(notification.imageUrl && { imageUrl: notification.imageUrl }),
           },
         },
