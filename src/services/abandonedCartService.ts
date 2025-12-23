@@ -45,7 +45,7 @@ const DEFAULT_SETTINGS: AbandonedCartSettings = {
   abandonmentThresholdMinutes: 3, // TESTING: was 60
   quietHoursStart: 0, // TESTING: was 22 (disabled for testing)
   quietHoursEnd: 0, // TESTING: was 8 (disabled for testing)
-  maxNotificationsPerCart: 1,
+  maxNotificationsPerCart: 10, // TESTING: was 1
 };
 
 // In-memory store settings cache (per store)
@@ -332,8 +332,11 @@ export async function sendAbandonedCartNotification(
   settings: AbandonedCartSettings
 ): Promise<SendResult> {
   try {
+    console.log(`🛒 [ABANDONED] Sending notification to ${cart.customerEmail}, notificationsSent: ${cart.notificationsSent}, max: ${settings.maxNotificationsPerCart}`);
+
     // Check max notifications limit
     if (cart.notificationsSent >= settings.maxNotificationsPerCart) {
+      console.log(`🛒 [ABANDONED] Skip: max notifications reached (${cart.notificationsSent}/${settings.maxNotificationsPerCart})`);
       return {
         customerId: cart.customerId,
         success: false,
@@ -345,6 +348,7 @@ export async function sendAbandonedCartNotification(
     const customer = await Customer.findById(cart.customerId).select('deviceTokens');
 
     if (!customer) {
+      console.log(`🛒 [ABANDONED] Skip: customer not found`);
       return {
         customerId: cart.customerId,
         success: false,
@@ -353,8 +357,10 @@ export async function sendAbandonedCartNotification(
     }
 
     const deviceTokens = customer.getActiveDeviceTokens();
+    console.log(`🛒 [ABANDONED] Customer ${cart.customerEmail} has ${deviceTokens.length} active device tokens`);
 
     if (deviceTokens.length === 0) {
+      console.log(`🛒 [ABANDONED] Skip: no active device tokens`);
       return {
         customerId: cart.customerId,
         success: false,
