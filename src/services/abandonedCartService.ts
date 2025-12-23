@@ -283,7 +283,8 @@ async function buildNotificationContent(
         : `Your cart with ${cart.itemCount} items (${formattedTotal}) is waiting for you.`,
     deepLink: cartDeepLink,
     data: {
-      type: 'abandoned_cart',
+      type: 'cart', // Changed from 'abandoned_cart' for deep link compatibility
+      notificationType: 'abandoned_cart', // Keep original type for tracking
       action: 'open_cart',
       itemCount: cart.itemCount.toString(),
       cartTotal: cart.cartTotal.toString(),
