@@ -2,6 +2,7 @@ import { Get, Post, Put, Delete, Route, Tags, Response, Path, Body, Security, Re
 import { Controller } from '@tsoa/runtime';
 import shopifyStorefront from '../services/shopifyStorefrontService';
 import Customer from '../models/Customer';
+import CartActivity from '../models/CartActivity';
 import {
   CartResponse,
   CartCreateRequest,
@@ -457,6 +458,7 @@ export class CartController extends Controller {
   ): Promise<SaveCartResponse> {
     try {
       const customerId = request.user?.id || request.user?._id;
+      const storeId = request.user?.storeId;
 
       if (!customerId) {
         this.setStatus(401);
@@ -474,6 +476,32 @@ export class CartController extends Controller {
       );
 
       console.log(`[CartController] Saved cartId for customer ${customerId}: ${decodedCartId}`);
+
+      // Track cart activity for abandoned cart notifications (only for customers with storeId)
+      if (storeId && shopifyStorefront.isConfigured()) {
+        try {
+          const cartResponse = await shopifyStorefront.getCart(decodedCartId);
+          const cart = cartResponse?.data?.cart;
+
+          if (cart) {
+            const itemCount = cart.lines?.edges?.length || 0;
+            const cartTotal = parseFloat(cart.estimatedCost?.subtotalAmount?.amount || '0');
+            const currency = cart.estimatedCost?.subtotalAmount?.currencyCode || 'USD';
+
+            await CartActivity.updateCartActivity(storeId, customerId, {
+              shopifyCartId: decodedCartId,
+              itemCount,
+              cartTotal,
+              currency,
+            });
+
+            console.log(`[CartController] Updated CartActivity for customer ${customerId}: ${itemCount} items, ${currency} ${cartTotal}`);
+          }
+        } catch (cartActivityError) {
+          // Log but don't fail the request - cart activity tracking is secondary
+          console.error('[CartController] Error tracking cart activity:', cartActivityError);
+        }
+      }
 
       return { status: 'success', message: 'Cart saved to profile' };
     } catch (error) {

@@ -33,13 +33,13 @@ class AbandonedCartScheduler {
       return;
     }
 
-    // Run every 15 minutes
-    this.cronJob = cron.schedule('*/15 * * * *', async () => {
+    // Run every 2 minutes (for testing - change back to */15 for production)
+    this.cronJob = cron.schedule('*/2 * * * *', async () => {
       await this.processAllStores();
     });
 
     this.isRunning = true;
-    console.log('🛒 [ABANDONED] Scheduler started - checking every 15 minutes');
+    console.log('🛒 [ABANDONED] Scheduler started - checking every 2 minutes (TESTING MODE)');
   }
 
   /**
@@ -163,8 +163,8 @@ class AbandonedCartScheduler {
     let nextRunIn: number | null = null;
 
     if (this.isRunning && this.lastRunAt) {
-      // Next run is 15 minutes after last run
-      const nextRunTime = new Date(this.lastRunAt.getTime() + 15 * 60 * 1000);
+      // Next run is 2 minutes after last run (testing mode - change to 15 for production)
+      const nextRunTime = new Date(this.lastRunAt.getTime() + 2 * 60 * 1000);
       nextRunIn = Math.max(0, nextRunTime.getTime() - Date.now());
     }
 

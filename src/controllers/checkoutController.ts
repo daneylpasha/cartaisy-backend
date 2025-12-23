@@ -4,6 +4,7 @@ import User from '../models/User';
 import Customer from '../models/Customer';
 import Order from '../models/Order';
 import Product from '../models/Product';
+import CartActivity from '../models/CartActivity';
 import shopifyStorefront from '../services/shopifyStorefrontService';
 import stripeService from '../services/stripeService';
 import { normalizeAddressForShopify } from '../utils/addressHelper';
@@ -164,6 +165,18 @@ export class CheckoutController extends Controller {
       });
 
       await session.save();
+
+      // Track checkout initiation for abandoned cart detection
+      const storeId = request.user?.storeId;
+      if (storeId) {
+        try {
+          await CartActivity.markCheckoutInitiated(storeId, userId);
+          console.log(`[Checkout] Marked checkout initiated for customer ${userId}`);
+        } catch (cartActivityError) {
+          // Log but don't fail - this is secondary tracking
+          console.error('[Checkout] Error marking checkout initiated:', cartActivityError);
+        }
+      }
 
       return {
         success: true,
@@ -1601,12 +1614,30 @@ export class CheckoutController extends Controller {
       session.completeStep(3);
       await session.save();
 
-      // Clear saved Shopify cart ID from customer profile after successful checkout
-      // This prevents stale cart references on next login
+      // Update customer stats and clear cart after successful checkout
       if (!user.isUser) {
-        // Customer model - clear shopifyCartId
-        await Customer.findByIdAndUpdate(userId, { $unset: { shopifyCartId: 1 } });
-        console.log(`[Checkout] Cleared saved cartId for customer ${userId} after successful order`);
+        // Customer model - update order stats and clear shopifyCartId
+        const orderTotal = order.totalPrice || 0;
+        const customer = await Customer.findByIdAndUpdate(userId, {
+          $set: { lastOrderDate: new Date() },
+          $inc: {
+            orderCount: 1,
+            totalSpent: orderTotal
+          },
+          $unset: { shopifyCartId: 1 }
+        }, { new: true });
+        console.log(`[Checkout] Updated customer stats for ${userId}: +1 order, +${orderTotal} spent`);
+
+        // Mark checkout completed for abandoned cart tracking
+        if (customer?.storeId) {
+          try {
+            await CartActivity.markCheckoutCompleted(customer.storeId, userId);
+            console.log(`[Checkout] Marked checkout completed for customer ${userId}`);
+          } catch (cartActivityError) {
+            // Log but don't fail - this is secondary tracking
+            console.error('[Checkout] Error marking checkout completed:', cartActivityError);
+          }
+        }
       }
 
       // Get payment method details from Stripe for complete response
