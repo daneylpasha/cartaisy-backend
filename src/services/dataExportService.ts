@@ -540,15 +540,16 @@ export async function createExportRequest(
   requestedBy: 'customer' | 'merchant',
   requestedByUserId?: string | mongoose.Types.ObjectId
 ): Promise<IDataExport> {
-  // Check rate limiting
-  const rateCheck = await DataExport.canRequestExport(customerId);
-  if (!rateCheck.canRequest) {
-    const error: any = new Error(
-      `Export request limit reached. Next available at: ${rateCheck.nextAvailableAt?.toISOString()}`
-    );
-    error.nextAvailableAt = rateCheck.nextAvailableAt;
-    throw error;
-  }
+  // Rate limiting disabled for now
+  // TODO: Re-enable rate limiting in production if needed
+  // const rateCheck = await DataExport.canRequestExport(customerId);
+  // if (!rateCheck.canRequest) {
+  //   const error: any = new Error(
+  //     `Export request limit reached. Next available at: ${rateCheck.nextAvailableAt?.toISOString()}`
+  //   );
+  //   error.nextAvailableAt = rateCheck.nextAvailableAt;
+  //   throw error;
+  // }
 
   // Create the export request
   const exportRequest = await DataExport.create({
