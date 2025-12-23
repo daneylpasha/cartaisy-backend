@@ -152,7 +152,8 @@ export async function identifyAbandonedCarts(
   abandonedAfterMinutes: number = 60
 ): Promise<AbandonedCartSummary[]> {
   const abandonedThreshold = new Date(Date.now() - abandonedAfterMinutes * 60 * 1000);
-  const notificationCooldown = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  // TESTING: 5 min cooldown (was 24 hours = 24 * 60 * 60 * 1000)
+  const notificationCooldown = new Date(Date.now() - 5 * 60 * 1000);
 
   console.log(`🛒 [ABANDONED] Checking store ${storeId} with threshold ${abandonedAfterMinutes} min (before ${abandonedThreshold.toISOString()})`);
 
