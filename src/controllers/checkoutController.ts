@@ -131,21 +131,28 @@ export class CheckoutController extends Controller {
       // Check for existing active session for this user
       const existingSession = await (CheckoutSession as any).findActiveByUser(userId) as ICheckoutSessionDocument | null;
       if (existingSession) {
-        // Extend expiration and return existing session
-        existingSession.extendExpiration(30);
-        await existingSession.save();
+        // Check if the existing session has the same cart
+        if (existingSession.shopifyCartId === cartId) {
+          // Same cart - extend expiration and return existing session
+          existingSession.extendExpiration(30);
+          await existingSession.save();
 
-        return {
-          success: true,
-          data: {
-            sessionId: existingSession._id.toString(),
-            cartId: existingSession.shopifyCartId,
-            subtotal: existingSession.subtotal,
-            currency: existingSession.currency,
-            itemCount: cart.lines.edges.length,
-            expiresAt: existingSession.expiresAt.toISOString(),
-          },
-        };
+          return {
+            success: true,
+            data: {
+              sessionId: existingSession._id.toString(),
+              cartId: existingSession.shopifyCartId,
+              subtotal: existingSession.subtotal,
+              currency: existingSession.currency,
+              itemCount: cart.lines.edges.length,
+              expiresAt: existingSession.expiresAt.toISOString(),
+            },
+          };
+        } else {
+          // Different cart - delete old session and create new one
+          console.log(`[Checkout] Cart changed from ${existingSession.shopifyCartId} to ${cartId}, creating new session`);
+          await CheckoutSession.findByIdAndDelete(existingSession._id);
+        }
       }
 
       // Create new checkout session
