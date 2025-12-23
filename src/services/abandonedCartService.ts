@@ -39,12 +39,12 @@ export interface SendResult {
   error?: string;
 }
 
-// Default settings
+// Default settings (TESTING MODE - revert for production)
 const DEFAULT_SETTINGS: AbandonedCartSettings = {
   enabled: true,
-  abandonmentThresholdMinutes: 60,
-  quietHoursStart: 22, // 10 PM
-  quietHoursEnd: 8, // 8 AM
+  abandonmentThresholdMinutes: 3, // TESTING: was 60
+  quietHoursStart: 0, // TESTING: was 22 (disabled for testing)
+  quietHoursEnd: 0, // TESTING: was 8 (disabled for testing)
   maxNotificationsPerCart: 1,
 };
 
