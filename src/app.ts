@@ -236,6 +236,7 @@ import emailConfigRoutes from './routes/emailConfigRoutes';
 import pushNotificationRoutes from './routes/pushNotificationRoutes';
 import customerManagementRoutes from './routes/customerManagementRoutes';
 import abandonedCartRoutes from './routes/abandonedCartRoutes';
+import complianceRoutes from './routes/complianceRoutes';
 
 // API Routes with versioning
 app.use(`/api/${apiConfig.version}/auth`, authRoutes);
@@ -263,6 +264,8 @@ app.use(`/api/${apiConfig.version}/admin`, emailConfigRoutes);
 app.use(`/api/${apiConfig.version}/admin`, customerManagementRoutes);
 // Abandoned cart routes (admin)
 app.use(`/api/${apiConfig.version}/admin`, abandonedCartRoutes);
+// GDPR Compliance routes (admin)
+app.use(`/api/${apiConfig.version}`, complianceRoutes);
 app.use(`/api/${apiConfig.version}`, carouselRoutes);
 app.use(`/api/${apiConfig.version}`, categoryGridRoutes);
 app.use(`/api/${apiConfig.version}`, calloutBannerRoutes);
