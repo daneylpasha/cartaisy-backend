@@ -478,6 +478,7 @@ export class CartController extends Controller {
       console.log(`[CartController] Saved cartId for customer ${customerId}: ${decodedCartId}`);
 
       // Track cart activity for abandoned cart notifications (only for customers with storeId)
+      console.log(`[CartController] CartActivity check - storeId: ${storeId}, shopifyConfigured: ${shopifyStorefront.isConfigured()}`);
       if (storeId && shopifyStorefront.isConfigured()) {
         try {
           const cartResponse = await shopifyStorefront.getCart(decodedCartId);
