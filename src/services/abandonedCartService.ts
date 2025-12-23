@@ -154,6 +154,22 @@ export async function identifyAbandonedCarts(
   const abandonedThreshold = new Date(Date.now() - abandonedAfterMinutes * 60 * 1000);
   const notificationCooldown = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
+  console.log(`🛒 [ABANDONED] Checking store ${storeId} with threshold ${abandonedAfterMinutes} min (before ${abandonedThreshold.toISOString()})`);
+
+  // First check - how many cart activities exist for this store?
+  const totalActivities = await CartActivity.countDocuments({
+    storeId: new mongoose.Types.ObjectId(storeId),
+  });
+  console.log(`🛒 [ABANDONED] Total CartActivity records for store: ${totalActivities}`);
+
+  // Check with just basic criteria
+  const withItems = await CartActivity.countDocuments({
+    storeId: new mongoose.Types.ObjectId(storeId),
+    itemCount: { $gt: 0 },
+    hasCompletedCheckout: false,
+  });
+  console.log(`🛒 [ABANDONED] Carts with items & not completed: ${withItems}`);
+
   // Find cart activities that match abandonment criteria
   const activities = await CartActivity.find({
     storeId: new mongoose.Types.ObjectId(storeId),
@@ -169,28 +185,42 @@ export async function identifyAbandonedCarts(
     .populate('customerId', 'email name deviceTokens notificationPreferences')
     .lean();
 
+  console.log(`🛒 [ABANDONED] Activities matching time criteria: ${activities.length}`);
+
   // Filter and transform results
   const abandonedCarts: AbandonedCartSummary[] = [];
 
   for (const activity of activities) {
     const customer = activity.customerId as any;
 
-    if (!customer || !customer._id) continue;
+    if (!customer || !customer._id) {
+      console.log(`🛒 [ABANDONED] Skipping: no customer data`);
+      continue;
+    }
 
-    // Check if customer has push notifications enabled
-    if (!customer.notificationPreferences?.pushEnabled) continue;
+    // Check if customer has push notifications enabled (default to true if not set)
+    const pushEnabled = customer.notificationPreferences?.pushEnabled !== false;
+    if (!pushEnabled) {
+      console.log(`🛒 [ABANDONED] Skipping ${customer.email}: push disabled`);
+      continue;
+    }
 
     // Check notification cooldown (24 hours)
     if (
       activity.lastAbandonedCartNotificationSent &&
       activity.lastAbandonedCartNotificationSent > notificationCooldown
     ) {
+      console.log(`🛒 [ABANDONED] Skipping ${customer.email}: notification sent recently`);
       continue;
     }
 
-    // Check if customer has device tokens
-    const activeTokens = customer.deviceTokens?.filter((dt: any) => dt.active) || [];
-    if (activeTokens.length === 0) continue;
+    // Check if customer has device tokens (don't require active flag)
+    const deviceTokens = customer.deviceTokens || [];
+    if (deviceTokens.length === 0) {
+      console.log(`🛒 [ABANDONED] Skipping ${customer.email}: no device tokens`);
+      continue;
+    }
+    console.log(`🛒 [ABANDONED] Found eligible cart for ${customer.email}: ${activity.itemCount} items, $${activity.cartTotal}`);
 
     const hoursSinceUpdate = Math.round(
       (Date.now() - new Date(activity.lastCartUpdate).getTime()) / (1000 * 60 * 60)
