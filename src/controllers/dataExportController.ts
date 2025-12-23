@@ -17,7 +17,7 @@ import * as DataExportService from '../services/dataExportService';
  */
 export async function requestDataExport(req: Request, res: Response): Promise<void> {
   try {
-    const customerId = (req as any).customerId;
+    const customerId = (req as any).customer?.id;
     const storeId = (req as any).storeId;
 
     if (!customerId || !storeId) {
@@ -89,7 +89,7 @@ export async function requestDataExport(req: Request, res: Response): Promise<vo
  */
 export async function getDataExportStatus(req: Request, res: Response): Promise<void> {
   try {
-    const customerId = (req as any).customerId;
+    const customerId = (req as any).customer?.id;
 
     if (!customerId) {
       res.status(401).json({
@@ -136,7 +136,7 @@ export async function getDataExportStatus(req: Request, res: Response): Promise<
  */
 export async function getDataExportHistory(req: Request, res: Response): Promise<void> {
   try {
-    const customerId = (req as any).customerId;
+    const customerId = (req as any).customer?.id;
     const { limit = '10', offset = '0' } = req.query;
 
     if (!customerId) {
@@ -188,7 +188,7 @@ export async function getDataExportHistory(req: Request, res: Response): Promise
  */
 export async function downloadDataExport(req: Request, res: Response): Promise<void> {
   try {
-    const customerId = (req as any).customerId;
+    const customerId = (req as any).customer?.id;
     const storeId = (req as any).storeId;
     const { exportId } = req.params;
 
