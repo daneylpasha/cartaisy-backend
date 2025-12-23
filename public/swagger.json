@@ -2256,6 +2256,19 @@
 				"type": "object",
 				"additionalProperties": false
 			},
+			"CustomerRefreshTokenRequest": {
+				"properties": {
+					"refreshToken": {
+						"type": "string",
+						"description": "Refresh token from login/register response"
+					}
+				},
+				"required": [
+					"refreshToken"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
 			"CustomerUpdateProfileRequest": {
 				"properties": {
 					"name": {
@@ -6658,6 +6671,89 @@
 							"schema": {
 								"$ref": "#/components/schemas/CustomerLoginRequest",
 								"description": "Login credentials"
+							}
+						}
+					}
+				}
+			}
+		},
+		"/customer/auth/refresh-token": {
+			"post": {
+				"operationId": "CustomerRefreshToken",
+				"responses": {
+					"200": {
+						"description": "Token refreshed successfully",
+						"content": {
+							"application/json": {
+								"schema": {
+									"properties": {
+										"data": {
+											"properties": {
+												"refreshToken": {
+													"type": "string"
+												},
+												"token": {
+													"type": "string"
+												},
+												"user": {
+													"$ref": "#/components/schemas/CustomerData"
+												}
+											},
+											"required": [
+												"refreshToken",
+												"token",
+												"user"
+											],
+											"type": "object"
+										},
+										"message": {
+											"type": "string"
+										},
+										"status": {
+											"type": "string",
+											"enum": [
+												"success",
+												"error"
+											]
+										}
+									},
+									"required": [
+										"message",
+										"status"
+									],
+									"type": "object"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "Bad Request - Refresh token required"
+					},
+					"401": {
+						"description": "Unauthorized - Invalid or expired refresh token"
+					},
+					"403": {
+						"description": "Forbidden - Account deactivated"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Refresh access token for customer",
+				"summary": "Refresh customer access token",
+				"tags": [
+					"Customer Authentication"
+				],
+				"security": [],
+				"parameters": [],
+				"requestBody": {
+					"description": "Refresh token",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/CustomerRefreshTokenRequest",
+								"description": "Refresh token"
 							}
 						}
 					}

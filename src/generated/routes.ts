@@ -676,6 +676,14 @@ const models: TsoaRoute.Models = {
         "additionalProperties": false,
     },
     // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "CustomerRefreshTokenRequest": {
+        "dataType": "refObject",
+        "properties": {
+            "refreshToken": {"dataType":"string","required":true},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
     "CustomerUpdateProfileRequest": {
         "dataType": "refObject",
         "properties": {
@@ -2489,6 +2497,36 @@ export function RegisterRoutes(app: Router) {
 
               await templateService.apiHandler({
                 methodName: 'customerLogin',
+                controller,
+                response,
+                next,
+                validatedArgs,
+                successStatus: 200,
+              });
+            } catch (err) {
+                return next(err);
+            }
+        });
+        // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+        const argsCustomerAuthTsoaController_customerRefreshToken: Record<string, TsoaRoute.ParameterSchema> = {
+                requestBody: {"in":"body","name":"requestBody","required":true,"ref":"CustomerRefreshTokenRequest"},
+        };
+        app.post('/api/v1/customer/auth/refresh-token',
+            ...(fetchMiddlewares<RequestHandler>(CustomerAuthTsoaController)),
+            ...(fetchMiddlewares<RequestHandler>(CustomerAuthTsoaController.prototype.customerRefreshToken)),
+
+            async function CustomerAuthTsoaController_customerRefreshToken(request: ExRequest, response: ExResponse, next: any) {
+
+            // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+
+            let validatedArgs: any[] = [];
+            try {
+                validatedArgs = templateService.getValidatedArgs({ args: argsCustomerAuthTsoaController_customerRefreshToken, request, response });
+
+                const controller = new CustomerAuthTsoaController();
+
+              await templateService.apiHandler({
+                methodName: 'customerRefreshToken',
                 controller,
                 response,
                 next,

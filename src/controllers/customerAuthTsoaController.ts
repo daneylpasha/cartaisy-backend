@@ -13,6 +13,7 @@ import {
   SuccessResponse,
   Header,
 } from 'tsoa';
+import jwt from 'jsonwebtoken';
 import Customer, { ICustomer } from '../models/Customer';
 import Store from '../models/Store';
 import { generateToken, generateRefreshToken } from '../utils/jwt';
@@ -124,6 +125,11 @@ interface CustomerDeviceTokenRequest {
 interface CustomerLogoutRequest {
   /** Device token to remove (optional) */
   deviceToken?: string;
+}
+
+interface CustomerRefreshTokenRequest {
+  /** Refresh token from login/register response */
+  refreshToken: string;
 }
 
 interface CustomerDeleteAccountRequest {
@@ -380,6 +386,107 @@ export class CustomerAuthTsoaController extends Controller {
       return {
         status: 'error',
         message: 'Login failed. Please try again.',
+      };
+    }
+  }
+
+  /**
+   * Refresh access token for customer
+   * @summary Refresh customer access token
+   * @param requestBody Refresh token
+   * @returns New access token and refresh token
+   */
+  @Post('refresh-token')
+  @SuccessResponse(200, 'Token refreshed successfully')
+  @Response(400, 'Bad Request - Refresh token required')
+  @Response(401, 'Unauthorized - Invalid or expired refresh token')
+  @Response(403, 'Forbidden - Account deactivated')
+  @Response(500, 'Internal Server Error')
+  public async customerRefreshToken(
+    @Body() requestBody: CustomerRefreshTokenRequest
+  ): Promise<{
+    status: 'success' | 'error';
+    message: string;
+    data?: {
+      user: CustomerData;
+      token: string;
+      refreshToken: string;
+    };
+  }> {
+    try {
+      const { refreshToken: token } = requestBody;
+
+      if (!token) {
+        this.setStatus(400);
+        return {
+          status: 'error',
+          message: 'Refresh token is required',
+        };
+      }
+
+      // Verify the refresh token
+      const JWT_SECRET = process.env.JWT_SECRET || 'your-default-secret-key';
+
+      let decoded: any;
+      try {
+        decoded = jwt.verify(token, JWT_SECRET);
+      } catch (error) {
+        this.setStatus(401);
+        return {
+          status: 'error',
+          message: 'Invalid or expired refresh token',
+        };
+      }
+
+      // Verify it's a refresh token (not an access token)
+      if (decoded.type !== 'refresh') {
+        this.setStatus(401);
+        return {
+          status: 'error',
+          message: 'Invalid token type',
+        };
+      }
+
+      // Find the customer
+      const customer = await Customer.findById(decoded.userId);
+
+      if (!customer) {
+        this.setStatus(401);
+        return {
+          status: 'error',
+          message: 'Customer not found',
+        };
+      }
+
+      // Check if customer is active
+      if (!customer.isActive) {
+        this.setStatus(403);
+        return {
+          status: 'error',
+          message: 'Account is inactive',
+        };
+      }
+
+      // Generate new tokens
+      const newAccessToken = generateToken(customer._id.toString());
+      const newRefreshToken = generateRefreshToken(customer._id.toString());
+
+      this.setStatus(200);
+      return {
+        status: 'success',
+        message: 'Token refreshed successfully',
+        data: {
+          user: formatCustomerResponse(customer),
+          token: newAccessToken,
+          refreshToken: newRefreshToken,
+        },
+      };
+    } catch (error) {
+      console.error('Customer refresh token error:', error);
+      this.setStatus(500);
+      return {
+        status: 'error',
+        message: 'Failed to refresh token. Please try again.',
       };
     }
   }
