@@ -106,6 +106,8 @@ export class ShopifyOrderSyncService {
           note: `Mobile App Order: ${order.orderNumber}\nPayment Status: ${order.paymentStatus || 'pending'}\nSource: Cartaisy`,
           tags: 'cartaisy,mobile-app',
           tax_exempt: false,
+          // Use order currency for multi-currency support
+          currency: order.currency || 'USD',
         },
       };
 
