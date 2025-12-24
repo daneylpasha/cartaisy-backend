@@ -148,12 +148,10 @@ export async function exportAllCustomersData(req: Request, res: Response): Promi
       return;
     }
 
-    // Create a bulk export record
-    const bulkExportId = new mongoose.Types.ObjectId();
+    // Process each customer (in production, this would be batched/queued)
     const exportResults: any[] = [];
     const errors: any[] = [];
 
-    // Process each customer (in production, this would be batched/queued)
     for (const customer of customers) {
       try {
         const customerId = (customer._id as mongoose.Types.ObjectId).toString();
@@ -172,6 +170,37 @@ export async function exportAllCustomersData(req: Request, res: Response): Promi
         });
       }
     }
+
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+    // Create bulk export record in database
+    const bulkExportRecord = await DataExport.create({
+      storeId,
+      type: 'bulk',
+      requestedBy: 'merchant',
+      requestedByUserId: adminUserId,
+      status: 'completed',
+      totalCustomers: customers.length,
+      successCount: exportResults.length,
+      errorCount: errors.length,
+      exportData: {
+        schemaVersion: '1.0.0',
+        exportedAt: now,
+        storeId,
+        type: 'bulk',
+        totalCustomers: customers.length,
+        successCount: exportResults.length,
+        errorCount: errors.length,
+        customers: exportResults,
+        errors: errors.length > 0 ? errors : undefined,
+      },
+      schemaVersion: '1.0.0',
+      dataCategories: ['profile', 'orders', 'wishlist', 'activity'],
+      requestedAt: now,
+      completedAt: now,
+      expiresAt,
+    });
 
     // Create audit log for bulk export
     await AuditLog.create({
@@ -193,15 +222,15 @@ export async function exportAllCustomersData(req: Request, res: Response): Promi
     res.status(200).json({
       success: true,
       data: {
-        exportId: bulkExportId.toString(),
+        exportId: bulkExportRecord._id,
         status: 'completed',
         totalCustomers: customers.length,
         successCount: exportResults.length,
         errorCount: errors.length,
-        requestedAt: new Date(),
-        completedAt: new Date(),
-        exports: exportResults,
-        errors: errors.length > 0 ? errors : undefined,
+        requestedAt: bulkExportRecord.requestedAt,
+        completedAt: bulkExportRecord.completedAt,
+        expiresAt: bulkExportRecord.expiresAt,
+        downloadUrl: `/api/v1/stores/${storeId}/compliance/export/${bulkExportRecord._id}/download`,
       },
     });
   } catch (error: any) {
@@ -538,15 +567,23 @@ export async function downloadExportData(req: Request, res: Response): Promise<v
       return;
     }
 
-    // Re-generate the export data
-    const exportData = await DataExportService.collectUserData(storeId, exportRecord.customerId);
+    let exportData: any;
+    let filename: string;
+
+    // Handle bulk vs single customer exports
+    if (exportRecord.type === 'bulk') {
+      // For bulk exports, return stored exportData
+      exportData = exportRecord.exportData;
+      filename = `bulk-data-export-${exportRecord._id}-${new Date().toISOString().split('T')[0]}.json`;
+    } else {
+      // For single customer exports, re-generate the data
+      exportData = await DataExportService.collectUserData(storeId, exportRecord.customerId!.toString());
+      filename = `customer-data-export-${exportRecord.customerId}-${new Date().toISOString().split('T')[0]}.json`;
+    }
 
     // Set headers for JSON download
     res.setHeader('Content-Type', 'application/json');
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename="customer-data-export-${exportRecord.customerId}-${new Date().toISOString().split('T')[0]}.json"`
-    );
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
 
     res.status(200).json(exportData);
   } catch (error: any) {
