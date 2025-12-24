@@ -115,9 +115,11 @@ export async function exportCustomerData(req: Request, res: Response): Promise<v
  * Export all customer data for the entire store (bulk GDPR export)
  */
 export async function exportAllCustomersData(req: Request, res: Response): Promise<void> {
+  const startTime = Date.now();
   try {
     const { storeId } = req.params;
     const adminUserId = (req as any).userId;
+    const clientIp = req.ip || req.headers['x-forwarded-for'] as string || 'unknown';
 
     if (!mongoose.Types.ObjectId.isValid(storeId)) {
       res.status(400).json({
@@ -173,13 +175,15 @@ export async function exportAllCustomersData(req: Request, res: Response): Promi
 
     // Create audit log for bulk export
     await AuditLog.create({
+      storeId,
       userId: adminUserId,
       action: 'bulk_data_export',
       endpoint: `/stores/${storeId}/compliance/export/all`,
       method: 'POST',
+      ip: clientIp,
       statusCode: 200,
-      metadata: {
-        storeId,
+      duration: Date.now() - startTime,
+      requestBody: {
         totalCustomers: customers.length,
         successCount: exportResults.length,
         errorCount: errors.length,
@@ -344,9 +348,11 @@ export async function getExportHistory(req: Request, res: Response): Promise<voi
  * Delete all personal data for a customer while preserving anonymized order history
  */
 export async function deleteCustomerData(req: Request, res: Response): Promise<void> {
+  const startTime = Date.now();
   try {
     const { storeId, customerId } = req.params;
     const adminUserId = (req as any).userId;
+    const clientIp = req.ip || req.headers['x-forwarded-for'] as string || 'unknown';
     const { reason, confirmDelete } = req.body;
 
     // Require confirmation
@@ -448,13 +454,15 @@ export async function deleteCustomerData(req: Request, res: Response): Promise<v
 
     // Create audit log for deletion
     await AuditLog.create({
+      storeId,
       userId: adminUserId,
       action: 'gdpr_customer_deletion',
       endpoint: `/stores/${storeId}/compliance/delete/customer/${customerId}`,
       method: 'POST',
+      ip: clientIp,
       statusCode: 200,
-      metadata: {
-        storeId,
+      duration: Date.now() - startTime,
+      requestBody: {
         deletedCustomerId: customerId,
         deletedCustomerEmail: customerEmail,
         reason: reason || 'GDPR Article 17 - Right to be Forgotten',
