@@ -16,6 +16,7 @@ const router = express.Router();
  *
  * Admin endpoints for GDPR data export and deletion.
  * All routes require authentication and admin role.
+ * Authentication is applied per-route to avoid affecting other routes.
  *
  * Routes:
  * - POST /stores/:storeId/compliance/export/customer/:customerId  - Export single customer
@@ -26,9 +27,8 @@ const router = express.Router();
  * - POST /stores/:storeId/compliance/delete/customer/:customerId  - Delete customer data
  */
 
-// Apply authentication and admin authorization to all routes
-router.use(authenticate);
-router.use(authorize('admin', 'super_admin'));
+// Middleware array for admin authentication
+const adminAuth = [authenticate, authorize('admin', 'super_admin')];
 
 // =============================================================================
 // DATA EXPORT ENDPOINTS
@@ -38,63 +38,36 @@ router.use(authorize('admin', 'super_admin'));
  * POST /stores/:storeId/compliance/export/customer/:customerId
  *
  * Export all data for a specific customer (GDPR Article 20 - Data Portability)
- *
- * Returns:
- * - Export ID and status
- * - Complete customer data export
  */
-router.post('/stores/:storeId/compliance/export/customer/:customerId', exportCustomerData);
+router.post('/stores/:storeId/compliance/export/customer/:customerId', adminAuth, exportCustomerData);
 
 /**
  * POST /stores/:storeId/compliance/export/all
  *
  * Export all customer data for the entire store (bulk export)
- *
- * WARNING: This can be resource-intensive for large stores.
- * Consider implementing pagination or background processing for production.
- *
- * Returns:
- * - Export ID
- * - Array of all customer data exports
  */
-router.post('/stores/:storeId/compliance/export/all', exportAllCustomersData);
+router.post('/stores/:storeId/compliance/export/all', adminAuth, exportAllCustomersData);
 
 /**
  * GET /stores/:storeId/compliance/export/:exportId
  *
  * Get status of a specific export request
- *
- * Returns:
- * - Export status (pending, processing, completed, failed, expired)
- * - Export metadata (size, categories, dates)
- * - Download URL if completed
  */
-router.get('/stores/:storeId/compliance/export/:exportId', getExportStatus);
+router.get('/stores/:storeId/compliance/export/:exportId', adminAuth, getExportStatus);
 
 /**
  * GET /stores/:storeId/compliance/export/:exportId/download
  *
  * Download the exported data as JSON file
- *
- * Returns:
- * - JSON file with all customer data
  */
-router.get('/stores/:storeId/compliance/export/:exportId/download', downloadExportData);
+router.get('/stores/:storeId/compliance/export/:exportId/download', adminAuth, downloadExportData);
 
 /**
  * GET /stores/:storeId/compliance/exports
  *
  * Get all export requests for the store
- *
- * Query params:
- * - limit: number (default: 20, max: 100)
- * - offset: number (default: 0)
- * - status: 'pending' | 'processing' | 'completed' | 'failed' | 'expired'
- *
- * Returns:
- * - Paginated list of export requests
  */
-router.get('/stores/:storeId/compliance/exports', getExportHistory);
+router.get('/stores/:storeId/compliance/exports', adminAuth, getExportHistory);
 
 // =============================================================================
 // DATA DELETION ENDPOINTS (RIGHT TO BE FORGOTTEN)
@@ -104,25 +77,7 @@ router.get('/stores/:storeId/compliance/exports', getExportHistory);
  * POST /stores/:storeId/compliance/delete/customer/:customerId
  *
  * Delete all personal data for a customer (GDPR Article 17 - Right to be Forgotten)
- *
- * Body:
- * - confirmDelete: boolean (required, must be true)
- * - reason: string (optional, for audit purposes)
- *
- * This will:
- * - Anonymize orders (preserve for financial records)
- * - Delete payment methods
- * - Delete search history
- * - Delete product views
- * - Delete cart activity
- * - Delete wishlists
- * - Delete notification data
- * - Anonymize audit logs
- * - Delete customer account
- *
- * Returns:
- * - Deletion summary with counts
  */
-router.post('/stores/:storeId/compliance/delete/customer/:customerId', deleteCustomerData);
+router.post('/stores/:storeId/compliance/delete/customer/:customerId', adminAuth, deleteCustomerData);
 
 export default router;

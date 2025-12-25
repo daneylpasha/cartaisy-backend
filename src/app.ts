@@ -265,8 +265,8 @@ app.use(`/api/${apiConfig.version}/admin`, emailConfigRoutes);
 app.use(`/api/${apiConfig.version}/admin`, customerManagementRoutes);
 // Abandoned cart routes (admin)
 app.use(`/api/${apiConfig.version}/admin`, abandonedCartRoutes);
-// GDPR Compliance routes (admin)
-app.use(`/api/${apiConfig.version}/admin`, complianceRoutes);
+// GDPR Compliance routes (admin) - mounted at base path with per-route auth
+app.use(`/api/${apiConfig.version}`, complianceRoutes);
 // Store admin routes (dashboard APIs like sync status)
 app.use(`/api/${apiConfig.version}`, storeAdminRoutes);
 app.use(`/api/${apiConfig.version}`, carouselRoutes);
