@@ -488,3 +488,87 @@ export const updateDeviceToken = async (
     });
   }
 };
+
+/**
+ * Refresh customer access token
+ * POST /api/v1/customer/auth/refresh-token
+ */
+export const refreshCustomerToken = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { refreshToken: token } = req.body;
+
+    if (!token) {
+      res.status(400).json({
+        status: 'error',
+        message: 'Refresh token is required',
+      });
+      return;
+    }
+
+    // Verify the refresh token
+    const jwt = await import('jsonwebtoken');
+    const JWT_SECRET = process.env.JWT_SECRET || 'your-default-secret-key';
+
+    let decoded: any;
+    try {
+      decoded = jwt.default.verify(token, JWT_SECRET);
+    } catch (error) {
+      res.status(401).json({
+        status: 'error',
+        message: 'Invalid or expired refresh token',
+      });
+      return;
+    }
+
+    // Verify it's a refresh token (not an access token)
+    if (decoded.type !== 'refresh') {
+      res.status(401).json({
+        status: 'error',
+        message: 'Invalid token type',
+      });
+      return;
+    }
+
+    // Find the customer
+    const customer = await Customer.findById(decoded.userId);
+
+    if (!customer) {
+      res.status(401).json({
+        status: 'error',
+        message: 'User not found',
+      });
+      return;
+    }
+
+    // Check if customer is active
+    if (!customer.isActive) {
+      res.status(403).json({
+        status: 'error',
+        message: 'Account is inactive',
+      });
+      return;
+    }
+
+    // Generate new tokens
+    const newAccessToken = generateToken(customer._id.toString());
+    const newRefreshToken = generateRefreshToken(customer._id.toString());
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Token refreshed successfully',
+      data: {
+        token: newAccessToken,
+        refreshToken: newRefreshToken,
+      },
+    });
+  } catch (error) {
+    console.error('Customer refresh token error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to refresh token. Please try again.',
+    });
+  }
+};

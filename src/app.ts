@@ -265,7 +265,7 @@ app.use(`/api/${apiConfig.version}/admin`, customerManagementRoutes);
 // Abandoned cart routes (admin)
 app.use(`/api/${apiConfig.version}/admin`, abandonedCartRoutes);
 // GDPR Compliance routes (admin)
-app.use(`/api/${apiConfig.version}`, complianceRoutes);
+app.use(`/api/${apiConfig.version}/admin`, complianceRoutes);
 app.use(`/api/${apiConfig.version}`, carouselRoutes);
 app.use(`/api/${apiConfig.version}`, categoryGridRoutes);
 app.use(`/api/${apiConfig.version}`, calloutBannerRoutes);

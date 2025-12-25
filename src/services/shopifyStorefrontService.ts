@@ -1433,6 +1433,7 @@ class ShopifyStorefrontService {
       value: string;
       type: string;
     }>;
+    presentmentCurrencyCode?: string;
   }): Promise<any> {
     const query = `
       mutation draftOrderCreate($input: DraftOrderInput!) {
@@ -1552,6 +1553,11 @@ class ShopifyStorefrontService {
     // Add metafields if provided (custom data storage)
     if (orderInput.metafields && orderInput.metafields.length > 0) {
       input.metafields = orderInput.metafields;
+    }
+
+    // Add presentment currency for multi-currency support
+    if (orderInput.presentmentCurrencyCode) {
+      input.presentmentCurrencyCode = orderInput.presentmentCurrencyCode;
     }
 
     return this.queryAdmin<any>(query, { input });

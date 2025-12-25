@@ -9,10 +9,12 @@ import mongoose, { Document, Schema } from 'mongoose';
 
 export type ExportStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'expired';
 export type ExportRequestedBy = 'customer' | 'merchant';
+export type ExportType = 'single_customer' | 'bulk';
 
 export interface IDataExport extends Document {
   storeId: mongoose.Types.ObjectId;
-  customerId: mongoose.Types.ObjectId;
+  customerId?: mongoose.Types.ObjectId; // Optional for bulk exports
+  type: ExportType;
 
   // Request details
   requestedBy: ExportRequestedBy;
@@ -26,6 +28,14 @@ export interface IDataExport extends Document {
   fileUrl?: string;
   fileSize?: number;
   expiresAt?: Date;
+
+  // Bulk export stats
+  totalCustomers?: number;
+  successCount?: number;
+  errorCount?: number;
+
+  // Export data storage
+  exportData?: Record<string, any>;
 
   // Metadata
   schemaVersion: string;
@@ -53,7 +63,13 @@ const dataExportSchema = new Schema<IDataExport>(
     customerId: {
       type: Schema.Types.ObjectId,
       ref: 'Customer',
-      required: true,
+      index: true,
+      // Not required - bulk exports don't have a single customerId
+    },
+    type: {
+      type: String,
+      enum: ['single_customer', 'bulk'],
+      default: 'single_customer',
       index: true,
     },
     requestedBy: {
@@ -83,6 +99,20 @@ const dataExportSchema = new Schema<IDataExport>(
     expiresAt: {
       type: Date,
       index: true,
+    },
+    // Bulk export stats
+    totalCustomers: {
+      type: Number,
+    },
+    successCount: {
+      type: Number,
+    },
+    errorCount: {
+      type: Number,
+    },
+    // Export data storage (for persisting export data)
+    exportData: {
+      type: Schema.Types.Mixed,
     },
     schemaVersion: {
       type: String,

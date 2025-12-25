@@ -1,8 +1,10 @@
 import { shopifyApi, ApiVersion } from '@shopify/shopify-api';
+import axios, { AxiosInstance } from 'axios';
 import { tenantConfig } from '../config/tenant';
 import Product from '../models/Product';
 import User from '../models/User';
 import Order from '../models/Order';
+import Store from '../models/Store';
 import crypto from 'crypto';
 import {
   IShopifyProduct,
@@ -96,13 +98,62 @@ export const getShopifySession = () => {
 /**
  * Legacy client getter - simplified for deployment
  */
-export const getShopifyClient = () => {
-  return {
-    get: async (options: any) => ({ body: {} }),
-    post: async (options: any) => ({ body: {} }),
-    put: async (options: any) => ({ body: {} }),
-    delete: async (options: any) => ({ body: {} })
-  };
+// Store-specific Shopify client cache
+let cachedClient: { storeId: string; client: AxiosInstance } | null = null;
+
+/**
+ * Get Shopify Admin API client for a specific store
+ * Uses store credentials from database
+ */
+export const getShopifyClientForStore = async (storeId: string): Promise<AxiosInstance | null> => {
+  try {
+    const store = await Store.findById(storeId).select('+shopify.accessToken');
+
+    if (!store?.shopify?.accessToken || !store.shopify.shop || !store.shopify.isConnected) {
+      console.log(`Store ${storeId} not connected to Shopify or missing credentials`);
+      return null;
+    }
+
+    return axios.create({
+      baseURL: `https://${store.shopify.shop}/admin/api/2024-01`,
+      headers: {
+        'X-Shopify-Access-Token': store.shopify.accessToken,
+        'Content-Type': 'application/json',
+      },
+      timeout: 30000,
+    });
+  } catch (error) {
+    console.error('Error creating Shopify client:', error);
+    return null;
+  }
+};
+
+/**
+ * Get the first connected store's Shopify client (for backward compatibility)
+ * This is used by sync functions that don't have a specific storeId
+ */
+export const getShopifyClient = async (): Promise<AxiosInstance | null> => {
+  try {
+    // Find first connected store
+    const store = await Store.findOne({ 'shopify.isConnected': true }).select('+shopify.accessToken');
+
+    if (!store?.shopify?.accessToken || !store.shopify.shop) {
+      console.log('No connected Shopify store found');
+      return null;
+    }
+
+    return axios.create({
+      baseURL: `https://${store.shopify.shop}/admin/api/2024-01`,
+      headers: {
+        'X-Shopify-Access-Token': store.shopify.accessToken,
+        'Content-Type': 'application/json',
+      },
+      timeout: 30000,
+    });
+  } catch (error) {
+    console.error('Error creating Shopify client:', error);
+    return null;
+  }
 };
 
 /**
@@ -110,13 +161,11 @@ export const getShopifyClient = () => {
  */
 export const testShopifyConnection = async (): Promise<boolean> => {
   try {
-    const client = getShopifyClient();
-    const response = await client.get({
-      path: 'shop'
-    });
+    const client = await getShopifyClient();
+    if (!client) return false;
 
-    // Check if we got a response body (indicates success)
-    return !!(response as any).body?.shop || (response as any).status === 200;
+    const response = await client.get('/shop.json');
+    return !!response.data?.shop;
   } catch (error) {
     console.error('Shopify connection test failed:', error);
     return false;
@@ -127,26 +176,24 @@ export const testShopifyConnection = async (): Promise<boolean> => {
  * Fetch all products from Shopify and sync with our Product model
  */
 export const syncProducts = async (): Promise<SyncResult> => {
-  const client = getShopifyClient();
+  const client = await getShopifyClient();
   const errors: string[] = [];
   let synced = 0;
-  let page = 1;
   const limit = 50;
 
-  try {
-    while (true) {
-      const response = await client.get({
-        path: 'products',
-        query: {
-          limit: limit.toString(),
-          page: page.toString(),
-          status: 'active'
-        }
-      }) as ShopifyResponse<ShopifyProductResponse>;
+  if (!client) {
+    console.log('❌ No Shopify client available - store not connected');
+    return { synced: 0, errors: ['No Shopify store connected'] };
+  }
 
-      const products = response.body.products;
-      
-      if (!products || products.length === 0) {
+  try {
+    let url = `/products.json?limit=${limit}&status=active`;
+
+    while (url) {
+      const response = await client.get(url);
+      const products = response.data?.products || [];
+
+      if (products.length === 0) {
         break;
       }
 
@@ -161,19 +208,22 @@ export const syncProducts = async (): Promise<SyncResult> => {
         }
       }
 
-      // Check if we have more pages
-      if (products.length < limit) {
-        break;
+      // Check for next page using Link header
+      const linkHeader = response.headers?.link || response.headers?.Link;
+      if (linkHeader && linkHeader.includes('rel="next"')) {
+        const match = linkHeader.match(/<([^>]+)>;\s*rel="next"/);
+        url = match ? match[1].replace(/^https:\/\/[^\/]+/, '') : '';
+      } else {
+        url = '';
       }
-      
-      page++;
     }
 
     console.log(`✅ Synced ${synced} products from Shopify`);
     return { synced, errors };
-  } catch (error) {
-    console.error('Error syncing products from Shopify:', error);
-    throw error;
+  } catch (error: any) {
+    console.error('Error syncing products from Shopify:', error.response?.data || error.message);
+    errors.push(error.message || 'Unknown error');
+    return { synced, errors };
   }
 };
 
@@ -181,21 +231,23 @@ export const syncProducts = async (): Promise<SyncResult> => {
  * Sync single product with enhanced mobile features
  */
 export const syncProduct = async (productId: string, shopifyProduct?: IShopifyProduct): Promise<void> => {
-  const client = getShopifyClient();
-  
+  const client = await getShopifyClient();
+
   try {
     // Fetch product from Shopify if not provided
+    if (!shopifyProduct && client) {
+      const response = await client.get(`/products/${productId}.json`);
+      shopifyProduct = response.data?.product;
+    }
+
     if (!shopifyProduct) {
-      const response = await client.get({
-        path: `products/${productId}`
-      }) as ShopifyResponse<{ product: IShopifyProduct }>;
-      shopifyProduct = response.body.product;
+      throw new Error(`Product ${productId} not found`);
     }
 
     // Check if product already exists in our database
     let existingProduct = await Product.findOne({ shopifyProductId: productId });
 
-    const productData = {
+    const productData: any = {
       shopifyProductId: productId,
       title: shopifyProduct.title,
       description: shopifyProduct.body_html || '',
@@ -300,25 +352,24 @@ export const syncProduct = async (productId: string, shopifyProduct?: IShopifyPr
  * Import Shopify customers and merge with our User model
  */
 export const syncCustomers = async (): Promise<SyncResult> => {
-  const client = getShopifyClient();
+  const client = await getShopifyClient();
   const errors: string[] = [];
   let synced = 0;
-  let page = 1;
   const limit = 50;
 
-  try {
-    while (true) {
-      const response = await client.get({
-        path: 'customers',
-        query: {
-          limit: limit.toString(),
-          page: page.toString()
-        }
-      }) as ShopifyResponse<ShopifyCustomerResponse>;
+  if (!client) {
+    console.log('❌ No Shopify client available - store not connected');
+    return { synced: 0, errors: ['No Shopify store connected'] };
+  }
 
-      const customers = response.body.customers;
-      
-      if (!customers || customers.length === 0) {
+  try {
+    let url = `/customers.json?limit=${limit}`;
+
+    while (url) {
+      const response = await client.get(url);
+      const customers = response.data?.customers || [];
+
+      if (customers.length === 0) {
         break;
       }
 
@@ -381,18 +432,22 @@ export const syncCustomers = async (): Promise<SyncResult> => {
         }
       }
 
-      if (customers.length < limit) {
-        break;
+      // Check for next page using Link header
+      const linkHeader = response.headers?.link || response.headers?.Link;
+      if (linkHeader && linkHeader.includes('rel="next"')) {
+        const match = linkHeader.match(/<([^>]+)>;\s*rel="next"/);
+        url = match ? match[1].replace(/^https:\/\/[^\/]+/, '') : '';
+      } else {
+        url = '';
       }
-      
-      page++;
     }
 
     console.log(`👥 Synced ${synced} customers from Shopify`);
     return { synced, errors };
-  } catch (error) {
-    console.error('Error syncing customers from Shopify:', error);
-    throw error;
+  } catch (error: any) {
+    console.error('Error syncing customers from Shopify:', error.response?.data || error.message);
+    errors.push(error.message || 'Unknown error');
+    return { synced, errors };
   }
 };
 
@@ -400,116 +455,127 @@ export const syncCustomers = async (): Promise<SyncResult> => {
  * Import recent orders and enhance with our tracking system
  */
 export const syncOrders = async (daysBack: number = 30): Promise<SyncResult> => {
-  const client = getShopifyClient();
+  const client = await getShopifyClient();
   const errors: string[] = [];
   let synced = 0;
-  
+
+  if (!client) {
+    console.log('❌ No Shopify client available - store not connected');
+    return { synced: 0, errors: ['No Shopify store connected'] };
+  }
+
   const startDate = new Date();
   startDate.setDate(startDate.getDate() - daysBack);
+  const limit = 50;
 
   try {
-    const response = await client.get({
-      path: 'orders',
-      query: {
-        status: 'any',
-        created_at_min: startDate.toISOString(),
-        limit: '250'
+    let url = `/orders.json?status=any&created_at_min=${startDate.toISOString()}&limit=${limit}`;
+
+    while (url) {
+      const response = await client.get(url);
+      const orders = response.data?.orders || [];
+
+      if (orders.length === 0) {
+        break;
       }
-    }) as ShopifyResponse<ShopifyOrderResponse>;
 
-    const orders = response.body.orders;
+      for (const shopifyOrder of orders) {
+        try {
+          // Check if order already exists
+          let existingOrder = await Order.findOne({ shopifyOrderId: shopifyOrder.id.toString() });
 
-    if (!orders || !Array.isArray(orders)) {
-      console.log('No orders found in Shopify response');
-      return { synced: 0, errors: [] };
-    }
+          if (!existingOrder) {
+            // Find user by email
+            const user = await User.findOne({ email: shopifyOrder.email });
 
-    for (const shopifyOrder of orders) {
-      try {
-        // Check if order already exists
-        let existingOrder = await Order.findOne({ shopifyOrderId: shopifyOrder.id.toString() });
+            if (!user) {
+              console.warn(`User not found for order ${shopifyOrder.order_number}, skipping...`);
+              continue;
+            }
 
-        if (!existingOrder) {
-          // Find user by email
-          const user = await User.findOne({ email: shopifyOrder.email });
-          
-          if (!user) {
-            console.warn(`User not found for order ${shopifyOrder.order_number}, skipping...`);
-            continue;
+            // Create new order with enhanced tracking
+            const orderData = {
+              shopifyOrderId: shopifyOrder.id.toString(),
+              shopifyOrderNumber: shopifyOrder.order_number.toString(),
+              orderNumber: shopifyOrder.name || shopifyOrder.order_number.toString(),
+              user: user._id,
+              email: shopifyOrder.email,
+
+              lineItems: shopifyOrder.line_items?.map((item: any) => ({
+                productId: item.product_id?.toString(),
+                variantId: item.variant_id?.toString(),
+                quantity: item.quantity,
+                price: parseFloat(item.price),
+                title: item.title,
+                sku: item.sku
+              })) || [],
+
+              subtotalPrice: parseFloat(shopifyOrder.subtotal_price),
+              totalTax: parseFloat(shopifyOrder.total_tax),
+              totalPrice: parseFloat(shopifyOrder.total_price),
+              currency: shopifyOrder.currency,
+
+              billingAddress: mapShopifyAddress(shopifyOrder.billing_address),
+              shippingAddress: mapShopifyAddress(shopifyOrder.shipping_address),
+
+              shipping: {
+                method: shopifyOrder.shipping_lines?.[0]?.title || 'Standard',
+                cost: shopifyOrder.shipping_lines?.[0] ?
+                  parseFloat(shopifyOrder.shipping_lines[0].price) : 0,
+                carrier: shopifyOrder.shipping_lines?.[0]?.carrier_identifier,
+                trackingNumber: shopifyOrder.tracking_number,
+                trackingUrl: shopifyOrder.tracking_url
+              },
+
+              financialStatus: mapShopifyFinancialStatus(shopifyOrder.financial_status),
+              fulfillmentStatus: mapShopifyFulfillmentStatus(shopifyOrder.fulfillment_status),
+
+              // Enhanced mobile status
+              mobileStatus: {
+                current: mapToMobileStatus(shopifyOrder.fulfillment_status),
+                history: [{
+                  status: 'placed',
+                  timestamp: new Date(shopifyOrder.created_at),
+                  note: 'Order placed in Shopify'
+                }],
+                estimatedDelivery: shopifyOrder.shipping_lines?.[0]?.delivery_date ?
+                  new Date(shopifyOrder.shipping_lines[0].delivery_date) : undefined
+              },
+
+              placedAt: new Date(shopifyOrder.created_at),
+              processedAt: shopifyOrder.processed_at ? new Date(shopifyOrder.processed_at) : undefined,
+
+              source: 'web',
+              channel: 'website'
+            };
+
+            const newOrder = new Order(orderData);
+            await newOrder.save();
+            synced++;
           }
-
-          // Create new order with enhanced tracking
-          const orderData = {
-            shopifyOrderId: shopifyOrder.id.toString(),
-            shopifyOrderNumber: shopifyOrder.order_number.toString(),
-            orderNumber: shopifyOrder.name || shopifyOrder.order_number.toString(),
-            user: user._id,
-            email: shopifyOrder.email,
-            
-            lineItems: shopifyOrder.line_items?.map((item: any) => ({
-              productId: item.product_id?.toString(),
-              variantId: item.variant_id?.toString(),
-              quantity: item.quantity,
-              price: parseFloat(item.price),
-              title: item.title,
-              sku: item.sku
-            })) || [],
-            
-            subtotalPrice: parseFloat(shopifyOrder.subtotal_price),
-            totalTax: parseFloat(shopifyOrder.total_tax),
-            totalPrice: parseFloat(shopifyOrder.total_price),
-            currency: shopifyOrder.currency,
-            
-            billingAddress: mapShopifyAddress(shopifyOrder.billing_address),
-            shippingAddress: mapShopifyAddress(shopifyOrder.shipping_address),
-            
-            shipping: {
-              method: shopifyOrder.shipping_lines?.[0]?.title || 'Standard',
-              cost: shopifyOrder.shipping_lines?.[0] ? 
-                parseFloat(shopifyOrder.shipping_lines[0].price) : 0,
-              carrier: shopifyOrder.shipping_lines?.[0]?.carrier_identifier,
-              trackingNumber: shopifyOrder.tracking_number,
-              trackingUrl: shopifyOrder.tracking_url
-            },
-            
-            financialStatus: mapShopifyFinancialStatus(shopifyOrder.financial_status),
-            fulfillmentStatus: mapShopifyFulfillmentStatus(shopifyOrder.fulfillment_status),
-            
-            // Enhanced mobile status
-            mobileStatus: {
-              current: mapToMobileStatus(shopifyOrder.fulfillment_status),
-              history: [{
-                status: 'placed',
-                timestamp: new Date(shopifyOrder.created_at),
-                note: 'Order placed in Shopify'
-              }],
-              estimatedDelivery: shopifyOrder.shipping_lines?.[0]?.delivery_date ? 
-                new Date(shopifyOrder.shipping_lines[0].delivery_date) : undefined
-            },
-            
-            placedAt: new Date(shopifyOrder.created_at),
-            processedAt: shopifyOrder.processed_at ? new Date(shopifyOrder.processed_at) : undefined,
-            
-            source: 'web',
-            channel: 'website'
-          };
-
-          const newOrder = new Order(orderData);
-          await newOrder.save();
-          synced++;
+        } catch (error) {
+          const errorMsg = `Failed to sync order ${shopifyOrder.id}: ${error instanceof Error ? error.message : String(error)}`;
+          console.error(errorMsg);
+          errors.push(errorMsg);
         }
-      } catch (error) {
-        const errorMsg = `Failed to sync order ${shopifyOrder.id}: ${error instanceof Error ? error.message : String(error)}`;
-        console.error(errorMsg);
-        errors.push(errorMsg);
+      }
+
+      // Check for next page using Link header
+      const linkHeader = response.headers?.link || response.headers?.Link;
+      if (linkHeader && linkHeader.includes('rel="next"')) {
+        const match = linkHeader.match(/<([^>]+)>;\s*rel="next"/);
+        url = match ? match[1].replace(/^https:\/\/[^\/]+/, '') : '';
+      } else {
+        url = '';
       }
     }
 
     console.log(`📋 Synced ${synced} orders from Shopify`);
     return { synced, errors };
-  } catch (error) {
-    console.error('Error syncing orders from Shopify:', error);
-    throw error;
+  } catch (error: any) {
+    console.error('Error syncing orders from Shopify:', error.response?.data || error.message);
+    errors.push(error.message || 'Unknown error');
+    return { synced, errors };
   }
 };
 
@@ -517,14 +583,20 @@ export const syncOrders = async (daysBack: number = 30): Promise<SyncResult> => 
  * Get real-time inventory levels for a product
  */
 export const getInventoryLevels = async (productId: string): Promise<InventoryLevelsResponse> => {
-  const client = getShopifyClient();
-  
+  const client = await getShopifyClient();
+
+  if (!client) {
+    throw new Error('No Shopify store connected');
+  }
+
   try {
-    const response = await client.get({
-      path: `products/${productId}`
-    }) as ShopifyResponse<{ product: IShopifyProduct }>;
-    
-    const product = response.body.product;
+    const response = await client.get(`/products/${productId}.json`);
+    const product = response.data?.product;
+
+    if (!product) {
+      throw new Error(`Product ${productId} not found`);
+    }
+
     const inventoryLevels = product.variants?.map((variant: any) => ({
       variantId: variant.id.toString(),
       quantity: variant.inventory_quantity || 0,
@@ -537,8 +609,8 @@ export const getInventoryLevels = async (productId: string): Promise<InventoryLe
       totalQuantity: inventoryLevels.reduce((total: number, level: any) => total + level.quantity, 0),
       variants: inventoryLevels
     };
-  } catch (error) {
-    console.error(`Error getting inventory levels for product ${productId}:`, error);
+  } catch (error: any) {
+    console.error(`Error getting inventory levels for product ${productId}:`, error.response?.data || error.message);
     throw error;
   }
 };
@@ -547,22 +619,23 @@ export const getInventoryLevels = async (productId: string): Promise<InventoryLe
  * Update Shopify inventory for a variant
  */
 export const updateInventory = async (variantId: string, quantity: number): Promise<void> => {
-  const client = getShopifyClient();
-  
+  const client = await getShopifyClient();
+
+  if (!client) {
+    throw new Error('No Shopify store connected');
+  }
+
   try {
-    await client.put({
-      path: `variants/${variantId}`,
-      data: {
-        variant: {
-          id: variantId,
-          inventory_quantity: quantity
-        }
+    await client.put(`/variants/${variantId}.json`, {
+      variant: {
+        id: variantId,
+        inventory_quantity: quantity
       }
     });
-    
+
     console.log(`📦 Updated inventory for variant ${variantId}: ${quantity}`);
-  } catch (error) {
-    console.error(`Error updating inventory for variant ${variantId}:`, error);
+  } catch (error: any) {
+    console.error(`Error updating inventory for variant ${variantId}:`, error.response?.data || error.message);
     throw error;
   }
 };
@@ -576,9 +649,13 @@ export const createOrder = async (orderData: {
   shippingAddress: IAddress;
   billingAddress: IAddress;
   specialInstructions?: string;
-}): Promise<IShopifyProduct> => {
-  const client = getShopifyClient();
-  
+}): Promise<any> => {
+  const client = await getShopifyClient();
+
+  if (!client) {
+    throw new Error('No Shopify store connected');
+  }
+
   try {
     const shopifyOrderData = {
       order: {
@@ -615,14 +692,10 @@ export const createOrder = async (orderData: {
       }
     };
 
-    const response = await client.post({
-      path: 'orders',
-      data: shopifyOrderData
-    }) as ShopifyResponse<{ order: IShopifyProduct }>;
-
-    return response.body.order;
-  } catch (error) {
-    console.error('Error creating order in Shopify:', error);
+    const response = await client.post('/orders.json', shopifyOrderData);
+    return response.data?.order;
+  } catch (error: any) {
+    console.error('Error creating order in Shopify:', error.response?.data || error.message);
     throw error;
   }
 };
@@ -631,22 +704,23 @@ export const createOrder = async (orderData: {
  * Update order status and sync
  */
 export const updateOrderStatus = async (shopifyOrderId: string, status: string): Promise<void> => {
-  const client = getShopifyClient();
-  
+  const client = await getShopifyClient();
+
+  if (!client) {
+    throw new Error('No Shopify store connected');
+  }
+
   try {
-    await client.put({
-      path: `orders/${shopifyOrderId}`,
-      data: {
-        order: {
-          id: shopifyOrderId,
-          fulfillment_status: status
-        }
+    await client.put(`/orders/${shopifyOrderId}.json`, {
+      order: {
+        id: shopifyOrderId,
+        fulfillment_status: status
       }
     });
-    
+
     console.log(`📋 Updated order ${shopifyOrderId} status to: ${status}`);
-  } catch (error) {
-    console.error(`Error updating order status for ${shopifyOrderId}:`, error);
+  } catch (error: any) {
+    console.error(`Error updating order status for ${shopifyOrderId}:`, error.response?.data || error.message);
     throw error;
   }
 };

@@ -10,14 +10,16 @@ import {
   performIncrementalSync,
   validateSyncIntegrity 
 } from '../services/syncService';
-import { 
-  getLowStockProducts, 
-  getInventoryReservations 
+import {
+  getLowStockProducts,
+  getInventoryReservations
 } from '../services/inventoryService';
 // import { auth } from '../middleware/auth'; // Temporarily disabled
 import Product from '../models/Product';
 import Order from '../models/Order';
 import User from '../models/User';
+import Customer from '../models/Customer';
+import Store from '../models/Store';
 
 const router = express.Router();
 
@@ -68,26 +70,113 @@ router.get('/dashboard', async (req: Request, res: Response) => {
 
 /**
  * GET /api/admin/sync/status - Detailed sync status
+ * Query params: storeId (optional) - filter by store
+ * Headers: X-Store-ID (optional) - alternative way to pass store ID
  */
 router.get('/sync/status', async (req: Request, res: Response) => {
   try {
+    const storeId = (req.query.storeId as string) || req.headers['x-store-id'] as string;
+
+    // Get global sync status
     const [syncStatus, integrityCheck] = await Promise.all([
       getSyncStatus(),
       validateSyncIntegrity()
     ]);
 
+    // Build query filter for store-specific counts
+    const storeFilter = storeId ? { storeId } : {};
+
+    // Get resource counts (in parallel for performance)
+    const [productCount, customerCount, orderCount, store] = await Promise.all([
+      Product.countDocuments(storeFilter),
+      Customer.countDocuments(storeFilter),
+      Order.countDocuments(storeFilter),
+      storeId ? Store.findById(storeId).select('shopify.lastSyncAt name') : null
+    ]);
+
+    // Calculate next scheduled sync (incremental runs every 4 hours)
+    const now = new Date();
+    const nextSync = new Date(now);
+    nextSync.setHours(nextSync.getHours() + (4 - (nextSync.getHours() % 4)));
+    nextSync.setMinutes(0);
+    nextSync.setSeconds(0);
+    nextSync.setMilliseconds(0);
+
+    // Get last sync info - prefer store-specific, fallback to global
+    const storeLastSync = store?.shopify?.lastSyncAt;
+    const lastSyncDate = storeLastSync || syncStatus.lastIncrementalSync || syncStatus.lastFullSync;
+
+    // Determine overall status
+    let status: 'healthy' | 'syncing' | 'error' | 'unknown' = 'unknown';
+    if (syncStatus.inProgress) {
+      status = 'syncing';
+    } else if (syncStatus.errors.length > 0) {
+      status = 'error';
+    } else if (lastSyncDate) {
+      // Check if last sync was within 24 hours
+      const hoursSinceSync = (Date.now() - new Date(lastSyncDate).getTime()) / (1000 * 60 * 60);
+      status = hoursSinceSync < 24 ? 'healthy' : 'error'; // Stale data = error
+    }
+    const lastSyncType = syncStatus.lastIncrementalSync
+      ? (syncStatus.lastIncrementalSync > (syncStatus.lastFullSync || new Date(0)) ? 'incremental' : 'full')
+      : (syncStatus.lastFullSync ? 'full' : null);
+
     res.json({
       success: true,
       data: {
-        ...syncStatus,
-        integrity: integrityCheck
+        status,
+        lastSync: {
+          completedAt: lastSyncDate?.toISOString() || null,
+          type: lastSyncType,
+          duration: undefined // Duration tracking would need to be added to syncService
+        },
+        nextScheduledSync: nextSync.toISOString(),
+        resources: {
+          products: {
+            count: productCount,
+            lastUpdated: lastSyncDate?.toISOString() || null
+          },
+          customers: {
+            count: customerCount,
+            lastUpdated: lastSyncDate?.toISOString() || null
+          },
+          orders: {
+            count: orderCount,
+            lastUpdated: lastSyncDate?.toISOString() || null
+          },
+          inventory: {
+            count: productCount, // Inventory tied to products
+            lastUpdated: lastSyncDate?.toISOString() || null
+          }
+        },
+        recentErrors: syncStatus.errors.length > 0
+          ? syncStatus.errors.slice(0, 5).map(err => ({
+              timestamp: new Date().toISOString(),
+              resource: 'sync',
+              message: err
+            }))
+          : undefined,
+        // Include legacy data for backward compatibility
+        stats: syncStatus.stats,
+        integrity: integrityCheck,
+        inProgress: syncStatus.inProgress
       }
     });
   } catch (error) {
     console.error('Error getting sync status:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to get sync status'
+      error: 'Failed to get sync status',
+      data: {
+        status: 'error',
+        lastSync: { completedAt: null, type: null },
+        resources: {
+          products: { count: 0, lastUpdated: null },
+          customers: { count: 0, lastUpdated: null },
+          orders: { count: 0, lastUpdated: null },
+          inventory: { count: 0, lastUpdated: null }
+        }
+      }
     });
   }
 });

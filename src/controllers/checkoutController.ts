@@ -733,8 +733,18 @@ export class CheckoutController extends Controller {
         };
       }
 
+      // Get country code from shipping address for multi-currency support
+      let countryCode: string | undefined;
+      if (session.shippingAddressId !== undefined) {
+        const user = await findUserOrCustomer(userId);
+        if (user?.addresses?.[session.shippingAddressId]) {
+          const address = user.addresses[session.shippingAddressId] as any;
+          countryCode = address.countryCode || address.country;
+        }
+      }
+
       // Apply discount code via Shopify
-      const shopifyResponse = await shopifyStorefront.applyDiscountCodes(session.shopifyCartId, [promoCode.trim().toUpperCase()]);
+      const shopifyResponse = await shopifyStorefront.applyDiscountCodes(session.shopifyCartId, [promoCode.trim().toUpperCase()], countryCode);
 
       if (shopifyResponse?.data?.cartDiscountCodesUpdate?.userErrors?.length > 0) {
         const error = shopifyResponse.data.cartDiscountCodesUpdate.userErrors[0];
@@ -881,8 +891,18 @@ export class CheckoutController extends Controller {
         throw new Error('Unauthorized access to checkout session');
       }
 
+      // Get country code from shipping address for multi-currency support
+      let countryCode: string | undefined;
+      if (session.shippingAddressId !== undefined) {
+        const user = await findUserOrCustomer(userId);
+        if (user?.addresses?.[session.shippingAddressId]) {
+          const address = user.addresses[session.shippingAddressId] as any;
+          countryCode = address.countryCode || address.country;
+        }
+      }
+
       // Remove discount codes from Shopify cart
-      const shopifyResponse = await shopifyStorefront.applyDiscountCodes(session.shopifyCartId, []);
+      const shopifyResponse = await shopifyStorefront.applyDiscountCodes(session.shopifyCartId, [], countryCode);
 
       if (shopifyResponse?.data?.cartDiscountCodesUpdate?.userErrors?.length > 0) {
         const error = shopifyResponse.data.cartDiscountCodesUpdate.userErrors[0];

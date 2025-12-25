@@ -6,6 +6,7 @@ import {
   updateCustomerProfile,
   logoutCustomer,
   updateDeviceToken,
+  refreshCustomerToken,
 } from '../controllers/customerAuthController';
 import {
   authenticateCustomer,
@@ -17,6 +18,7 @@ const router = Router();
 // Public routes - require storeId
 router.post('/register', extractStoreId, registerCustomer);
 router.post('/login', extractStoreId, loginCustomer);
+router.post('/refresh-token', refreshCustomerToken);
 
 // Protected routes - require customer JWT
 router.get('/profile', authenticateCustomer, getCustomerProfile);
