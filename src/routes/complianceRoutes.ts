@@ -166,19 +166,22 @@ router.get('/stores/:storeId/admin/sync/status', async (req: Request, res: Respo
     nextSync.setHours(nextSync.getHours() + (4 - (nextSync.getHours() % 4)));
     nextSync.setMinutes(0, 0, 0);
 
+    // Get last sync info - prefer store-specific, fallback to global
+    const storeLastSync = store?.shopify?.lastSyncAt;
+    const lastSyncDate = storeLastSync || syncStatus.lastIncrementalSync || syncStatus.lastFullSync;
+
     // Determine overall status
-    let status: 'healthy' | 'syncing' | 'error' | 'unknown' = 'healthy';
+    let status: 'healthy' | 'syncing' | 'error' | 'unknown' = 'unknown';
     if (syncStatus.inProgress) {
       status = 'syncing';
     } else if (syncStatus.errors.length > 0) {
       status = 'error';
-    } else if (!syncStatus.lastFullSync && !syncStatus.lastIncrementalSync) {
-      status = 'unknown';
+    } else if (lastSyncDate) {
+      // Check if last sync was within 24 hours
+      const hoursSinceSync = (Date.now() - new Date(lastSyncDate).getTime()) / (1000 * 60 * 60);
+      status = hoursSinceSync < 24 ? 'healthy' : 'error'; // Stale data = error
     }
 
-    // Get last sync info - prefer store-specific, fallback to global
-    const storeLastSync = store?.shopify?.lastSyncAt;
-    const lastSyncDate = storeLastSync || syncStatus.lastIncrementalSync || syncStatus.lastFullSync;
     const lastSyncType = syncStatus.lastIncrementalSync
       ? (syncStatus.lastIncrementalSync > (syncStatus.lastFullSync || new Date(0)) ? 'incremental' : 'full')
       : (syncStatus.lastFullSync ? 'full' : null);
