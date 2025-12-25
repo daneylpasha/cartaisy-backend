@@ -3,6 +3,7 @@ import { syncProducts, syncCustomers, syncOrders } from './shopifyService';
 import Product from '../models/Product';
 import User from '../models/User';
 import Order from '../models/Order';
+import Store from '../models/Store';
 import { ApiError } from '../utils/errors';
 
 // Sync status tracking
@@ -68,10 +69,13 @@ export const performFullSync = async (): Promise<ISyncStatus> => {
     syncStatus.lastFullSync = new Date();
     syncStatus.inProgress = false;
 
+    // Update lastSyncAt for all connected stores
+    await updateStoresLastSyncAt();
+
     const duration = Math.round((Date.now() - startTime) / 1000);
     console.log(`✅ Full sync completed in ${duration}s`);
     console.log(`📊 Stats: ${syncStatus.stats.productsSync} products, ${syncStatus.stats.customersSync} customers, ${syncStatus.stats.ordersSync} orders`);
-    
+
     if (syncStatus.errors.length > 0) {
       console.warn(`⚠️ ${syncStatus.errors.length} errors occurred during sync`);
     }
@@ -116,6 +120,9 @@ export const performIncrementalSync = async (): Promise<ISyncStatus> => {
     syncStatus.lastIncrementalSync = new Date();
     syncStatus.inProgress = false;
     syncStatus.errors = incrementalErrors;
+
+    // Update lastSyncAt for all connected stores
+    await updateStoresLastSyncAt();
 
     const duration = Math.round((Date.now() - startTime) / 1000);
     console.log(`✅ Incremental sync completed in ${duration}s`);
@@ -516,4 +523,21 @@ export const resetSyncStatus = (): void => {
     }
   };
   console.log('🔄 Sync status reset');
+};
+
+/**
+ * Update lastSyncAt timestamp for all connected stores
+ * Called after successful sync completion
+ */
+const updateStoresLastSyncAt = async (): Promise<void> => {
+  try {
+    const result = await Store.updateMany(
+      { 'shopify.isConnected': true },
+      { $set: { 'shopify.lastSyncAt': new Date() } }
+    );
+    console.log(`📊 Updated lastSyncAt for ${result.modifiedCount} connected stores`);
+  } catch (error) {
+    console.error('Failed to update stores lastSyncAt:', error);
+    // Don't throw - this is non-critical
+  }
 };
