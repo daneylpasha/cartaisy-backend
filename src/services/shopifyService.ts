@@ -294,8 +294,9 @@ export const syncProduct = async (productId: string, shopifyProduct?: IShopifyPr
       
       // SEO
       seo: {
-        title: shopifyProduct.title,
-        description: shopifyProduct.body_html ? 
+        title: (shopifyProduct.title || '').substring(0, 60),
+        slug: shopifyProduct.handle || shopifyProduct.title?.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || `product-${productId}`,
+        description: shopifyProduct.body_html ?
           shopifyProduct.body_html.replace(/<[^>]*>/g, '').substring(0, 160) : '',
         keywords: shopifyProduct.tags ? shopifyProduct.tags.split(',').map((tag: string) => tag.trim()) : []
       },
@@ -380,27 +381,27 @@ export const syncCustomers = async (): Promise<SyncResult> => {
 
           const customerData = {
             shopifyCustomerId: shopifyCustomer.id.toString(),
-            name: `${shopifyCustomer.first_name || ''} ${shopifyCustomer.last_name || ''}`.trim(),
+            name: `${shopifyCustomer.first_name || ''} ${shopifyCustomer.last_name || ''}`.trim() || 'Shopify Customer',
             email: shopifyCustomer.email,
             phone: shopifyCustomer.phone,
             isVerified: shopifyCustomer.verified_email || false,
-            
-            // Addresses
+
+            // Addresses - provide default province if missing
             addresses: shopifyCustomer.addresses?.map((addr: any) => ({
               type: addr.default ? 'shipping' : 'billing',
-              firstName: addr.first_name,
-              lastName: addr.last_name,
+              firstName: addr.first_name || '',
+              lastName: addr.last_name || '',
               company: addr.company,
-              address1: addr.address1,
+              address1: addr.address1 || '',
               address2: addr.address2,
-              city: addr.city,
-              province: addr.province,
-              country: addr.country,
-              zip: addr.zip,
+              city: addr.city || '',
+              province: addr.province || addr.province_code || 'N/A',
+              country: addr.country || addr.country_code || '',
+              zip: addr.zip || '',
               phone: addr.phone,
               isDefault: addr.default || false
             })) || [],
-            
+
             // Preserve existing preferences or set defaults
             preferences: existingUser?.preferences || {
               notifications: { email: true, push: true, sms: false },
@@ -415,11 +416,14 @@ export const syncCustomers = async (): Promise<SyncResult> => {
             Object.assign(existingUser, customerData);
             await existingUser.save();
           } else {
-            // Create new user (without password - they'll need to set one)
+            // Create new user with random password (they'll need to reset it)
+            const randomPassword = crypto.randomBytes(16).toString('hex');
             const newUser = new User({
               ...customerData,
+              password: randomPassword,
               role: 'customer',
-              isActive: true
+              isActive: true,
+              importedFromShopify: true
             });
             await newUser.save();
           }
