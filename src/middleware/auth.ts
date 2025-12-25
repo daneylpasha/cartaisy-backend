@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyToken } from '../utils/jwt';
 import User, { IUser } from '../models/User';
+import Customer from '../models/Customer';
 import { AuthenticatedRequest } from '../types';
 import { storeAuth, storeAdmin, superAdmin } from './storeAuth';
 
@@ -44,10 +45,43 @@ export const authenticate = async (
       return;
     }
 
-    // Find user by ID from token payload
-    const user = await User.findById(decoded.userId).select('-password');
+    // Find user by ID from token payload - check both User and Customer models
+    let user = await User.findById(decoded.userId).select('-password');
 
     if (!user) {
+      // Not found in User model, try Customer model (mobile app users)
+      const customer = await Customer.findById(decoded.userId).select('-password');
+
+      if (customer) {
+        // Check if customer is active
+        if (!customer.isActive) {
+          res.status(403).json({
+            status: 'error',
+            message: 'Your account has been deactivated. Please contact support.',
+          });
+          return;
+        }
+
+        // Attach customer as user to request object
+        req.user = {
+          _id: customer._id,
+          id: customer._id.toString(),
+          storeId: customer.storeId,
+          email: customer.email,
+          role: 'customer',
+          name: customer.name,
+          isActive: customer.isActive,
+          isVerified: customer.isVerified,
+          phone: customer.phone,
+          addresses: customer.addresses as any,
+          createdAt: customer.createdAt,
+        };
+
+        next();
+        return;
+      }
+
+      // Not found in either model
       res.status(401).json({
         status: 'error',
         message: 'User not found. Please authenticate again.',
