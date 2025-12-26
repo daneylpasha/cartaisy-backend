@@ -87,9 +87,26 @@ export async function updateAbandonedCartSettings(
 ): Promise<AbandonedCartSettings> {
   const Store = mongoose.model('Store');
 
+  // First get existing settings to preserve them
+  const existingStore = await Store.findById(storeId).select('abandonedCartSettings').lean() as any;
+  const existingSettings = existingStore?.abandonedCartSettings || {};
+
+  // Merge: defaults -> existing -> updates
+  const newSettings = {
+    ...DEFAULT_SETTINGS,
+    ...existingSettings,
+    ...updates,
+  };
+
+  console.log(`🛒 [SETTINGS] Updating store ${storeId}:`, {
+    existing: existingSettings,
+    updates,
+    final: newSettings,
+  });
+
   const store = await Store.findByIdAndUpdate(
     storeId,
-    { $set: { abandonedCartSettings: { ...DEFAULT_SETTINGS, ...updates } } },
+    { $set: { abandonedCartSettings: newSettings } },
     { new: true }
   ).select('abandonedCartSettings');
 
@@ -100,6 +117,9 @@ export async function updateAbandonedCartSettings(
 
   // Update cache
   storeSettingsCache.set(storeId, settings);
+
+  // Also clear cache to ensure fresh read on next request
+  storeSettingsCache.delete(storeId);
 
   return settings;
 }
