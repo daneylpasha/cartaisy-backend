@@ -443,7 +443,26 @@ export class CartController extends Controller {
   /**
    * Save Shopify cart ID to customer profile for persistence across sessions
    * Call this after creating/updating cart to enable cart recovery on next login
-   * @summary Save cart to customer profile
+   * @summary Save cart to customer profile (body)
+   * @param body - Object containing cartId
+   * @param request - Request object with authenticated user
+   */
+  @Post('saved')
+  @Security('jwt')
+  @Response<SaveCartResponse>(200, 'Cart saved successfully')
+  @Response<SaveCartResponse>(401, 'Unauthorized')
+  @Response<SaveCartResponse>(500, 'Internal Server Error')
+  public async saveCartToProfileBody(
+    @Body() body: { cartId: string },
+    @Request() request: any
+  ): Promise<SaveCartResponse> {
+    return this.saveCartToProfile(body.cartId, request);
+  }
+
+  /**
+   * Save Shopify cart ID to customer profile for persistence across sessions
+   * Call this after creating/updating cart to enable cart recovery on next login
+   * @summary Save cart to customer profile (path)
    * @param cartId - Shopify cart ID (URL encoded)
    * @param request - Request object with authenticated user
    */
