@@ -528,16 +528,33 @@ export class CartController extends Controller {
   ): Promise<SaveCartResponse> {
     try {
       const customerId = request.user?.id || request.user?._id;
+      const storeId = request.storeId;
 
       if (!customerId) {
         this.setStatus(401);
         return { status: 'error', message: 'Authentication required' };
       }
 
+      // Clear shopifyCartId from customer profile
       await Customer.findByIdAndUpdate(
         customerId,
         { $unset: { shopifyCartId: 1 } }
       );
+
+      // Also update CartActivity to reflect empty cart
+      if (storeId) {
+        try {
+          await CartActivity.updateCartActivity(storeId, customerId, {
+            itemCount: 0,
+            cartTotal: 0,
+            currency: 'USD',
+          });
+          console.log(`[CartController] Updated CartActivity to empty for customer ${customerId}`);
+        } catch (cartActivityError) {
+          // Log but don't fail - cart activity update is secondary
+          console.error('[CartController] Error updating CartActivity:', cartActivityError);
+        }
+      }
 
       console.log(`[CartController] Cleared saved cartId for customer ${customerId}`);
 
