@@ -4,6 +4,7 @@ import Customer from '../models/Customer';
 import NotificationLog from '../models/NotificationLog';
 import NotificationTemplate from '../models/NotificationTemplate';
 import { FirebaseNotificationService, PushNotification, DeepLink } from './firebaseNotificationService';
+import shopifyStorefront from './shopifyStorefrontService';
 
 /**
  * Abandoned Cart Service
@@ -344,8 +345,48 @@ export async function sendAbandonedCartNotification(
       };
     }
 
-    // Get customer's device tokens
-    const customer = await Customer.findById(cart.customerId).select('deviceTokens');
+    // Get customer with shopifyCartId to verify cart from Shopify
+    const customer = await Customer.findById(cart.customerId).select('deviceTokens shopifyCartId');
+
+    // Verify cart from Shopify before sending notification
+    if (customer?.shopifyCartId && shopifyStorefront.isConfigured()) {
+      try {
+        const cartResponse = await shopifyStorefront.getCart(customer.shopifyCartId);
+        const shopifyCart = cartResponse?.data?.cart;
+        const actualItemCount = shopifyCart?.lines?.edges?.length || 0;
+
+        console.log(`🛒 [ABANDONED] Shopify cart verification for ${cart.customerEmail}: ${actualItemCount} items (cached: ${cart.itemCount})`);
+
+        if (actualItemCount === 0) {
+          // Cart is empty in Shopify - update CartActivity and skip notification
+          const storeObjectId = new mongoose.Types.ObjectId(storeId);
+          await CartActivity.updateCartActivity(storeObjectId, cart.customerId, {
+            shopifyCartId: customer.shopifyCartId,
+            itemCount: 0,
+            cartTotal: 0,
+            currency: cart.currency,
+          });
+
+          console.log(`🛒 [ABANDONED] Skip: cart is actually empty in Shopify, updated CartActivity`);
+          return {
+            customerId: cart.customerId,
+            success: false,
+            error: 'Cart is empty (verified from Shopify)',
+          };
+        }
+
+        // Update cart data with fresh info from Shopify
+        const actualTotal = parseFloat(shopifyCart?.estimatedCost?.subtotalAmount?.amount || '0');
+        if (actualItemCount !== cart.itemCount || actualTotal !== cart.cartTotal) {
+          cart.itemCount = actualItemCount;
+          cart.cartTotal = actualTotal;
+          console.log(`🛒 [ABANDONED] Updated cart data from Shopify: ${actualItemCount} items, $${actualTotal}`);
+        }
+      } catch (shopifyError) {
+        console.error(`🛒 [ABANDONED] Error verifying cart from Shopify:`, shopifyError);
+        // Continue with cached data if Shopify verification fails
+      }
+    }
 
     if (!customer) {
       console.log(`🛒 [ABANDONED] Skip: customer not found`);
