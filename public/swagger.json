@@ -3887,6 +3887,22 @@
 				"type": "object",
 				"additionalProperties": false
 			},
+			"SaveCartResponse": {
+				"properties": {
+					"status": {
+						"type": "string"
+					},
+					"message": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"status",
+					"message"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
 			"ClearCartResponse": {
 				"description": "Clear cart response",
 				"properties": {
@@ -3899,22 +3915,6 @@
 				},
 				"required": [
 					"success",
-					"message"
-				],
-				"type": "object",
-				"additionalProperties": false
-			},
-			"SaveCartResponse": {
-				"properties": {
-					"status": {
-						"type": "string"
-					},
-					"message": {
-						"type": "string"
-					}
-				},
-				"required": [
-					"status",
 					"message"
 				],
 				"type": "object",
@@ -8297,31 +8297,43 @@
 				]
 			}
 		},
-		"/cart/{cartId}/associate": {
-			"post": {
-				"operationId": "AssociateWithCustomer",
+		"/cart/saved": {
+			"delete": {
+				"operationId": "ClearSavedCart",
 				"responses": {
 					"200": {
 						"description": "Ok",
 						"content": {
 							"application/json": {
 								"schema": {
-									"$ref": "#/components/schemas/CartResponse"
+									"$ref": "#/components/schemas/SaveCartResponse"
 								}
 							}
 						}
 					},
-					"400": {
-						"description": "Bad Request"
-					},
-					"404": {
-						"description": "Cart not found"
+					"401": {
+						"description": "Unauthorized",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SaveCartResponse"
+								}
+							}
+						}
 					},
 					"500": {
-						"description": "Internal Server Error"
+						"description": "Internal Server Error",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/SaveCartResponse"
+								}
+							}
+						}
 					}
 				},
-				"description": "Associate cart with logged-in customer\nCall this when user logs in to merge guest cart with their account",
+				"description": "Clear saved cart ID from customer profile\nCall this after checkout completion to remove stale cart reference",
+				"summary": "Clear saved cart from profile",
 				"tags": [
 					"Cart"
 				],
@@ -8330,20 +8342,8 @@
 						"jwt": []
 					}
 				],
-				"parameters": [
-					{
-						"description": "- Shopify cart ID",
-						"in": "path",
-						"name": "cartId",
-						"required": true,
-						"schema": {
-							"type": "string"
-						}
-					}
-				]
-			}
-		},
-		"/cart/saved": {
+				"parameters": []
+			},
 			"post": {
 				"operationId": "SaveCartToProfileBody",
 				"responses": {
@@ -8409,43 +8409,33 @@
 						}
 					}
 				}
-			},
-			"delete": {
-				"operationId": "ClearSavedCart",
+			}
+		},
+		"/cart/{cartId}/associate": {
+			"post": {
+				"operationId": "AssociateWithCustomer",
 				"responses": {
 					"200": {
 						"description": "Ok",
 						"content": {
 							"application/json": {
 								"schema": {
-									"$ref": "#/components/schemas/SaveCartResponse"
+									"$ref": "#/components/schemas/CartResponse"
 								}
 							}
 						}
 					},
-					"401": {
-						"description": "Unauthorized",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/SaveCartResponse"
-								}
-							}
-						}
+					"400": {
+						"description": "Bad Request"
+					},
+					"404": {
+						"description": "Cart not found"
 					},
 					"500": {
-						"description": "Internal Server Error",
-						"content": {
-							"application/json": {
-								"schema": {
-									"$ref": "#/components/schemas/SaveCartResponse"
-								}
-							}
-						}
+						"description": "Internal Server Error"
 					}
 				},
-				"description": "Clear saved cart ID from customer profile\nCall this after checkout completion to remove stale cart reference",
-				"summary": "Clear saved cart from profile",
+				"description": "Associate cart with logged-in customer\nCall this when user logs in to merge guest cart with their account",
 				"tags": [
 					"Cart"
 				],
@@ -8454,7 +8444,17 @@
 						"jwt": []
 					}
 				],
-				"parameters": []
+				"parameters": [
+					{
+						"description": "- Shopify cart ID",
+						"in": "path",
+						"name": "cartId",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				]
 			}
 		},
 		"/cart/{cartId}/save": {
