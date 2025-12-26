@@ -249,10 +249,10 @@ export const updateSettings = async (req: Request, res: Response): Promise<void>
 
     // Validate settings
     if (updates.abandonmentThresholdMinutes !== undefined) {
-      if (updates.abandonmentThresholdMinutes < 15 || updates.abandonmentThresholdMinutes > 1440) {
+      if (updates.abandonmentThresholdMinutes < 1 || updates.abandonmentThresholdMinutes > 1440) {
         res.status(400).json({
           success: false,
-          error: 'Abandonment threshold must be between 15 and 1440 minutes',
+          error: 'Abandonment threshold must be between 1 and 1440 minutes',
         });
         return;
       }
