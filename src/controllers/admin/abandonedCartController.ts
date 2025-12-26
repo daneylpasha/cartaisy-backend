@@ -272,10 +272,10 @@ export const updateSettings = async (req: Request, res: Response): Promise<void>
     }
 
     if (updates.maxNotificationsPerCart !== undefined) {
-      if (updates.maxNotificationsPerCart < 1 || updates.maxNotificationsPerCart > 3) {
+      if (updates.maxNotificationsPerCart < 1 || updates.maxNotificationsPerCart > 10) {
         res.status(400).json({
           success: false,
-          error: 'Max notifications per cart must be between 1 and 3',
+          error: 'Max notifications per cart must be between 1 and 10',
         });
         return;
       }
