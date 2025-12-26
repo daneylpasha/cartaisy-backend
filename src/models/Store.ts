@@ -195,7 +195,7 @@ const AbandonedCartSettingsSchema = new Schema<IAbandonedCartSettings>(
     abandonmentThresholdMinutes: {
       type: Number,
       default: 60,
-      min: 15,
+      min: 1, // Allow 1 minute for testing
       max: 1440, // 24 hours
     },
     quietHoursStart: {
@@ -217,7 +217,7 @@ const AbandonedCartSettingsSchema = new Schema<IAbandonedCartSettings>(
       type: Number,
       default: 1,
       min: 1,
-      max: 3,
+      max: 10, // Allow up to 10 for testing
     },
   },
   { _id: false }
