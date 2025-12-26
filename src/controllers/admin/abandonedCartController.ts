@@ -9,6 +9,7 @@ import {
 } from '../../services/abandonedCartService';
 import { abandonedCartScheduler } from '../../services/abandonedCartScheduler';
 import CartActivity from '../../models/CartActivity';
+import Customer from '../../models/Customer';
 
 /**
  * Abandoned Cart Admin Controller
@@ -383,6 +384,92 @@ export const triggerGlobalProcessing = async (_req: Request, res: Response): Pro
     res.status(500).json({
       success: false,
       error: 'Failed to trigger global processing',
+    });
+  }
+};
+
+/**
+ * POST /api/v1/admin/stores/:storeId/abandoned-carts/reset-notification-count
+ *
+ * Reset notification count for a customer's cart (for testing)
+ */
+export const resetNotificationCount = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { storeId } = req.params;
+    const { email, customerId } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(storeId)) {
+      res.status(400).json({
+        success: false,
+        error: 'Invalid store ID',
+      });
+      return;
+    }
+
+    let targetCustomerId = customerId;
+
+    // If email provided, find customer by email
+    if (email && !customerId) {
+      const customer = await Customer.findOne({
+        storeId: new mongoose.Types.ObjectId(storeId),
+        email: email.toLowerCase(),
+      });
+
+      if (!customer) {
+        res.status(404).json({
+          success: false,
+          error: 'Customer not found with this email',
+        });
+        return;
+      }
+      targetCustomerId = customer._id.toString();
+    }
+
+    if (!targetCustomerId) {
+      res.status(400).json({
+        success: false,
+        error: 'Either email or customerId is required',
+      });
+      return;
+    }
+
+    // Reset notification count
+    const result = await CartActivity.findOneAndUpdate(
+      {
+        storeId: new mongoose.Types.ObjectId(storeId),
+        customerId: new mongoose.Types.ObjectId(targetCustomerId),
+      },
+      {
+        $set: {
+          abandonedCartNotificationCount: 0,
+          lastAbandonedCartNotificationSent: null,
+        },
+      },
+      { new: true }
+    );
+
+    if (!result) {
+      res.status(404).json({
+        success: false,
+        error: 'Cart activity not found for this customer',
+      });
+      return;
+    }
+
+    res.json({
+      success: true,
+      message: 'Notification count reset successfully',
+      data: {
+        customerId: targetCustomerId,
+        abandonedCartNotificationCount: result.abandonedCartNotificationCount,
+        lastAbandonedCartNotificationSent: result.lastAbandonedCartNotificationSent,
+      },
+    });
+  } catch (error) {
+    console.error('Error resetting notification count:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to reset notification count',
     });
   }
 };

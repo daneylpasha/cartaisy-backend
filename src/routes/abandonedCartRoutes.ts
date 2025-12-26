@@ -8,6 +8,7 @@ import {
   getSchedulerStatus,
   triggerProcessing,
   triggerGlobalProcessing,
+  resetNotificationCount,
 } from '../controllers/admin/abandonedCartController';
 
 const router = express.Router();
@@ -104,6 +105,17 @@ router.get('/stores/:storeId/settings/abandoned-cart', getSettings);
  * - maxNotificationsPerCart: number (1-3)
  */
 router.patch('/stores/:storeId/settings/abandoned-cart', updateSettings);
+
+/**
+ * POST /stores/:storeId/abandoned-carts/reset-notification-count
+ *
+ * Reset notification count for a customer's cart (for testing)
+ *
+ * Body:
+ * - email: string (customer email) OR
+ * - customerId: string (customer ID)
+ */
+router.post('/stores/:storeId/abandoned-carts/reset-notification-count', resetNotificationCount);
 
 // =============================================================================
 // GLOBAL ROUTES
