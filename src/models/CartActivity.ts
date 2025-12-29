@@ -146,6 +146,10 @@ CartActivitySchema.statics.updateCartActivity = async function (
     itemCount: cartData.itemCount,
     cartTotal: cartData.cartTotal,
     hasCompletedCheckout: false, // Reset when cart is updated
+    // Reset notification cycle when cart is updated with items
+    // This allows new notifications to be sent if customer adds more items
+    abandonedCartNotificationCount: 0,
+    lastAbandonedCartNotificationSent: null,
   };
 
   if (cartData.shopifyCartId) {
