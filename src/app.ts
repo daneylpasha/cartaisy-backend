@@ -238,6 +238,8 @@ import customerManagementRoutes from './routes/customerManagementRoutes';
 import abandonedCartRoutes from './routes/abandonedCartRoutes';
 import complianceRoutes from './routes/complianceRoutes';
 import storeAdminRoutes from './routes/storeAdminRoutes';
+import storeSettingsRoutes from './routes/storeSettingsRoutes';
+import storeConfigRoutes from './routes/storeConfigRoutes';
 
 // API Routes with versioning
 app.use(`/api/${apiConfig.version}/auth`, authRoutes);
@@ -269,6 +271,10 @@ app.use(`/api/${apiConfig.version}/admin`, abandonedCartRoutes);
 app.use(`/api/${apiConfig.version}`, complianceRoutes);
 // Store admin routes (dashboard APIs like sync status)
 app.use(`/api/${apiConfig.version}`, storeAdminRoutes);
+// Store settings routes (admin - currency, timezone, language)
+app.use(`/api/${apiConfig.version}/admin`, storeSettingsRoutes);
+// Store config routes (public - for mobile app)
+app.use(`/api/${apiConfig.version}/store`, storeConfigRoutes);
 app.use(`/api/${apiConfig.version}`, carouselRoutes);
 app.use(`/api/${apiConfig.version}`, categoryGridRoutes);
 app.use(`/api/${apiConfig.version}`, calloutBannerRoutes);
