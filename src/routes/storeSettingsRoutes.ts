@@ -4,6 +4,7 @@ import {
   getStoreSettings,
   updateStoreSettings,
   getSettingsOptions,
+  syncFromShopify,
 } from '../controllers/admin/storeSettingsController';
 
 const router = express.Router();
@@ -44,13 +45,24 @@ router.get(
 
 /**
  * PATCH /api/v1/admin/stores/:storeId/settings
- * Update store settings
+ * Update store settings (language only - currency/timezone synced from Shopify)
  */
 router.patch(
   '/stores/:storeId/settings',
   authenticate,
   authorize('admin', 'super_admin'),
   updateStoreSettings
+);
+
+/**
+ * POST /api/v1/admin/stores/:storeId/settings/sync-from-shopify
+ * Sync currency and timezone from connected Shopify store
+ */
+router.post(
+  '/stores/:storeId/settings/sync-from-shopify',
+  authenticate,
+  authorize('admin', 'super_admin'),
+  syncFromShopify
 );
 
 export default router;

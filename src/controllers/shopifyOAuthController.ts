@@ -113,6 +113,14 @@ export const handleCallback = async (req: AuthenticatedRequest, res: Response) =
       tokenResponse.scope
     );
 
+    // Sync currency and timezone from Shopify to Store.settings
+    await Store.findByIdAndUpdate(storeId, {
+      $set: {
+        'settings.currency': shopInfo.currency || 'USD',
+        'settings.timezone': shopInfo.timezone || 'UTC',
+      },
+    });
+
     // Return success with shop info (but NOT the access token)
     res.status(200).json({
       success: true,
