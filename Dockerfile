@@ -15,9 +15,9 @@ RUN npm ci --include=dev
 COPY src ./src
 COPY public ./public
 
-# Generate tsoa routes and spec
-RUN npx tsoa spec || echo "⚠️ Spec generation failed" && \
-    npx tsoa routes || echo "⚠️ Routes generation failed"
+# Use pre-generated tsoa routes from git (already in src/generated/)
+# Routes are generated during development and committed to git
+RUN echo "Using pre-committed tsoa routes..."
 
 # Set environment
 ENV NODE_ENV=production
