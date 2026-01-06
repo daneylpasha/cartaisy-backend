@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import crypto from 'crypto';
 import User from '../models/User';
 import Store from '../models/Store';
+import Order from '../models/Order';
 import { generateToken, generateRefreshToken } from '../utils/jwt';
 import { sendWelcomeEmail, sendPasswordResetEmail } from '../utils/email';
 import { SUCCESS_MESSAGES } from '../utils/constants';
@@ -371,12 +372,29 @@ export const getProfile = async (req: AuthRequest, res: Response): Promise<void>
       return;
     }
 
-    // Get store name if user has a storeId
-    let storeName = '';
-    if (req.user.storeId) {
-      const store = await Store.findById(req.user.storeId).select('name');
-      storeName = store?.name || '';
-    }
+    // Get store name and order stats in parallel
+    const [store, orderStats] = await Promise.all([
+      req.user.storeId ? Store.findById(req.user.storeId).select('name') : null,
+      Order.aggregate([
+        {
+          $match: {
+            user: req.user._id,
+            paymentStatus: 'paid'
+          }
+        },
+        {
+          $group: {
+            _id: null,
+            totalSpent: { $sum: '$totalPrice' },
+            totalOrdersCount: { $sum: 1 }
+          }
+        }
+      ])
+    ]);
+
+    const storeName = store?.name || '';
+    const totalSpent = orderStats[0]?.totalSpent || 0;
+    const totalOrdersCount = orderStats[0]?.totalOrdersCount || 0;
 
     // Prepare user data (exclude sensitive fields)
     const userData = {
@@ -393,8 +411,8 @@ export const getProfile = async (req: AuthRequest, res: Response): Promise<void>
       dateOfBirth: req.user.profile?.dateOfBirth,
       addresses: req.user.addresses,
       preferences: req.user.preferences,
-      totalOrdersCount: (req.user as any).totalOrdersCount,
-      totalSpent: (req.user as any).totalSpent,
+      totalOrdersCount,
+      totalSpent,
       createdAt: req.user.createdAt,
       lastLoginAt: req.user.lastLoginAt
     };
