@@ -427,6 +427,10 @@ export const cancelOrder = async (req: CustomerRequest, res: Response): Promise<
       return;
     }
 
+    // Save cancellation reason to dedicated field
+    (order as any).cancellationReason = reason || '';
+    (order as any).cancelledAt = new Date();
+
     // Update order status
     if (typeof order.updateMobileStatus === 'function') {
       await order.updateMobileStatus('cancelled', reason);

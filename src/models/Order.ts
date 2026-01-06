@@ -719,7 +719,12 @@ const OrderSchema = new Schema<IOrder>({
   processedAt: { type: Date },
   shippedAt: { type: Date },
   deliveredAt: { type: Date },
-  cancelledAt: { type: Date }
+  cancelledAt: { type: Date },
+  cancellationReason: {
+    type: String,
+    trim: true,
+    maxlength: [500, 'Cancellation reason cannot exceed 500 characters']
+  }
 }, {
   timestamps: true,
   toJSON: { 

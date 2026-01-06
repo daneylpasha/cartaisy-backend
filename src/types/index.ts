@@ -709,6 +709,7 @@ export interface IOrder extends Document {
   shippedAt?: Date;
   deliveredAt?: Date;
   cancelledAt?: Date;
+  cancellationReason?: string;
   createdAt: Date;
   updatedAt: Date;
 }
