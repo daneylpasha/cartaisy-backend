@@ -38,6 +38,8 @@ interface CustomerData {
   createdAt: Date;
   lastLoginAt?: Date;
   shopifyCartId?: string;  // Shopify cart ID for cart persistence
+  totalSpent?: number;
+  totalOrdersCount?: number;
 }
 
 /**
@@ -61,6 +63,8 @@ const formatCustomerResponse = (customer: ICustomer): CustomerData => {
     createdAt: customer.createdAt,
     lastLoginAt: customer.lastLoginAt,
     shopifyCartId: customer.shopifyCartId,  // Include saved Shopify cart ID
+    totalSpent: customer.totalSpent || 0,
+    totalOrdersCount: customer.orderCount || 0,
   };
 };
 
