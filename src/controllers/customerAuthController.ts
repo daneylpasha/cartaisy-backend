@@ -25,6 +25,8 @@ const formatCustomerResponse = (customer: ICustomer) => {
     createdAt: customer.createdAt,
     lastLoginAt: customer.lastLoginAt,
     shopifyCartId: customer.shopifyCartId,  // Include saved Shopify cart ID for cart persistence
+    totalSpent: customer.totalSpent || 0,
+    totalOrdersCount: customer.orderCount || 0,
   };
 };
 
