@@ -652,6 +652,8 @@ const models: TsoaRoute.Models = {
             "createdAt": {"dataType":"datetime","required":true},
             "lastLoginAt": {"dataType":"datetime"},
             "shopifyCartId": {"dataType":"string"},
+            "totalSpent": {"dataType":"double"},
+            "totalOrdersCount": {"dataType":"double"},
         },
         "additionalProperties": false,
     },

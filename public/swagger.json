@@ -2197,6 +2197,14 @@
 					},
 					"shopifyCartId": {
 						"type": "string"
+					},
+					"totalSpent": {
+						"type": "number",
+						"format": "double"
+					},
+					"totalOrdersCount": {
+						"type": "number",
+						"format": "double"
 					}
 				},
 				"required": [
