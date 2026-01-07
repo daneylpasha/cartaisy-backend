@@ -9,6 +9,7 @@ import {
   ISupportTicket,
   IReturnExchange,
   IMobileStatusHistory,
+  IHelpRequest,
   MongooseDocument,
 } from '../types/index';
 
@@ -349,24 +350,24 @@ const ReturnExchangeSchema = new Schema({
     // Note: unique removed - uniqueness should be per-order, not global
     trim: true
   },
-  type: { 
-    type: String, 
+  type: {
+    type: String,
     enum: {
       values: ['return', 'exchange'],
       message: 'Type must be return or exchange'
     },
     required: [true, 'Return/exchange type is required']
   },
-  status: { 
-    type: String, 
+  status: {
+    type: String,
     enum: {
       values: ['requested', 'approved', 'rejected', 'processing', 'completed'],
       message: 'Status must be requested, approved, rejected, processing, or completed'
     },
     default: 'requested'
   },
-  reason: { 
-    type: String, 
+  reason: {
+    type: String,
     required: [true, 'Reason is required'],
     trim: true,
     maxlength: [1000, 'Reason cannot exceed 1000 characters']
@@ -381,15 +382,62 @@ const ReturnExchangeSchema = new Schema({
       message: 'At least one return item is required'
     }
   },
-  requestedAt: { 
-    type: Date, 
+  requestedAt: {
+    type: Date,
     required: [true, 'Request timestamp is required'],
-    default: Date.now 
+    default: Date.now
   },
   processedAt: { type: Date },
-  refundAmount: { 
-    type: Number, 
+  refundAmount: {
+    type: Number,
     min: [0, 'Refund amount must be positive']
+  }
+}, { _id: false });
+
+const HelpRequestSchema = new Schema({
+  id: {
+    type: String,
+    required: [true, 'Help request ID is required'],
+    trim: true
+  },
+  reason: {
+    type: String,
+    required: [true, 'Help reason is required'],
+    enum: {
+      values: [
+        'item_damaged',
+        'wrong_item',
+        'order_not_received',
+        'missing_items',
+        'tracking_info',
+        'other'
+      ],
+      message: 'Invalid help reason'
+    }
+  },
+  otherText: {
+    type: String,
+    trim: true,
+    maxlength: [1000, 'Other text cannot exceed 1000 characters']
+  },
+  status: {
+    type: String,
+    enum: {
+      values: ['open', 'in_progress', 'resolved', 'closed'],
+      message: 'Status must be open, in_progress, resolved, or closed'
+    },
+    default: 'open'
+  },
+  createdAt: {
+    type: Date,
+    required: [true, 'Creation timestamp is required'],
+    default: Date.now
+  },
+  resolvedAt: { type: Date },
+  adminNotes: {
+    type: String,
+    trim: true,
+    maxlength: [1000, 'Admin notes cannot exceed 1000 characters']
   }
 }, { _id: false });
 
@@ -645,7 +693,11 @@ const OrderSchema = new Schema<IOrder>({
     type: [ReturnExchangeSchema],
     default: []
   },
-  
+  helpRequests: {
+    type: [HelpRequestSchema],
+    default: []
+  },
+
   // Special Instructions and Notes
   specialInstructions: { 
     type: String,
@@ -1042,15 +1094,16 @@ export interface IOrderModel extends mongoose.Model<IOrderDocument> {
   generateOrderNumber(): Promise<string>;
 }
 
-export type { 
-  IOrder, 
-  IOrderLineItem, 
-  IOrderAddress, 
-  IOrderShipping, 
-  IOrderNotification, 
-  IOrderRating, 
-  ISupportTicket, 
-  IReturnExchange 
+export type {
+  IOrder,
+  IOrderLineItem,
+  IOrderAddress,
+  IOrderShipping,
+  IOrderNotification,
+  IOrderRating,
+  ISupportTicket,
+  IReturnExchange,
+  IHelpRequest
 };
 
 const Order = mongoose.model<IOrder>('Order', OrderSchema) as IOrderModel;

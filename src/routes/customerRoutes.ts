@@ -53,6 +53,7 @@ import {
   getOrderTracking as getCustomerOrderTracking,
   rateOrder as rateCustomerOrder,
   createSupportTicket as createCustomerSupportTicket,
+  createOrderHelpRequest as createCustomerOrderHelpRequest,
   getOrderAnalytics as getCustomerOrderAnalytics
 } from '../controllers/customerOrderController';
 
@@ -401,6 +402,16 @@ router.post('/orders/:orderId/rate', validateObjectId('orderId'), authenticateCu
  * @body {string} priority - Ticket priority (low, medium, high, urgent)
  */
 router.post('/orders/:orderId/support', validateObjectId('orderId'), authenticateCustomer, createCustomerSupportTicket as any);
+
+/**
+ * @route POST /api/v1/customer/orders/:orderId/help
+ * @desc Submit help request for order
+ * @access Private (Customer)
+ * @param {string} orderId - Order ID
+ * @body {string} reason - Help reason (required: item_damaged, wrong_item, order_not_received, missing_items, tracking_info, other)
+ * @body {string} otherText - Additional details (required if reason is 'other')
+ */
+router.post('/orders/:orderId/help', validateObjectId('orderId'), authenticateCustomer, createCustomerOrderHelpRequest as any);
 
 // =============================================================================
 // PRODUCT INTERACTION ROUTES (Customer - uses authenticateCustomer middleware)

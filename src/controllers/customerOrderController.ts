@@ -815,6 +815,99 @@ export const createSupportTicket = async (req: CustomerRequest, res: Response): 
 };
 
 /**
+ * Create a help request for an order
+ */
+export const createOrderHelpRequest = async (req: CustomerRequest, res: Response): Promise<void> => {
+  try {
+    const customerId = req.customer.id;
+    const { orderId } = req.params;
+    const { reason, otherText } = req.body;
+
+    // Validate reason
+    const validReasons = ['item_damaged', 'wrong_item', 'order_not_received', 'missing_items', 'tracking_info', 'other'];
+    if (!reason || !validReasons.includes(reason)) {
+      res.status(400).json({
+        status: 'error',
+        message: 'Valid reason is required. Must be one of: ' + validReasons.join(', ')
+      });
+      return;
+    }
+
+    // Validate otherText is provided when reason is 'other'
+    if (reason === 'other' && (!otherText || otherText.trim().length === 0)) {
+      res.status(400).json({
+        status: 'error',
+        message: 'Please provide details when selecting "Other"'
+      });
+      return;
+    }
+
+    const order = await Order.findOne({ _id: orderId, $or: [{ customer: customerId }, { user: customerId }] });
+
+    if (!order) {
+      res.status(404).json({
+        status: 'error',
+        message: 'Order not found'
+      });
+      return;
+    }
+
+    // Generate help request ID
+    const helpRequestId = `HELP-${Date.now().toString(36).toUpperCase()}-${Math.floor(Math.random() * 1000)}`;
+
+    const helpRequest: any = {
+      id: helpRequestId,
+      reason,
+      otherText: reason === 'other' ? otherText?.trim() : undefined,
+      status: 'open',
+      createdAt: new Date()
+    };
+
+    // Initialize helpRequests array if doesn't exist
+    if (!order.helpRequests) {
+      order.helpRequests = [];
+    }
+    order.helpRequests.push(helpRequest);
+    await order.save();
+
+    // Map reason to human-readable text for response
+    const reasonLabels: Record<string, string> = {
+      'item_damaged': 'Item damaged or defective',
+      'wrong_item': 'Wrong item received',
+      'order_not_received': 'Order not received',
+      'missing_items': 'Missing items in order',
+      'tracking_info': 'Need tracking information',
+      'other': 'Other'
+    };
+
+    res.status(201).json({
+      status: 'success',
+      message: 'Help request submitted successfully',
+      data: {
+        helpRequest: {
+          id: helpRequestId,
+          reason,
+          reasonLabel: reasonLabels[reason],
+          otherText: helpRequest.otherText || null,
+          status: 'open',
+          createdAt: helpRequest.createdAt
+        },
+        order: {
+          id: order._id,
+          orderNumber: order.orderNumber
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Create order help request error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to create help request'
+    });
+  }
+};
+
+/**
  * Get order analytics for the authenticated customer
  */
 export const getOrderAnalytics = async (req: CustomerRequest, res: Response): Promise<void> => {

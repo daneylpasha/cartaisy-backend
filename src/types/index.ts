@@ -641,6 +641,16 @@ export interface IReturnExchange {
   refundAmount?: number;
 }
 
+export interface IHelpRequest {
+  id: string;
+  reason: 'item_damaged' | 'wrong_item' | 'order_not_received' | 'missing_items' | 'tracking_info' | 'other';
+  otherText?: string;
+  status: 'open' | 'in_progress' | 'resolved' | 'closed';
+  createdAt: Date;
+  resolvedAt?: Date;
+  adminNotes?: string;
+}
+
 export interface IOrder extends Document {
   _id: ObjectId;
   storeId?: ObjectId;
@@ -690,6 +700,7 @@ export interface IOrder extends Document {
   customerRating?: IOrderRating;
   supportTickets: ISupportTicket[];
   returns: IReturnExchange[];
+  helpRequests: IHelpRequest[];
   specialInstructions?: string;
   customerNotes?: string;
   merchantNotes?: string;

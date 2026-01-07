@@ -401,6 +401,292 @@ router.get('/logs', async (req: Request, res: Response) => {
 });
 
 // ===============================
+// HELP REQUESTS MANAGEMENT
+// ===============================
+
+/**
+ * GET /api/admin/help-requests - Get all orders with help requests
+ * Query params:
+ *   - status: 'open' | 'in_progress' | 'resolved' | 'closed' | 'all' (default: 'open')
+ *   - page: number (default: 1)
+ *   - limit: number (default: 20)
+ *   - sortBy: 'createdAt' | 'status' (default: 'createdAt')
+ *   - sortOrder: 'asc' | 'desc' (default: 'desc')
+ */
+router.get('/help-requests', async (req: Request, res: Response) => {
+  try {
+    const {
+      status = 'open',
+      page = '1',
+      limit = '20',
+      sortBy = 'createdAt',
+      sortOrder = 'desc'
+    } = req.query;
+
+    const pageNum = parseInt(page as string);
+    const limitNum = Math.min(parseInt(limit as string), 100);
+    const skip = (pageNum - 1) * limitNum;
+
+    // Build match filter
+    const matchFilter: any = {
+      helpRequests: { $exists: true, $ne: [] }
+    };
+
+    if (status !== 'all') {
+      matchFilter['helpRequests.status'] = status;
+    }
+
+    // Aggregate to get orders with help requests
+    const pipeline: any[] = [
+      { $match: matchFilter },
+      { $unwind: '$helpRequests' }
+    ];
+
+    // Filter by specific status after unwinding
+    if (status !== 'all') {
+      pipeline.push({ $match: { 'helpRequests.status': status } });
+    }
+
+    // Sort
+    const sortField = sortBy === 'status' ? 'helpRequests.status' : 'helpRequests.createdAt';
+    pipeline.push({ $sort: { [sortField]: sortOrder === 'asc' ? 1 : -1 } });
+
+    // Get total count before pagination
+    const countPipeline = [...pipeline, { $count: 'total' }];
+    const countResult = await Order.aggregate(countPipeline);
+    const total = countResult[0]?.total || 0;
+
+    // Add pagination
+    pipeline.push({ $skip: skip });
+    pipeline.push({ $limit: limitNum });
+
+    // Project fields
+    pipeline.push({
+      $project: {
+        orderId: '$_id',
+        orderNumber: 1,
+        customerEmail: '$email',
+        customerId: { $ifNull: ['$customer', '$user'] },
+        orderStatus: '$mobileStatus.current',
+        placedAt: 1,
+        totalPrice: 1,
+        helpRequest: '$helpRequests'
+      }
+    });
+
+    const helpRequests = await Order.aggregate(pipeline);
+
+    // Map reason codes to labels
+    const reasonLabels: Record<string, string> = {
+      'item_damaged': 'Item damaged or defective',
+      'wrong_item': 'Wrong item received',
+      'order_not_received': 'Order not received',
+      'missing_items': 'Missing items in order',
+      'tracking_info': 'Need tracking information',
+      'other': 'Other'
+    };
+
+    const formattedRequests = helpRequests.map(item => ({
+      id: item.helpRequest.id,
+      orderId: item.orderId,
+      orderNumber: item.orderNumber,
+      customerEmail: item.customerEmail,
+      customerId: item.customerId,
+      orderStatus: item.orderStatus,
+      orderTotal: item.totalPrice,
+      placedAt: item.placedAt,
+      reason: item.helpRequest.reason,
+      reasonLabel: reasonLabels[item.helpRequest.reason] || item.helpRequest.reason,
+      otherText: item.helpRequest.otherText || null,
+      status: item.helpRequest.status,
+      createdAt: item.helpRequest.createdAt,
+      resolvedAt: item.helpRequest.resolvedAt || null,
+      adminNotes: item.helpRequest.adminNotes || null
+    }));
+
+    // Get status counts
+    const statusCounts = await Order.aggregate([
+      { $match: { helpRequests: { $exists: true, $ne: [] } } },
+      { $unwind: '$helpRequests' },
+      { $group: { _id: '$helpRequests.status', count: { $sum: 1 } } }
+    ]);
+
+    const counts: Record<string, number> = {
+      open: 0,
+      in_progress: 0,
+      resolved: 0,
+      closed: 0
+    };
+    statusCounts.forEach((s: any) => {
+      counts[s._id] = s.count;
+    });
+
+    res.json({
+      success: true,
+      data: {
+        helpRequests: formattedRequests,
+        pagination: {
+          total,
+          page: pageNum,
+          pages: Math.ceil(total / limitNum),
+          limit: limitNum
+        },
+        statusCounts: counts
+      }
+    });
+  } catch (error) {
+    console.error('Error getting help requests:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch help requests'
+    });
+  }
+});
+
+/**
+ * GET /api/admin/help-requests/:orderId/:helpRequestId - Get specific help request details
+ */
+router.get('/help-requests/:orderId/:helpRequestId', async (req: Request, res: Response) => {
+  try {
+    const { orderId, helpRequestId } = req.params;
+
+    const order = await Order.findById(orderId)
+      .select('orderNumber email customer user mobileStatus totalPrice placedAt lineItems helpRequests shippingAddress')
+      .populate('customer', 'email firstName lastName phone')
+      .lean();
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        error: 'Order not found'
+      });
+    }
+
+    const helpRequest = order.helpRequests?.find((hr: any) => hr.id === helpRequestId);
+    if (!helpRequest) {
+      return res.status(404).json({
+        success: false,
+        error: 'Help request not found'
+      });
+    }
+
+    const reasonLabels: Record<string, string> = {
+      'item_damaged': 'Item damaged or defective',
+      'wrong_item': 'Wrong item received',
+      'order_not_received': 'Order not received',
+      'missing_items': 'Missing items in order',
+      'tracking_info': 'Need tracking information',
+      'other': 'Other'
+    };
+
+    res.json({
+      success: true,
+      data: {
+        helpRequest: {
+          id: helpRequest.id,
+          reason: helpRequest.reason,
+          reasonLabel: reasonLabels[helpRequest.reason] || helpRequest.reason,
+          otherText: helpRequest.otherText || null,
+          status: helpRequest.status,
+          createdAt: helpRequest.createdAt,
+          resolvedAt: helpRequest.resolvedAt || null,
+          adminNotes: helpRequest.adminNotes || null
+        },
+        order: {
+          id: order._id,
+          orderNumber: order.orderNumber,
+          email: order.email,
+          status: order.mobileStatus?.current,
+          totalPrice: order.totalPrice,
+          placedAt: order.placedAt,
+          itemCount: order.lineItems?.length || 0,
+          shippingAddress: order.shippingAddress
+        },
+        customer: order.customer || null
+      }
+    });
+  } catch (error) {
+    console.error('Error getting help request details:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch help request details'
+    });
+  }
+});
+
+/**
+ * PUT /api/admin/help-requests/:orderId/:helpRequestId - Update help request status
+ * Body:
+ *   - status: 'open' | 'in_progress' | 'resolved' | 'closed'
+ *   - adminNotes: string (optional)
+ */
+router.put('/help-requests/:orderId/:helpRequestId', async (req: Request, res: Response) => {
+  try {
+    const { orderId, helpRequestId } = req.params;
+    const { status, adminNotes } = req.body;
+
+    const validStatuses = ['open', 'in_progress', 'resolved', 'closed'];
+    if (status && !validStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid status. Must be one of: ' + validStatuses.join(', ')
+      });
+    }
+
+    const order = await Order.findById(orderId);
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        error: 'Order not found'
+      });
+    }
+
+    const helpRequestIndex = order.helpRequests?.findIndex((hr: any) => hr.id === helpRequestId);
+    if (helpRequestIndex === undefined || helpRequestIndex === -1) {
+      return res.status(404).json({
+        success: false,
+        error: 'Help request not found'
+      });
+    }
+
+    // Update the help request
+    if (status) {
+      (order.helpRequests as any)[helpRequestIndex].status = status;
+      if (status === 'resolved' || status === 'closed') {
+        (order.helpRequests as any)[helpRequestIndex].resolvedAt = new Date();
+      }
+    }
+
+    if (adminNotes !== undefined) {
+      (order.helpRequests as any)[helpRequestIndex].adminNotes = adminNotes;
+    }
+
+    await order.save();
+
+    const updatedHelpRequest = (order.helpRequests as any)[helpRequestIndex];
+
+    res.json({
+      success: true,
+      message: 'Help request updated successfully',
+      data: {
+        helpRequest: {
+          id: updatedHelpRequest.id,
+          status: updatedHelpRequest.status,
+          adminNotes: updatedHelpRequest.adminNotes || null,
+          resolvedAt: updatedHelpRequest.resolvedAt || null
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error updating help request:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update help request'
+    });
+  }
+});
+
+// ===============================
 // HELPER FUNCTIONS
 // ===============================
 
