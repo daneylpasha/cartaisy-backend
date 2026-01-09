@@ -42,7 +42,7 @@
     "node-fetch": "^2.7.0",
     "nodemailer": "^7.0.5",
     "reflect-metadata": "^0.2.2",
-    "resend": "^6.6.0",
+    "resend": "^6.7.0",
     "stripe": "^19.1.0",
     "swagger-ui-express": "^5.0.1",
     "tsoa": "^6.6.0",

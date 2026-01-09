@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 import { tenantConfig } from '../config/tenant';
 
 // Email configuration from tenant config (defaults)
@@ -9,6 +10,10 @@ const FRONTEND_URL = tenantConfig.api.frontendUrl;
 const STORE_NAME = tenantConfig.store.name;
 const STORE_PRIMARY_COLOR = tenantConfig.store.primaryColor;
 const STORE_LOGO_URL = tenantConfig.store.logoUrl;
+
+// Initialize Resend client if API key is configured
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
 
 /**
  * Email options for customizing sender info (multi-tenant support)
@@ -31,34 +36,79 @@ export interface StoreEmailConfig {
   replyTo: string;
 }
 
-// For now, we'll create a basic transporter
-// In production, you'll configure this with your email service (SendGrid, AWS SES, etc.)
-const createTransporter = () => {
-  // Use configured SMTP settings
-  if (tenantConfig.email.serviceType === 'smtp') {
-    return nodemailer.createTransport({
-      host: tenantConfig.email.smtp.host,
-      port: tenantConfig.email.smtp.port,
-      secure: tenantConfig.email.smtp.secure,
-      auth: tenantConfig.email.smtp.user && tenantConfig.email.smtp.pass ? {
-        user: tenantConfig.email.smtp.user,
-        pass: tenantConfig.email.smtp.pass
-      } : undefined
-    });
-  }
-  
-  // In production, you would configure your actual email service
-  // For now, we'll just return a mock transporter
-  return {
-    sendMail: async (options: any) => {
-      console.log('Email would be sent in production:', options);
-      return { messageId: 'mock-message-id' };
-    }
-  };
+/**
+ * Create nodemailer SMTP transporter
+ */
+const createSmtpTransporter = () => {
+  return nodemailer.createTransport({
+    host: tenantConfig.email.smtp.host,
+    port: tenantConfig.email.smtp.port,
+    secure: tenantConfig.email.smtp.secure,
+    auth: tenantConfig.email.smtp.user && tenantConfig.email.smtp.pass ? {
+      user: tenantConfig.email.smtp.user,
+      pass: tenantConfig.email.smtp.pass
+    } : undefined
+  });
 };
 
 /**
- * Sends an email
+ * Send email via Resend
+ */
+const sendViaResend = async (
+  to: string,
+  subject: string,
+  html: string,
+  from: string,
+  replyTo: string
+): Promise<boolean> => {
+  if (!resend) {
+    console.error('[Email] Resend API key not configured');
+    return false;
+  }
+
+  const { data, error } = await resend.emails.send({
+    from,
+    to,
+    subject,
+    html,
+    replyTo,
+  });
+
+  if (error) {
+    console.error('[Email] Resend error:', error);
+    return false;
+  }
+
+  console.log(`[Email] Sent via Resend to ${to}, ID: ${data?.id}`);
+  return true;
+};
+
+/**
+ * Send email via SMTP (nodemailer)
+ */
+const sendViaSmtp = async (
+  to: string,
+  subject: string,
+  html: string,
+  from: string,
+  replyTo: string
+): Promise<boolean> => {
+  const transporter = createSmtpTransporter();
+
+  await transporter.sendMail({
+    from,
+    to,
+    subject,
+    html,
+    replyTo,
+  });
+
+  console.log(`[Email] Sent via SMTP to ${to}`);
+  return true;
+};
+
+/**
+ * Sends an email using the configured provider (Resend or SMTP)
  * @param to - Recipient email address
  * @param subject - Email subject
  * @param html - HTML content of the email
@@ -76,31 +126,36 @@ export const sendEmail = async (
     const fromName = options?.fromName || EMAIL_FROM_NAME;
     const fromAddress = options?.fromAddress || EMAIL_FROM_ADDRESS;
     const replyTo = options?.replyTo || EMAIL_REPLY_TO;
+    const from = `${fromName} <${fromAddress}>`;
 
-    // For development, just log and return true
-    if (process.env.NODE_ENV !== 'production') {
+    // Development mode: log and return true (unless explicitly testing email)
+    if (process.env.NODE_ENV !== 'production' && process.env.FORCE_EMAIL_SEND !== 'true') {
       console.log('📧 Email would be sent:', {
         to,
         subject,
-        from: `"${fromName}" <${fromAddress}>`,
-        replyTo
+        from,
+        replyTo,
+        provider: tenantConfig.email.serviceType
       });
       return true;
     }
 
-    const transporter = createTransporter();
+    const serviceType = tenantConfig.email.serviceType;
 
-    const mailOptions = {
-      from: `"${fromName}" <${fromAddress}>`,
-      replyTo,
-      to,
-      subject,
-      html
-    };
+    // Option 1: Use Resend (recommended for production)
+    if (serviceType === 'resend') {
+      return await sendViaResend(to, subject, html, from, replyTo);
+    }
 
-    await transporter.sendMail(mailOptions);
-    console.log(`[Email] Sent to ${to} from "${fromName}" <${fromAddress}>`);
+    // Option 2: Use SMTP (nodemailer)
+    if (serviceType === 'smtp') {
+      return await sendViaSmtp(to, subject, html, from, replyTo);
+    }
+
+    // Option 3: Mock mode (for testing/development)
+    console.log('[Email] Mock mode - would send:', { to, subject, from });
     return true;
+
   } catch (error) {
     console.error('[Email] Failed to send:', error);
     return false;

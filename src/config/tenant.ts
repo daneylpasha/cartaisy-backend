@@ -89,11 +89,13 @@ export const tenantConfig = {
   },
 
   // ============ EMAIL CONFIGURATION ============
+  // Supported providers: 'smtp' (nodemailer), 'resend' (Resend API)
+  // For Resend: set EMAIL_SERVICE_TYPE=resend and RESEND_API_KEY=re_xxx
   email: {
     fromName: process.env.EMAIL_FROM_NAME || 'Cartaisy Team',
     fromAddress: process.env.EMAIL_FROM_ADDRESS || 'noreply@cartaisy.com',
     replyTo: process.env.EMAIL_REPLY_TO || 'support@cartaisy.com',
-    serviceType: process.env.EMAIL_SERVICE_TYPE || 'smtp',
+    serviceType: process.env.EMAIL_SERVICE_TYPE || 'smtp', // 'smtp' | 'resend'
     serviceApiKey: process.env.EMAIL_SERVICE_API_KEY || '',
     smtp: {
       host: process.env.EMAIL_SMTP_HOST || 'smtp.ethereal.email',
