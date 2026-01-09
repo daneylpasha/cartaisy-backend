@@ -167,6 +167,7 @@ export const sendWelcomeEmail = async (
 /**
  * Sends password reset email with token
  * Supports multi-tenant branding when storeConfig is provided
+ * Includes both web URL and mobile deep link for app users
  * @param email - User's email address
  * @param resetToken - Password reset token
  * @param storeConfig - Optional store configuration for multi-tenant branding
@@ -187,8 +188,12 @@ export const sendPasswordResetEmail = async (
 
   const subject = `Password Reset Request - ${storeName}`;
 
-  // In production, this would be your actual frontend reset URL
-  const resetUrl = `${FRONTEND_URL}/reset-password?token=${resetToken}`;
+  // Web reset URL (for browser/web app)
+  const webResetUrl = `${FRONTEND_URL}/reset-password?token=${resetToken}`;
+
+  // Mobile deep link URL (for mobile app)
+  const mobileDeepLink = `${tenantConfig.app.deepLinkScheme}://reset-password?token=${resetToken}`;
+
   const currentYear = new Date().getFullYear();
 
   const html = `
@@ -198,12 +203,13 @@ export const sendPasswordResetEmail = async (
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <style>
-          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f4f4f4; }
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f5f5f5; }
           .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background-color: ${primaryColor}; color: white; padding: 30px 20px; text-align: center; border-radius: 8px 8px 0 0; }
+          .email-wrapper { background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+          .header { background-color: ${primaryColor}; color: white; padding: 30px 20px; text-align: center; }
           .header img { max-height: 50px; margin-bottom: 15px; }
           .header h1 { margin: 0; font-size: 24px; font-weight: 600; }
-          .content { padding: 30px; background: #ffffff; border-left: 1px solid #eee; border-right: 1px solid #eee; }
+          .content { padding: 30px; }
           .button-container { text-align: center; margin: 25px 0; }
           .button {
             display: inline-block;
@@ -211,79 +217,91 @@ export const sendPasswordResetEmail = async (
             background-color: ${primaryColor};
             color: #ffffff !important;
             text-decoration: none;
-            border-radius: 6px;
+            border-radius: 8px;
             font-weight: 600;
             font-size: 16px;
           }
+          .mobile-section {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 25px 0;
+            text-align: center;
+          }
+          .mobile-section p { margin: 0 0 15px 0; color: #666; font-size: 14px; }
+          .mobile-button {
+            display: inline-block;
+            padding: 12px 24px;
+            background-color: #333;
+            color: #ffffff !important;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 500;
+            font-size: 14px;
+          }
           .warning {
             background: #fff8e6;
-            border: 1px solid #ffe082;
+            border-left: 4px solid #ffb800;
             padding: 15px;
-            border-radius: 6px;
+            border-radius: 0 8px 8px 0;
             margin: 25px 0;
+            font-size: 14px;
           }
-          .warning-title { font-weight: 600; color: #f57c00; margin-bottom: 8px; }
-          .warning ul { margin: 8px 0 0 0; padding-left: 20px; color: #666; }
-          .warning li { margin: 4px 0; }
           .footer {
             text-align: center;
-            padding: 20px;
+            padding: 25px;
             font-size: 12px;
-            color: #666;
+            color: #999;
             background: #f9f9f9;
-            border-radius: 0 0 8px 8px;
-            border: 1px solid #eee;
-            border-top: none;
           }
-          .link-text {
-            margin-top: 20px;
-            padding: 15px;
-            background: #f9f9f9;
-            border-radius: 4px;
-            word-break: break-all;
-            font-size: 12px;
-            color: #666;
+          .divider {
+            border: none;
+            border-top: 1px solid #eee;
+            margin: 25px 0;
           }
-          .link-text a { color: ${primaryColor}; }
+          .help-text { font-size: 13px; color: #888; margin-top: 20px; }
+          .help-text a { color: ${primaryColor}; word-break: break-all; }
         </style>
       </head>
       <body>
         <div class="container">
-          <div class="header">
-            ${logoUrl ? `<img src="${logoUrl}" alt="${storeName}" />` : ''}
-            <h1>Password Reset Request</h1>
-          </div>
-          <div class="content">
-            <p>Hi there,</p>
-            <p>We received a request to reset your password for your <strong>${storeName}</strong> account.</p>
-            <p>Click the button below to reset your password:</p>
-
-            <div class="button-container">
-              <a href="${resetUrl}" class="button">Reset Password</a>
+          <div class="email-wrapper">
+            <div class="header">
+              ${logoUrl ? `<img src="${logoUrl}" alt="${storeName}" />` : ''}
+              <h1>Reset Your Password</h1>
             </div>
 
-            <div class="warning">
-              <div class="warning-title">⏰ Important</div>
-              <ul>
-                <li>This link will expire in <strong>10 minutes</strong></li>
-                <li>If you didn't request this, please ignore this email</li>
-                <li>Your password won't change until you create a new one</li>
-              </ul>
+            <div class="content">
+              <p>Hi there,</p>
+              <p>We received a request to reset your password for your <strong>${storeName}</strong> account. Click the button below to set a new password:</p>
+
+              <div class="button-container">
+                <a href="${webResetUrl}" class="button">Reset Password</a>
+              </div>
+
+              <div class="mobile-section">
+                <p>📱 <strong>Using our mobile app?</strong></p>
+                <a href="${mobileDeepLink}" class="mobile-button">Open in App</a>
+              </div>
+
+              <div class="warning">
+                ⏰ <strong>This link expires in 10 minutes</strong> for your security.
+              </div>
+
+              <hr class="divider" />
+
+              <p>If you didn't request this password reset, you can safely ignore this email. Your password will remain unchanged.</p>
+
+              <p class="help-text">
+                Having trouble? Copy and paste this URL into your browser:<br/>
+                <a href="${webResetUrl}">${webResetUrl}</a>
+              </p>
             </div>
 
-            <p>If you're having trouble clicking the button, copy and paste this URL into your browser:</p>
-            <div class="link-text">
-              <a href="${resetUrl}">${resetUrl}</a>
+            <div class="footer">
+              <p>© ${currentYear} ${storeName}. All rights reserved.</p>
+              <p>This is an automated message, please do not reply directly to this email.</p>
             </div>
-
-            <p style="margin-top: 30px;">
-              Best regards,<br/>
-              <strong>The ${storeName} Team</strong>
-            </p>
-          </div>
-          <div class="footer">
-            <p>© ${currentYear} ${storeName}. All rights reserved.</p>
-            <p>This is an automated message. Please do not reply directly to this email.</p>
           </div>
         </div>
       </body>
