@@ -69,6 +69,12 @@ export interface IStoreEmail {
   preferences: IEmailPreferences;
 }
 
+export interface IStoreBranding {
+  logoUrl?: string;
+  primaryColor?: string;
+  secondaryColor?: string;
+}
+
 export interface IStore extends Document {
   _id: ObjectId;
   name: string;
@@ -77,6 +83,7 @@ export interface IStore extends Document {
   plan: IStorePlan;
   settings: IStoreSettings;
   email: IStoreEmail;
+  branding: IStoreBranding;
   abandonedCartSettings: IAbandonedCartSettings;
   isActive: boolean;
   createdAt: Date;
@@ -265,6 +272,27 @@ const StoreEmailSchema = new Schema<IStoreEmail>(
   { _id: false }
 );
 
+const StoreBrandingSchema = new Schema<IStoreBranding>(
+  {
+    logoUrl: {
+      type: String,
+      trim: true,
+    },
+    primaryColor: {
+      type: String,
+      trim: true,
+      default: '#FF6B6B',
+      match: [/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/, 'Primary color must be a valid hex color'],
+    },
+    secondaryColor: {
+      type: String,
+      trim: true,
+      match: [/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/, 'Secondary color must be a valid hex color'],
+    },
+  },
+  { _id: false }
+);
+
 // =============================================================================
 // MAIN STORE SCHEMA
 // =============================================================================
@@ -326,6 +354,14 @@ const StoreSchema = new Schema<IStore>(
           sendShippingUpdates: true,
           sendDeliveryConfirmation: true,
         },
+      }),
+    },
+
+    // Store Branding
+    branding: {
+      type: StoreBrandingSchema,
+      default: () => ({
+        primaryColor: '#FF6B6B',
       }),
     },
 

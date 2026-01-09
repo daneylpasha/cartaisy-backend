@@ -1,7 +1,7 @@
 import nodemailer from 'nodemailer';
 import { tenantConfig } from '../config/tenant';
 
-// Email configuration from tenant config
+// Email configuration from tenant config (defaults)
 const EMAIL_FROM_NAME = tenantConfig.email.fromName;
 const EMAIL_FROM_ADDRESS = tenantConfig.email.fromAddress;
 const EMAIL_REPLY_TO = tenantConfig.email.replyTo;
@@ -9,6 +9,27 @@ const FRONTEND_URL = tenantConfig.api.frontendUrl;
 const STORE_NAME = tenantConfig.store.name;
 const STORE_PRIMARY_COLOR = tenantConfig.store.primaryColor;
 const STORE_LOGO_URL = tenantConfig.store.logoUrl;
+
+/**
+ * Email options for customizing sender info (multi-tenant support)
+ */
+export interface EmailOptions {
+  fromName?: string;
+  fromAddress?: string;
+  replyTo?: string;
+}
+
+/**
+ * Store email configuration for branded emails
+ */
+export interface StoreEmailConfig {
+  storeName: string;
+  logoUrl?: string;
+  primaryColor?: string;
+  fromName: string;
+  fromAddress: string;
+  replyTo: string;
+}
 
 // For now, we'll create a basic transporter
 // In production, you'll configure this with your email service (SendGrid, AWS SES, etc.)
@@ -41,34 +62,47 @@ const createTransporter = () => {
  * @param to - Recipient email address
  * @param subject - Email subject
  * @param html - HTML content of the email
+ * @param options - Optional email configuration for multi-tenant support
  * @returns Promise<boolean> - true if email was sent successfully
  */
 export const sendEmail = async (
   to: string,
   subject: string,
-  html: string
+  html: string,
+  options?: EmailOptions
 ): Promise<boolean> => {
   try {
+    // Use custom options or fall back to defaults
+    const fromName = options?.fromName || EMAIL_FROM_NAME;
+    const fromAddress = options?.fromAddress || EMAIL_FROM_ADDRESS;
+    const replyTo = options?.replyTo || EMAIL_REPLY_TO;
+
     // For development, just log and return true
     if (process.env.NODE_ENV !== 'production') {
-      console.log('📧 Email would be sent:', { to, subject });
+      console.log('📧 Email would be sent:', {
+        to,
+        subject,
+        from: `"${fromName}" <${fromAddress}>`,
+        replyTo
+      });
       return true;
     }
 
     const transporter = createTransporter();
-    
+
     const mailOptions = {
-      from: `${EMAIL_FROM_NAME} <${EMAIL_FROM_ADDRESS}>`,
-      replyTo: EMAIL_REPLY_TO,
+      from: `"${fromName}" <${fromAddress}>`,
+      replyTo,
       to,
       subject,
       html
     };
 
     await transporter.sendMail(mailOptions);
+    console.log(`[Email] Sent to ${to} from "${fromName}" <${fromAddress}>`);
     return true;
   } catch (error) {
-    console.error('Error sending email:', error);
+    console.error('[Email] Failed to send:', error);
     return false;
   }
 };
@@ -132,68 +166,136 @@ export const sendWelcomeEmail = async (
 
 /**
  * Sends password reset email with token
+ * Supports multi-tenant branding when storeConfig is provided
  * @param email - User's email address
  * @param resetToken - Password reset token
+ * @param storeConfig - Optional store configuration for multi-tenant branding
  * @returns Promise<boolean> - true if email was sent successfully
  */
 export const sendPasswordResetEmail = async (
   email: string,
-  resetToken: string
+  resetToken: string,
+  storeConfig?: StoreEmailConfig
 ): Promise<boolean> => {
-  const subject = `Password Reset Request - ${STORE_NAME}`;
-  
+  // Use store config or fall back to global defaults
+  const storeName = storeConfig?.storeName || STORE_NAME;
+  const logoUrl = storeConfig?.logoUrl || STORE_LOGO_URL;
+  const primaryColor = storeConfig?.primaryColor || STORE_PRIMARY_COLOR || '#FF6B6B';
+  const fromName = storeConfig?.fromName || EMAIL_FROM_NAME;
+  const fromAddress = storeConfig?.fromAddress || EMAIL_FROM_ADDRESS;
+  const replyTo = storeConfig?.replyTo || EMAIL_REPLY_TO;
+
+  const subject = `Password Reset Request - ${storeName}`;
+
   // In production, this would be your actual frontend reset URL
   const resetUrl = `${FRONTEND_URL}/reset-password?token=${resetToken}`;
-  
+  const currentYear = new Date().getFullYear();
+
   const html = `
     <!DOCTYPE html>
     <html>
       <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <style>
-          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f4f4f4; }
           .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-          .header { background-color: #FF6B6B; color: white; padding: 20px; text-align: center; }
-          .content { padding: 20px; background-color: #f9f9f9; }
-          .button { display: inline-block; padding: 12px 24px; background-color: #FF6B6B; color: white; text-decoration: none; border-radius: 5px; margin-top: 15px; }
-          .warning { background-color: #FFF3CD; border: 1px solid #FFC107; padding: 10px; border-radius: 5px; margin-top: 15px; }
-          .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
-          .logo { max-height: 60px; margin-bottom: 10px; }
+          .header { background-color: ${primaryColor}; color: white; padding: 30px 20px; text-align: center; border-radius: 8px 8px 0 0; }
+          .header img { max-height: 50px; margin-bottom: 15px; }
+          .header h1 { margin: 0; font-size: 24px; font-weight: 600; }
+          .content { padding: 30px; background: #ffffff; border-left: 1px solid #eee; border-right: 1px solid #eee; }
+          .button-container { text-align: center; margin: 25px 0; }
+          .button {
+            display: inline-block;
+            padding: 14px 32px;
+            background-color: ${primaryColor};
+            color: #ffffff !important;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 16px;
+          }
+          .warning {
+            background: #fff8e6;
+            border: 1px solid #ffe082;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 25px 0;
+          }
+          .warning-title { font-weight: 600; color: #f57c00; margin-bottom: 8px; }
+          .warning ul { margin: 8px 0 0 0; padding-left: 20px; color: #666; }
+          .warning li { margin: 4px 0; }
+          .footer {
+            text-align: center;
+            padding: 20px;
+            font-size: 12px;
+            color: #666;
+            background: #f9f9f9;
+            border-radius: 0 0 8px 8px;
+            border: 1px solid #eee;
+            border-top: none;
+          }
+          .link-text {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 4px;
+            word-break: break-all;
+            font-size: 12px;
+            color: #666;
+          }
+          .link-text a { color: ${primaryColor}; }
         </style>
       </head>
       <body>
         <div class="container">
           <div class="header">
-            ${STORE_LOGO_URL ? `<img src="${STORE_LOGO_URL}" alt="${STORE_NAME}" class="logo" />` : ''}
+            ${logoUrl ? `<img src="${logoUrl}" alt="${storeName}" />` : ''}
             <h1>Password Reset Request</h1>
           </div>
           <div class="content">
-            <h2>Reset Your Password</h2>
-            <p>We received a request to reset your password for your ${STORE_NAME} account.</p>
+            <p>Hi there,</p>
+            <p>We received a request to reset your password for your <strong>${storeName}</strong> account.</p>
             <p>Click the button below to reset your password:</p>
-            <a href="${resetUrl}" class="button">Reset Password</a>
+
+            <div class="button-container">
+              <a href="${resetUrl}" class="button">Reset Password</a>
+            </div>
+
             <div class="warning">
-              <p><strong>Important:</strong></p>
+              <div class="warning-title">⏰ Important</div>
               <ul>
-                <li>This link will expire in 10 minutes</li>
+                <li>This link will expire in <strong>10 minutes</strong></li>
                 <li>If you didn't request this, please ignore this email</li>
                 <li>Your password won't change until you create a new one</li>
               </ul>
             </div>
-            <p style="margin-top: 20px; font-size: 12px; color: #666;">
-              Or copy and paste this link into your browser:<br>
-              ${resetUrl}
+
+            <p>If you're having trouble clicking the button, copy and paste this URL into your browser:</p>
+            <div class="link-text">
+              <a href="${resetUrl}">${resetUrl}</a>
+            </div>
+
+            <p style="margin-top: 30px;">
+              Best regards,<br/>
+              <strong>The ${storeName} Team</strong>
             </p>
           </div>
           <div class="footer">
-            <p>© 2024 ${STORE_NAME}. All rights reserved.</p>
-            <p>This is an automated message, please do not reply to this email.</p>
+            <p>© ${currentYear} ${storeName}. All rights reserved.</p>
+            <p>This is an automated message. Please do not reply directly to this email.</p>
           </div>
         </div>
       </body>
     </html>
   `;
 
-  return sendEmail(email, subject, html);
+  // Pass store-specific email options
+  return sendEmail(email, subject, html, {
+    fromName,
+    fromAddress,
+    replyTo,
+  });
 };
 
 /**

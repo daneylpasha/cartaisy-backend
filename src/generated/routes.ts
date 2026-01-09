@@ -686,6 +686,32 @@ const models: TsoaRoute.Models = {
         "additionalProperties": false,
     },
     // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "CustomerForgotPasswordRequest": {
+        "dataType": "refObject",
+        "properties": {
+            "email": {"dataType":"string","required":true},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "CustomerResetPasswordRequest": {
+        "dataType": "refObject",
+        "properties": {
+            "token": {"dataType":"string","required":true},
+            "newPassword": {"dataType":"string","required":true},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "CustomerChangePasswordRequest": {
+        "dataType": "refObject",
+        "properties": {
+            "currentPassword": {"dataType":"string","required":true},
+            "newPassword": {"dataType":"string","required":true},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
     "CustomerUpdateProfileRequest": {
         "dataType": "refObject",
         "properties": {
@@ -2529,6 +2555,100 @@ export function RegisterRoutes(app: Router) {
 
               await templateService.apiHandler({
                 methodName: 'customerRefreshToken',
+                controller,
+                response,
+                next,
+                validatedArgs,
+                successStatus: 200,
+              });
+            } catch (err) {
+                return next(err);
+            }
+        });
+        // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+        const argsCustomerAuthTsoaController_customerForgotPassword: Record<string, TsoaRoute.ParameterSchema> = {
+                storeId: {"in":"header","name":"x-store-id","required":true,"dataType":"string"},
+                requestBody: {"in":"body","name":"requestBody","required":true,"ref":"CustomerForgotPasswordRequest"},
+        };
+        app.post('/api/v1/customer/auth/forgot-password',
+            ...(fetchMiddlewares<RequestHandler>(CustomerAuthTsoaController)),
+            ...(fetchMiddlewares<RequestHandler>(CustomerAuthTsoaController.prototype.customerForgotPassword)),
+
+            async function CustomerAuthTsoaController_customerForgotPassword(request: ExRequest, response: ExResponse, next: any) {
+
+            // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+
+            let validatedArgs: any[] = [];
+            try {
+                validatedArgs = templateService.getValidatedArgs({ args: argsCustomerAuthTsoaController_customerForgotPassword, request, response });
+
+                const controller = new CustomerAuthTsoaController();
+
+              await templateService.apiHandler({
+                methodName: 'customerForgotPassword',
+                controller,
+                response,
+                next,
+                validatedArgs,
+                successStatus: 200,
+              });
+            } catch (err) {
+                return next(err);
+            }
+        });
+        // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+        const argsCustomerAuthTsoaController_customerResetPassword: Record<string, TsoaRoute.ParameterSchema> = {
+                storeId: {"in":"header","name":"x-store-id","required":true,"dataType":"string"},
+                requestBody: {"in":"body","name":"requestBody","required":true,"ref":"CustomerResetPasswordRequest"},
+        };
+        app.post('/api/v1/customer/auth/reset-password',
+            ...(fetchMiddlewares<RequestHandler>(CustomerAuthTsoaController)),
+            ...(fetchMiddlewares<RequestHandler>(CustomerAuthTsoaController.prototype.customerResetPassword)),
+
+            async function CustomerAuthTsoaController_customerResetPassword(request: ExRequest, response: ExResponse, next: any) {
+
+            // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+
+            let validatedArgs: any[] = [];
+            try {
+                validatedArgs = templateService.getValidatedArgs({ args: argsCustomerAuthTsoaController_customerResetPassword, request, response });
+
+                const controller = new CustomerAuthTsoaController();
+
+              await templateService.apiHandler({
+                methodName: 'customerResetPassword',
+                controller,
+                response,
+                next,
+                validatedArgs,
+                successStatus: 200,
+              });
+            } catch (err) {
+                return next(err);
+            }
+        });
+        // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+        const argsCustomerAuthTsoaController_customerChangePassword: Record<string, TsoaRoute.ParameterSchema> = {
+                requestBody: {"in":"body","name":"requestBody","required":true,"ref":"CustomerChangePasswordRequest"},
+                request: {"in":"request","name":"request","required":true,"dataType":"object"},
+        };
+        app.post('/api/v1/customer/auth/change-password',
+            authenticateMiddleware([{"jwt":[]}]),
+            ...(fetchMiddlewares<RequestHandler>(CustomerAuthTsoaController)),
+            ...(fetchMiddlewares<RequestHandler>(CustomerAuthTsoaController.prototype.customerChangePassword)),
+
+            async function CustomerAuthTsoaController_customerChangePassword(request: ExRequest, response: ExResponse, next: any) {
+
+            // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+
+            let validatedArgs: any[] = [];
+            try {
+                validatedArgs = templateService.getValidatedArgs({ args: argsCustomerAuthTsoaController_customerChangePassword, request, response });
+
+                const controller = new CustomerAuthTsoaController();
+
+              await templateService.apiHandler({
+                methodName: 'customerChangePassword',
                 controller,
                 response,
                 next,

@@ -1,5 +1,6 @@
 import mongoose, { Document, Schema } from 'mongoose';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 
 export interface IAddress {
   label?: string;
@@ -90,6 +91,7 @@ export interface ICustomer extends Document {
   createdAt: Date;
   updatedAt: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;
+  createPasswordResetToken(): string;
   addDeviceToken(token: string, platform: 'ios' | 'android', deviceId?: string): Promise<ICustomer>;
   removeDeviceToken(token: string): Promise<ICustomer>;
   deactivateDeviceToken(token: string): Promise<ICustomer>;
@@ -272,6 +274,24 @@ customerSchema.methods.comparePassword = async function (
   candidatePassword: string
 ): Promise<boolean> {
   return bcrypt.compare(candidatePassword, this.password);
+};
+
+/**
+ * Generate password reset token
+ * Returns the unhashed token to be sent via email
+ * Stores the hashed version in the database
+ */
+customerSchema.methods.createPasswordResetToken = function (): string {
+  const resetToken = crypto.randomBytes(32).toString('hex');
+
+  this.resetPasswordToken = crypto
+    .createHash('sha256')
+    .update(resetToken)
+    .digest('hex');
+
+  this.resetPasswordExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+  return resetToken;
 };
 
 /**

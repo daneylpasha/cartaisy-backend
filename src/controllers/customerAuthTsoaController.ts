@@ -14,9 +14,11 @@ import {
   Header,
 } from 'tsoa';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import Customer, { ICustomer } from '../models/Customer';
 import Store from '../models/Store';
 import { generateToken, generateRefreshToken } from '../utils/jwt';
+import { sendPasswordResetEmail, StoreEmailConfig } from '../utils/email';
 
 /**
  * Customer data response interface
@@ -139,6 +141,25 @@ interface CustomerRefreshTokenRequest {
 interface CustomerDeleteAccountRequest {
   /** Customer's password for verification */
   password: string;
+}
+
+interface CustomerForgotPasswordRequest {
+  /** Customer email address */
+  email: string;
+}
+
+interface CustomerResetPasswordRequest {
+  /** Reset token from email */
+  token: string;
+  /** New password (minimum 6 characters) */
+  newPassword: string;
+}
+
+interface CustomerChangePasswordRequest {
+  /** Current password */
+  currentPassword: string;
+  /** New password (minimum 6 characters) */
+  newPassword: string;
 }
 
 /**
@@ -491,6 +512,339 @@ export class CustomerAuthTsoaController extends Controller {
       return {
         status: 'error',
         message: 'Failed to refresh token. Please try again.',
+      };
+    }
+  }
+
+  /**
+   * Request password reset - sends email with reset link
+   * Supports multi-tenant branding based on store configuration
+   * @summary Request password reset
+   * @param storeId Store ID from header
+   * @param requestBody Email address for password reset
+   */
+  @Post('forgot-password')
+  @SuccessResponse(200, 'Password reset email sent if account exists')
+  @Response(500, 'Internal Server Error')
+  public async customerForgotPassword(
+    @Header('x-store-id') storeId: string,
+    @Body() requestBody: CustomerForgotPasswordRequest
+  ): Promise<{
+    status: 'success' | 'error';
+    message: string;
+  }> {
+    try {
+      const { email } = requestBody;
+
+      // Validate required fields
+      if (!email) {
+        this.setStatus(400);
+        return {
+          status: 'error',
+          message: 'Email is required.',
+        };
+      }
+
+      // Validate storeId
+      if (!storeId) {
+        this.setStatus(400);
+        return {
+          status: 'error',
+          message: 'Store ID is required.',
+        };
+      }
+
+      // Fetch store first for branding
+      const store = await Store.findById(storeId);
+
+      // If store not found, return generic success (don't reveal store existence)
+      if (!store) {
+        this.setStatus(200);
+        return {
+          status: 'success',
+          message: 'If an account with that email exists, a password reset link has been sent.',
+        };
+      }
+
+      // Find customer by email and store
+      const customer = await Customer.findOne({
+        storeId,
+        email: email.toLowerCase(),
+      });
+
+      // Always return success message (don't reveal if email exists)
+      if (!customer) {
+        this.setStatus(200);
+        return {
+          status: 'success',
+          message: 'If an account with that email exists, a password reset link has been sent.',
+        };
+      }
+
+      // Check if customer is active
+      if (!customer.isActive) {
+        this.setStatus(200);
+        return {
+          status: 'success',
+          message: 'If an account with that email exists, a password reset link has been sent.',
+        };
+      }
+
+      // Generate reset token
+      const resetToken = customer.createPasswordResetToken();
+      await customer.save({ validateBeforeSave: false });
+
+      // Get store's email configuration using the model method
+      const emailConfig = store.getEmailConfig();
+
+      // Build store config for branded email
+      const storeEmailConfig: StoreEmailConfig = {
+        storeName: store.name,
+        logoUrl: store.branding?.logoUrl,
+        primaryColor: store.branding?.primaryColor || '#FF6B6B',
+        fromName: emailConfig.fromName,
+        fromAddress: emailConfig.fromAddress,
+        replyTo: emailConfig.replyTo,
+      };
+
+      // Send password reset email with store branding
+      const emailSent = await sendPasswordResetEmail(
+        customer.email,
+        resetToken,
+        storeEmailConfig
+      );
+
+      if (!emailSent) {
+        // If email fails, clear the reset token
+        customer.resetPasswordToken = undefined;
+        customer.resetPasswordExpires = undefined;
+        await customer.save({ validateBeforeSave: false });
+
+        console.error(`[CustomerAuth] Failed to send password reset email to ${customer.email} for store ${store.name}`);
+        this.setStatus(500);
+        return {
+          status: 'error',
+          message: 'Failed to send password reset email. Please try again later.',
+        };
+      }
+
+      console.log(`[CustomerAuth] Password reset email sent to ${customer.email} for store "${store.name}"`);
+      this.setStatus(200);
+      return {
+        status: 'success',
+        message: 'If an account with that email exists, a password reset link has been sent.',
+      };
+    } catch (error) {
+      console.error('Customer forgot password error:', error);
+      this.setStatus(500);
+      return {
+        status: 'error',
+        message: 'Failed to process password reset request. Please try again.',
+      };
+    }
+  }
+
+  /**
+   * Reset password using token from email
+   * @summary Reset password with token
+   * @param storeId Store ID from header
+   * @param requestBody Reset token and new password
+   */
+  @Post('reset-password')
+  @SuccessResponse(200, 'Password reset successful')
+  @Response(400, 'Bad Request - Invalid or expired token')
+  @Response(500, 'Internal Server Error')
+  public async customerResetPassword(
+    @Header('x-store-id') storeId: string,
+    @Body() requestBody: CustomerResetPasswordRequest
+  ): Promise<{
+    status: 'success' | 'error';
+    message: string;
+    data?: {
+      user: CustomerData;
+      token: string;
+      refreshToken: string;
+    };
+  }> {
+    try {
+      const { token, newPassword } = requestBody;
+
+      // Validate required fields
+      if (!token || !newPassword) {
+        this.setStatus(400);
+        return {
+          status: 'error',
+          message: 'Token and new password are required.',
+        };
+      }
+
+      // Validate password length
+      if (newPassword.length < 6) {
+        this.setStatus(400);
+        return {
+          status: 'error',
+          message: 'Password must be at least 6 characters.',
+        };
+      }
+
+      // Validate storeId
+      if (!storeId) {
+        this.setStatus(400);
+        return {
+          status: 'error',
+          message: 'Store ID is required.',
+        };
+      }
+
+      // Hash the token to match stored version
+      const hashedToken = crypto
+        .createHash('sha256')
+        .update(token)
+        .digest('hex');
+
+      // Find customer with matching token that hasn't expired
+      const customer = await Customer.findOne({
+        storeId,
+        resetPasswordToken: hashedToken,
+        resetPasswordExpires: { $gt: new Date() },
+      });
+
+      if (!customer) {
+        this.setStatus(400);
+        return {
+          status: 'error',
+          message: 'Invalid or expired reset token.',
+        };
+      }
+
+      // Update password and clear reset token fields
+      customer.password = newPassword;
+      customer.resetPasswordToken = undefined;
+      customer.resetPasswordExpires = undefined;
+      await customer.save();
+
+      // Generate new tokens for auto-login
+      const accessToken = generateToken(customer._id.toString());
+      const refreshToken = generateRefreshToken(customer._id.toString());
+
+      this.setStatus(200);
+      return {
+        status: 'success',
+        message: 'Password reset successful.',
+        data: {
+          user: formatCustomerResponse(customer),
+          token: accessToken,
+          refreshToken,
+        },
+      };
+    } catch (error) {
+      console.error('Customer reset password error:', error);
+      this.setStatus(500);
+      return {
+        status: 'error',
+        message: 'Failed to reset password. Please try again.',
+      };
+    }
+  }
+
+  /**
+   * Change password for authenticated customer
+   * @summary Change password
+   * @param requestBody Current password and new password
+   */
+  @Post('change-password')
+  @Security('jwt')
+  @SuccessResponse(200, 'Password changed successfully')
+  @Response(400, 'Bad Request')
+  @Response(401, 'Unauthorized')
+  @Response(404, 'Customer not found')
+  @Response(500, 'Internal Server Error')
+  public async customerChangePassword(
+    @Body() requestBody: CustomerChangePasswordRequest,
+    @Request() request: any
+  ): Promise<{
+    status: 'success' | 'error';
+    message: string;
+    data?: {
+      token: string;
+      refreshToken: string;
+    };
+  }> {
+    try {
+      const customerId = request.user?._id || request.user?.id;
+
+      if (!customerId) {
+        this.setStatus(401);
+        return {
+          status: 'error',
+          message: 'User not authenticated',
+        };
+      }
+
+      const { currentPassword, newPassword } = requestBody;
+
+      // Validate required fields
+      if (!currentPassword || !newPassword) {
+        this.setStatus(400);
+        return {
+          status: 'error',
+          message: 'Current password and new password are required.',
+        };
+      }
+
+      // Validate new password length
+      if (newPassword.length < 6) {
+        this.setStatus(400);
+        return {
+          status: 'error',
+          message: 'New password must be at least 6 characters.',
+        };
+      }
+
+      // Find customer with password field
+      const customer = await Customer.findById(customerId).select('+password');
+
+      if (!customer) {
+        this.setStatus(404);
+        return {
+          status: 'error',
+          message: 'Customer not found',
+        };
+      }
+
+      // Verify current password
+      const isPasswordValid = await customer.comparePassword(currentPassword);
+      if (!isPasswordValid) {
+        this.setStatus(401);
+        return {
+          status: 'error',
+          message: 'Current password is incorrect.',
+        };
+      }
+
+      // Update password
+      customer.password = newPassword;
+      await customer.save();
+
+      // Generate new tokens
+      const accessToken = generateToken(customer._id.toString());
+      const refreshToken = generateRefreshToken(customer._id.toString());
+
+      this.setStatus(200);
+      return {
+        status: 'success',
+        message: 'Password changed successfully.',
+        data: {
+          token: accessToken,
+          refreshToken,
+        },
+      };
+    } catch (error) {
+      console.error('Customer change password error:', error);
+      this.setStatus(500);
+      return {
+        status: 'error',
+        message: 'Failed to change password. Please try again.',
       };
     }
   }
