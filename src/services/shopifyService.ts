@@ -208,11 +208,24 @@ export const syncProducts = async (): Promise<SyncResult> => {
         }
       }
 
-      // Check for next page using Link header
-      const linkHeader = response.headers?.link || response.headers?.Link;
+      // Check for next page using Link header (axios stores headers in lowercase)
+      const linkHeader = response.headers?.link;
+      console.log(`[Sync] Page synced: ${products.length} products, Link header: ${linkHeader ? 'present' : 'none'}`);
+
       if (linkHeader && linkHeader.includes('rel="next"')) {
         const match = linkHeader.match(/<([^>]+)>;\s*rel="next"/);
-        url = match ? match[1].replace(/^https:\/\/[^\/]+/, '') : '';
+        if (match) {
+          // Extract just the path and query string using URL parsing
+          try {
+            const nextUrl = new URL(match[1]);
+            url = `${nextUrl.pathname}${nextUrl.search}`;
+            console.log(`[Sync] Next page URL: ${url}`);
+          } catch {
+            url = match[1].replace(/^https:\/\/[^\/]+/, '');
+          }
+        } else {
+          url = '';
+        }
       } else {
         url = '';
       }
