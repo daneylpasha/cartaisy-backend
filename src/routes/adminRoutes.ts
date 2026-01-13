@@ -227,7 +227,7 @@ router.post('/shopify/fetch-location', async (req: Request, res: Response) => {
       });
     }
 
-    const store = await Store.findById(storeId).select('+shopify.accessToken shopify');
+    const store = await Store.findById(storeId).select('+shopify.accessToken');
 
     if (!store?.shopify?.accessToken || !store.shopify.isConnected) {
       return res.status(400).json({
