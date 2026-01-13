@@ -283,14 +283,14 @@ ProductSchema.index({
 // =============================================================================
 
 ProductSchema.virtual('totalInventory').get(function(this: IProduct): number {
-  return this.variants.reduce((total, variant) => total + (variant.inventory?.quantity || 0), 0);
+  return (this.variants || []).reduce((total, variant) => total + (variant.inventory?.quantity || 0), 0);
 });
 
 ProductSchema.virtual('priceRange').get(function(this: IProduct): { min: number; max: number } {
-  if (this.variants.length === 0) {
+  if (!this.variants || this.variants.length === 0) {
     return { min: this.price, max: this.price };
   }
-  
+
   const prices = this.variants.map(v => v.price);
   return {
     min: Math.min(...prices),
@@ -340,10 +340,10 @@ ProductSchema.methods.isAvailable = function(this: IProduct): boolean {
   if (this.status !== 'active') {
     return false;
   }
-  
-  return this.variants.some(variant => 
-    variant.inventory.quantity > 0 && 
-    variant.inventory.tracked
+
+  return (this.variants || []).some(variant =>
+    variant.inventory?.quantity > 0 &&
+    variant.inventory?.tracked
   );
 };
 
@@ -351,14 +351,14 @@ ProductSchema.methods.isAvailable = function(this: IProduct): boolean {
  * Get the lowest price among available variants
  */
 ProductSchema.methods.getLowestPrice = function(this: IProduct): number {
-  if (this.variants.length === 0) {
+  if (!this.variants || this.variants.length === 0) {
     return this.price;
   }
-  
+
   const availablePrices = this.variants
-    .filter(v => v.inventory.quantity > 0)
+    .filter(v => v.inventory?.quantity > 0)
     .map(v => v.price);
-  
+
   return availablePrices.length > 0 ? Math.min(...availablePrices) : this.price;
 };
 
@@ -366,14 +366,14 @@ ProductSchema.methods.getLowestPrice = function(this: IProduct): number {
  * Get the highest price among available variants
  */
 ProductSchema.methods.getHighestPrice = function(this: IProduct): number {
-  if (this.variants.length === 0) {
+  if (!this.variants || this.variants.length === 0) {
     return this.price;
   }
-  
+
   const availablePrices = this.variants
-    .filter(v => v.inventory.quantity > 0)
+    .filter(v => v.inventory?.quantity > 0)
     .map(v => v.price);
-  
+
   return availablePrices.length > 0 ? Math.max(...availablePrices) : this.price;
 };
 
@@ -399,8 +399,8 @@ ProductSchema.pre('save', function(this: IProduct, next): void {
   }
   
   // Update total quantity from variants
-  this.inventoryTracking.totalQuantity = this.variants.reduce(
-    (total, variant) => total + (variant.inventory?.quantity || 0), 
+  this.inventoryTracking.totalQuantity = (this.variants || []).reduce(
+    (total, variant) => total + (variant.inventory?.quantity || 0),
     0
   );
   
