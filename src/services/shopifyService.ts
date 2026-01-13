@@ -215,13 +215,17 @@ export const syncProducts = async (): Promise<SyncResult> => {
       if (linkHeader && linkHeader.includes('rel="next"')) {
         const match = linkHeader.match(/<([^>]+)>;\s*rel="next"/);
         if (match) {
-          // Extract just the path and query string using URL parsing
+          // Extract just the endpoint path (e.g., /products.json?...) without the /admin/api/version prefix
           try {
             const nextUrl = new URL(match[1]);
-            url = `${nextUrl.pathname}${nextUrl.search}`;
+            // Remove the /admin/api/XXXX-XX prefix since baseURL already has it
+            const pathWithoutApiPrefix = nextUrl.pathname.replace(/^\/admin\/api\/\d{4}-\d{2}/, '');
+            url = `${pathWithoutApiPrefix}${nextUrl.search}`;
             console.log(`[Sync] Next page URL: ${url}`);
           } catch {
-            url = match[1].replace(/^https:\/\/[^\/]+/, '');
+            // Fallback: just get the query string part
+            const queryMatch = match[1].match(/(\?.*)/);
+            url = queryMatch ? `/products.json${queryMatch[1]}` : '';
           }
         } else {
           url = '';
