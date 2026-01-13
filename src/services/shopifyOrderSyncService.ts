@@ -178,7 +178,7 @@ export class ShopifyOrderSyncService {
         return;
       }
 
-      const store = await Store.findById(storeId).select('+shopify.accessToken shopify');
+      const store = await Store.findById(storeId).select('+shopify.accessToken');
       if (!store?.shopify?.accessToken || !store.shopify.isConnected) {
         console.log('Store not connected to Shopify, skipping inventory sync');
         return;

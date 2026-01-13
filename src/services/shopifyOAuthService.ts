@@ -198,6 +198,42 @@ export const getShopInfo = async (
 };
 
 /**
+ * Fetches the primary location ID from Shopify
+ */
+export const getPrimaryLocationId = async (shop: string, accessToken: string): Promise<string | null> => {
+  try {
+    const response = await fetch(
+      `https://${shop}/admin/api/${SHOPIFY_API_VERSION}/locations.json`,
+      {
+        headers: {
+          'X-Shopify-Access-Token': accessToken,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    if (!response.ok) {
+      console.error('Failed to fetch Shopify locations:', response.status);
+      return null;
+    }
+
+    const data: any = await response.json();
+    // Get the first active location (primary location)
+    const primaryLocation = data.locations?.find((loc: any) => loc.active) || data.locations?.[0];
+
+    if (primaryLocation?.id) {
+      console.log(`✅ Found Shopify primary location: ${primaryLocation.name} (ID: ${primaryLocation.id})`);
+      return primaryLocation.id.toString();
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Get primary location error:', error);
+    return null;
+  }
+};
+
+/**
  * Saves encrypted credentials to Store document
  */
 export const saveCredentials = async (
@@ -210,16 +246,26 @@ export const saveCredentials = async (
     // Encrypt the access token before saving
     const encryptedToken = encrypt(accessToken);
 
+    // Fetch primary location ID for inventory management
+    const locationId = await getPrimaryLocationId(shop, accessToken);
+
+    const updateData: any = {
+      'shopify.shop': shop,
+      'shopify.accessToken': encryptedToken,
+      'shopify.scope': scope,
+      'shopify.isConnected': true,
+      'shopify.connectedAt': new Date(),
+      'shopify.lastSyncAt': new Date(),
+    };
+
+    // Add locationId if found
+    if (locationId) {
+      updateData['shopify.locationId'] = locationId;
+    }
+
     const store = await Store.findByIdAndUpdate(
       storeId,
-      {
-        'shopify.shop': shop,
-        'shopify.accessToken': encryptedToken,
-        'shopify.scope': scope,
-        'shopify.isConnected': true,
-        'shopify.connectedAt': new Date(),
-        'shopify.lastSyncAt': new Date(),
-      },
+      updateData,
       { new: true }
     );
 

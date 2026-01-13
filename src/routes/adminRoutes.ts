@@ -213,6 +213,65 @@ router.post('/sync/trigger', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * POST /api/admin/shopify/fetch-location - Fetch and save Shopify location ID for a store
+ */
+router.post('/shopify/fetch-location', async (req: Request, res: Response) => {
+  try {
+    const { storeId } = req.body;
+
+    if (!storeId) {
+      return res.status(400).json({
+        success: false,
+        error: 'storeId is required'
+      });
+    }
+
+    const store = await Store.findById(storeId).select('+shopify.accessToken shopify');
+
+    if (!store?.shopify?.accessToken || !store.shopify.isConnected) {
+      return res.status(400).json({
+        success: false,
+        error: 'Store is not connected to Shopify'
+      });
+    }
+
+    // Import the decrypt function and getPrimaryLocationId
+    const { decrypt } = await import('../utils/encryption');
+    const { getPrimaryLocationId } = await import('../services/shopifyOAuthService');
+
+    // Decrypt access token
+    const accessToken = decrypt(store.shopify.accessToken);
+
+    // Fetch primary location
+    const locationId = await getPrimaryLocationId(store.shopify.shop, accessToken);
+
+    if (!locationId) {
+      return res.status(404).json({
+        success: false,
+        error: 'No location found in Shopify store'
+      });
+    }
+
+    // Update store with locationId
+    await Store.findByIdAndUpdate(storeId, {
+      'shopify.locationId': locationId
+    });
+
+    res.json({
+      success: true,
+      message: 'Shopify location ID fetched and saved successfully',
+      data: { locationId }
+    });
+  } catch (error: any) {
+    console.error('Error fetching Shopify location:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to fetch Shopify location'
+    });
+  }
+});
+
 // ===============================
 // BACKGROUND JOBS MANAGEMENT
 // ===============================

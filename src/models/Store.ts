@@ -20,6 +20,7 @@ export interface IShopifyConnection {
   isConnected: boolean;
   connectedAt?: Date;
   lastSyncAt?: Date;
+  locationId?: string; // Shopify location ID for inventory management
 }
 
 export interface IStorePlan {
@@ -114,6 +115,10 @@ const ShopifyConnectionSchema = new Schema<IShopifyConnection>(
     },
     connectedAt: Date,
     lastSyncAt: Date,
+    locationId: {
+      type: String,
+      sparse: true,
+    },
   },
   { _id: false }
 );
