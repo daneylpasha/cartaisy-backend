@@ -46,6 +46,7 @@ async function findUserOrCustomer(userId: string) {
       phone: customer.phone,
       addresses: customer.addresses,
       stripeCustomerId: customer.stripeCustomerId,
+      storeId: customer.storeId,
       isUser: false
     };
   }
@@ -1578,6 +1579,8 @@ export class CheckoutController extends Controller {
       const order = new Order({
         // Set user or customer based on which model the account is from
         ...(user.isUser ? { user: userId } : { customer: userId }),
+        // Add storeId for Shopify inventory sync (from Customer model)
+        ...(user.storeId ? { storeId: user.storeId } : {}),
         orderNumber,
         confirmationNumber,
         email: user.email,

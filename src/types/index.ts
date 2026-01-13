@@ -182,6 +182,7 @@ export interface IVariantInventory {
 
 export interface IProductVariant {
   id: string;
+  inventoryItemId?: string; // Shopify inventory_item_id for inventory adjustments
   title: string;
   price: number;
   compareAtPrice?: number;

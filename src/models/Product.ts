@@ -40,6 +40,7 @@ const VariantOptionsSchema = new Schema({
 
 const ProductVariantSchema = new Schema({
   id: { type: String, required: true },
+  inventoryItemId: { type: String }, // Shopify inventory_item_id for inventory adjustments
   title: { type: String, required: true, maxlength: 255 },
   price: { type: Number, required: true, min: 0 },
   compareAtPrice: { type: Number, min: 0 },

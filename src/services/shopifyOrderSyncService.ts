@@ -165,7 +165,7 @@ export class ShopifyOrderSyncService {
   static async updateInventory(orderId: string): Promise<void> {
     try {
       const order = await Order.findById(orderId)
-        .populate('lineItems.productId', 'shopifyInventoryItemId title');
+        .populate('lineItems.productId', 'variants title');
 
       if (!order) {
         console.log('Order not found for inventory update');
@@ -180,6 +180,7 @@ export class ShopifyOrderSyncService {
 
       const store = await Store.findById(storeId).select('+shopify.accessToken shopify');
       if (!store?.shopify?.accessToken || !store.shopify.isConnected) {
+        console.log('Store not connected to Shopify, skipping inventory sync');
         return;
       }
 
@@ -198,20 +199,32 @@ export class ShopifyOrderSyncService {
       // Update inventory for each item
       for (const item of order.lineItems) {
         try {
-          const inventoryItemId = (item as any).productId?.shopifyInventoryItemId;
+          const product = (item as any).productId;
+          if (!product?.variants) {
+            console.log(`No product variants found for ${item.title}, skipping`);
+            continue;
+          }
 
-          if (!inventoryItemId) {
+          // Extract variant ID from Shopify GID (e.g., "gid://shopify/ProductVariant/12345" -> "12345")
+          const shopifyVariantId = (item as any).shopifyVariantId;
+          const variantIdMatch = shopifyVariantId?.match(/\/(\d+)$/);
+          const variantId = variantIdMatch ? variantIdMatch[1] : shopifyVariantId;
+
+          // Find the variant in the product
+          const variant = product.variants.find((v: any) => v.id === variantId);
+          if (!variant?.inventoryItemId) {
+            console.log(`No inventoryItemId found for variant ${variantId} of ${item.title}, skipping`);
             continue;
           }
 
           // Adjust inventory
           await shopifyClient.post('/inventory_levels/adjust.json', {
             location_id: parseInt(locationId, 10),
-            inventory_item_id: parseInt(inventoryItemId, 10),
+            inventory_item_id: parseInt(variant.inventoryItemId, 10),
             available_adjustment: -item.quantity, // Reduce by ordered quantity
           });
 
-          console.log(`✅ Updated Shopify inventory for ${item.title}`);
+          console.log(`✅ Updated Shopify inventory for ${item.title} (variant: ${variant.title || 'default'})`);
         } catch (itemError: any) {
           console.error(`Inventory update error for item ${item.title}:`, itemError.response?.data || itemError.message);
         }

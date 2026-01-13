@@ -269,6 +269,7 @@ export const syncProduct = async (productId: string, shopifyProduct?: IShopifyPr
       // Variants and pricing
       variants: shopifyProduct.variants?.map((variant: any) => ({
         id: variant.id.toString(),
+        inventoryItemId: variant.inventory_item_id?.toString(),
         title: variant.title,
         price: parseFloat(variant.price),
         compareAtPrice: variant.compare_at_price ? parseFloat(variant.compare_at_price) : undefined,
