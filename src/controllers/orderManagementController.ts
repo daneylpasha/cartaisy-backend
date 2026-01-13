@@ -157,11 +157,13 @@ export const getOrderDetails = async (req: AuthenticatedRequest, res: Response):
       status: 'success',
       data: { order },
     });
-  } catch (error) {
-    console.error('Get order details error:', error);
+  } catch (error: any) {
+    console.error('Get order details error:', error?.message || error);
+    console.error('Stack:', error?.stack);
     res.status(500).json({
       status: 'error',
       message: 'Failed to fetch order details',
+      error: error?.message || 'Unknown error',
     });
   }
 };
