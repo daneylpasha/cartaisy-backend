@@ -272,6 +272,49 @@ router.post('/shopify/fetch-location', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * POST /api/admin/shopify/set-location - Manually set Shopify location ID for a store
+ * Use this if you know your Shopify location ID (find it in Shopify Admin > Settings > Locations)
+ */
+router.post('/shopify/set-location', async (req: Request, res: Response) => {
+  try {
+    const { storeId, locationId } = req.body;
+
+    if (!storeId || !locationId) {
+      return res.status(400).json({
+        success: false,
+        error: 'storeId and locationId are required'
+      });
+    }
+
+    // Update store with locationId
+    const store = await Store.findByIdAndUpdate(
+      storeId,
+      { 'shopify.locationId': locationId },
+      { new: true }
+    );
+
+    if (!store) {
+      return res.status(404).json({
+        success: false,
+        error: 'Store not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Shopify location ID set successfully',
+      data: { locationId }
+    });
+  } catch (error: any) {
+    console.error('Error setting Shopify location:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to set Shopify location'
+    });
+  }
+});
+
 // ===============================
 // BACKGROUND JOBS MANAGEMENT
 // ===============================
