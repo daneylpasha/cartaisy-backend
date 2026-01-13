@@ -832,12 +832,12 @@ OrderSchema.pre('validate', function(next) {
 // =============================================================================
 
 OrderSchema.virtual('totalItems').get(function(this: IOrder): number {
-  return this.lineItems.reduce((total, item) => total + item.quantity, 0);
+  return (this.lineItems || []).reduce((total, item) => total + item.quantity, 0);
 });
 
 OrderSchema.virtual('totalWeight').get(function(this: IOrder): number {
   // This would require product data to calculate actual weight
-  return this.lineItems.reduce((total, item) => total + (item.quantity * 1), 0); // Placeholder
+  return (this.lineItems || []).reduce((total, item) => total + (item.quantity * 1), 0); // Placeholder
 });
 
 OrderSchema.virtual('isActive').get(function(this: IOrder): boolean {
@@ -972,7 +972,7 @@ OrderSchema.methods.canBeReturned = function(this: IOrder): boolean {
  */
 OrderSchema.methods.getTotalWeight = function(this: IOrder): number {
   // This would need product data to calculate actual weight
-  return this.lineItems.reduce((total, item) => total + (item.quantity * 1), 0);
+  return (this.lineItems || []).reduce((total, item) => total + (item.quantity * 1), 0);
 };
 
 // =============================================================================
