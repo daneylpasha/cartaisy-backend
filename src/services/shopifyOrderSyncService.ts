@@ -1,6 +1,7 @@
 import axios, { AxiosInstance } from 'axios';
 import Order from '../models/Order';
 import Store from '../models/Store';
+import Product from '../models/Product';
 
 /**
  * Shopify Order Sync Service
@@ -217,7 +218,7 @@ export class ShopifyOrderSyncService {
             continue;
           }
 
-          // Adjust inventory
+          // Adjust inventory in Shopify
           await shopifyClient.post('/inventory_levels/adjust.json', {
             location_id: parseInt(locationId, 10),
             inventory_item_id: parseInt(variant.inventoryItemId, 10),
@@ -225,6 +226,18 @@ export class ShopifyOrderSyncService {
           });
 
           console.log(`✅ Updated Shopify inventory for ${item.title} (variant: ${variant.title || 'default'})`);
+
+          // Also update MongoDB inventory so mobile app shows correct stock
+          await Product.updateOne(
+            { _id: product._id, 'variants.id': variantId },
+            {
+              $inc: {
+                'variants.$.inventory.quantity': -item.quantity,
+                'inventoryTracking.totalQuantity': -item.quantity
+              }
+            }
+          );
+          console.log(`✅ Updated MongoDB inventory for ${item.title}`);
         } catch (itemError: any) {
           console.error(`Inventory update error for item ${item.title}:`, itemError.response?.data || itemError.message);
         }
