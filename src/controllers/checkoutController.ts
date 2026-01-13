@@ -1547,18 +1547,21 @@ export class CheckoutController extends Controller {
         const merchandise = node.merchandise;
         const itemPrice = parseFloat(merchandise.priceV2?.amount || '0');
 
-        // Find MongoDB product ID from Shopify product ID for image population
-        let productId = null;
-        if (merchandise.product?.id) {
-          // Extract numeric ID from GID format (gid://shopify/Product/12345 -> 12345)
-          const shopifyGid = merchandise.product.id;
-          const numericIdMatch = shopifyGid.match(/\/(\d+)$/);
-          const numericId = numericIdMatch ? numericIdMatch[1] : shopifyGid;
+        // Extract numeric IDs from GID format (gid://shopify/Product/12345 -> 12345)
+        const shopifyGid = merchandise.product?.id || '';
+        const numericIdMatch = shopifyGid.match(/\/(\d+)$/);
+        const numericProductId = numericIdMatch ? numericIdMatch[1] : shopifyGid;
 
-          // Try to find product by numeric ID or full GID
+        const variantGid = merchandise.id || '';
+        const variantIdMatch = variantGid.match(/\/(\d+)$/);
+        const numericVariantId = variantIdMatch ? variantIdMatch[1] : variantGid;
+
+        // Find MongoDB product ID from Shopify product ID
+        let productId = null;
+        if (numericProductId) {
           const product = await Product.findOne({
             $or: [
-              { shopifyProductId: numericId },
+              { shopifyProductId: numericProductId },
               { shopifyProductId: shopifyGid }
             ]
           });
@@ -1570,8 +1573,8 @@ export class CheckoutController extends Controller {
 
         return {
           productId, // MongoDB product ID for populate
-          shopifyProductId: merchandise.product?.id,
-          shopifyVariantId: merchandise.id,
+          shopifyProductId: numericProductId, // Store numeric ID, not full GID
+          shopifyVariantId: numericVariantId, // Store numeric ID, not full GID
           title: merchandise.product?.title || 'Product',
           variantTitle: merchandise.title || null,
           image: productImage, // Direct image URL from Shopify
