@@ -9,6 +9,7 @@ import shopifyStorefront from '../services/shopifyStorefrontService';
 import stripeService from '../services/stripeService';
 import { normalizeAddressForShopify } from '../utils/addressHelper';
 import { getCurrencyForCountry } from '../utils/currency';
+import { ShopifyOrderSyncService } from '../services/shopifyOrderSyncService';
 
 /**
  * Get the default currency based on store configuration.
@@ -1634,6 +1635,10 @@ export class CheckoutController extends Controller {
       });
 
       await order.save();
+
+      // Async: Update inventory in Shopify
+      ShopifyOrderSyncService.updateInventory(order._id.toString())
+        .catch(err => console.error('[Checkout] Shopify inventory update error:', err));
 
       // Mark session as completed
       session.orderId = order._id;
