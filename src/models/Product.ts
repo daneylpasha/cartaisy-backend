@@ -299,11 +299,13 @@ ProductSchema.virtual('priceRange').get(function(this: IProduct): { min: number;
 });
 
 ProductSchema.virtual('isInStock').get(function(this: IProduct): boolean {
-  return this.inventoryTracking.totalQuantity > 0;
+  return (this.inventoryTracking?.totalQuantity || 0) > 0;
 });
 
 ProductSchema.virtual('isLowStock').get(function(this: IProduct): boolean {
-  return this.inventoryTracking.totalQuantity <= this.inventoryTracking.lowStockThreshold;
+  const totalQty = this.inventoryTracking?.totalQuantity || 0;
+  const threshold = this.inventoryTracking?.lowStockThreshold || 0;
+  return totalQty <= threshold;
 });
 
 // =============================================================================
@@ -399,10 +401,12 @@ ProductSchema.pre('save', function(this: IProduct, next): void {
   }
   
   // Update total quantity from variants
-  this.inventoryTracking.totalQuantity = (this.variants || []).reduce(
-    (total, variant) => total + (variant.inventory?.quantity || 0),
-    0
-  );
+  if (this.inventoryTracking) {
+    this.inventoryTracking.totalQuantity = (this.variants || []).reduce(
+      (total, variant) => total + (variant.inventory?.quantity || 0),
+      0
+    );
+  }
   
   // Set default mobile display values if not set
   if (this.isNew) {
