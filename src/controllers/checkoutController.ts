@@ -10,6 +10,7 @@ import stripeService from '../services/stripeService';
 import { normalizeAddressForShopify } from '../utils/addressHelper';
 import { getCurrencyForCountry } from '../utils/currency';
 import { ShopifyOrderSyncService } from '../services/shopifyOrderSyncService';
+import { calculateTax } from '../services/taxService';
 
 /**
  * Get the default currency based on store configuration.
@@ -477,8 +478,13 @@ export class CheckoutController extends Controller {
       };
       session.shippingCost = parseFloat(selectedRate.estimatedCost?.amount || '0');
 
-      // Update tax from Shopify cart
-      session.tax = parseFloat(cart?.estimatedCost?.totalTaxAmount?.amount || '0');
+      // Calculate tax manually based on shipping address state
+      const taxResult = calculateTax(session.subtotal, {
+        province: normalizedAddress.provinceCode,
+        country: normalizedAddress.countryCode,
+      });
+      session.tax = taxResult.taxAmount;
+      console.log(`✅ Tax calculated: ${taxResult.taxRatePercent} for ${taxResult.stateName} (${taxResult.stateCode}) = $${taxResult.taxAmount}`);
 
       // Recalculate totals
       session.updatePricing({
@@ -699,8 +705,9 @@ export class CheckoutController extends Controller {
         const cart = cartResponse?.data?.cart;
 
         const currentSubtotal = parseFloat(cart?.estimatedCost?.subtotalAmount?.amount || session.subtotal);
-        const currentTax = parseFloat(cart?.estimatedCost?.totalTaxAmount?.amount || session.tax);
         const shippingCost = session.shippingCost || 0;
+        // Use already calculated tax from session (calculated in save-shipping step)
+        const currentTax = session.tax || 0;
 
         session.promoCode = undefined;
         session.discount = undefined;
@@ -760,7 +767,8 @@ export class CheckoutController extends Controller {
       if (!discountCode || !discountCode.applicable) {
         // Get current cart pricing even when promo is not applicable
         const currentSubtotal = parseFloat(cart?.estimatedCost?.subtotalAmount?.amount || session.subtotal);
-        const currentTax = parseFloat(cart?.estimatedCost?.totalTaxAmount?.amount || session.tax);
+        // Use already calculated tax from session
+        const currentTax = session.tax || 0;
         const shippingCost = session.shippingCost || 0;
         const currentGrandTotal = currentSubtotal + shippingCost + currentTax;
 
@@ -798,7 +806,8 @@ export class CheckoutController extends Controller {
 
       // Get current pricing from Shopify cart (real-time)
       const currentSubtotal = parseFloat(cart.estimatedCost?.subtotalAmount?.amount || '0');
-      const currentTax = parseFloat(cart.estimatedCost?.totalTaxAmount?.amount || '0');
+      // Use already calculated tax from session
+      const currentTax = session.tax || 0;
       const shippingCost = session.shippingCost || 0;
 
       // Update session with real-time values
@@ -917,7 +926,8 @@ export class CheckoutController extends Controller {
       const cart = cartResponse?.data?.cart;
 
       const currentSubtotal = parseFloat(cart?.estimatedCost?.subtotalAmount?.amount || session.subtotal);
-      const currentTax = parseFloat(cart?.estimatedCost?.totalTaxAmount?.amount || session.tax);
+      // Use already calculated tax from session
+      const currentTax = session.tax || 0;
       const shippingCost = session.shippingCost || 0;
 
       // Clear promo code and discount from session
@@ -1059,7 +1069,8 @@ export class CheckoutController extends Controller {
 
       // Calculate current pricing from Shopify cart (real-time)
       const currentSubtotal = parseFloat(cart.estimatedCost?.subtotalAmount?.amount || '0');
-      const currentTax = parseFloat(cart.estimatedCost?.totalTaxAmount?.amount || '0');
+      // Use already calculated tax from session
+      const currentTax = session.tax || 0;
 
       // Get discount from session if promo code was applied, otherwise check cart
       let currentDiscount = session.discountAmount || 0;
@@ -1319,7 +1330,8 @@ export class CheckoutController extends Controller {
       } else {
         // Cart fetched successfully, update session with current cart pricing
         const currentSubtotal = parseFloat(cart.estimatedCost?.subtotalAmount?.amount || '0');
-        const currentTax = parseFloat(cart.estimatedCost?.totalTaxAmount?.amount || '0');
+        // Use already calculated tax from session (calculated in save-shipping step)
+        const currentTax = session.tax || 0;
 
         // Calculate discount if promo code was applied
         let currentDiscount = 0;
