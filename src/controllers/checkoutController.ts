@@ -1550,7 +1550,18 @@ export class CheckoutController extends Controller {
         // Find MongoDB product ID from Shopify product ID for image population
         let productId = null;
         if (merchandise.product?.id) {
-          const product = await Product.findOne({ shopifyProductId: merchandise.product.id });
+          // Extract numeric ID from GID format (gid://shopify/Product/12345 -> 12345)
+          const shopifyGid = merchandise.product.id;
+          const numericIdMatch = shopifyGid.match(/\/(\d+)$/);
+          const numericId = numericIdMatch ? numericIdMatch[1] : shopifyGid;
+
+          // Try to find product by numeric ID or full GID
+          const product = await Product.findOne({
+            $or: [
+              { shopifyProductId: numericId },
+              { shopifyProductId: shopifyGid }
+            ]
+          });
           productId = product?._id;
         }
 
