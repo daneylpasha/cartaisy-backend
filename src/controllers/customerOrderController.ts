@@ -63,8 +63,21 @@ export const getOrders = async (req: CustomerRequest, res: Response): Promise<vo
     // Build filter - query by either customer or user field for backwards compatibility
     const filter: any = { $or: [{ customer: customerId }, { user: customerId }] };
 
+    // Map status parameter to database status values
     if (status) {
-      filter['mobileStatus.current'] = status;
+      if (status === 'inprogress') {
+        // Active/in-progress orders
+        filter['mobileStatus.current'] = { $in: ['placed', 'confirmed', 'processing', 'shipped', 'out_for_delivery'] };
+      } else if (status === 'fulfilled') {
+        // Delivered orders
+        filter['mobileStatus.current'] = 'delivered';
+      } else if (status === 'cancelled') {
+        // Cancelled or returned orders
+        filter['mobileStatus.current'] = { $in: ['cancelled', 'returned'] };
+      } else {
+        // Direct status match
+        filter['mobileStatus.current'] = status;
+      }
     }
 
     if (startDate || endDate) {
