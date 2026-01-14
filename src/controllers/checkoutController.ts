@@ -10,7 +10,6 @@ import stripeService from '../services/stripeService';
 import { normalizeAddressForShopify } from '../utils/addressHelper';
 import { getCurrencyForCountry } from '../utils/currency';
 import { ShopifyOrderSyncService } from '../services/shopifyOrderSyncService';
-import { calculateTax } from '../services/taxService';
 
 /**
  * Get the default currency based on store configuration.
@@ -478,13 +477,10 @@ export class CheckoutController extends Controller {
       };
       session.shippingCost = parseFloat(selectedRate.estimatedCost?.amount || '0');
 
-      // Calculate tax manually based on shipping address state
-      const taxResult = calculateTax(session.subtotal, {
-        province: normalizedAddress.provinceCode,
-        country: normalizedAddress.countryCode,
-      });
-      session.tax = taxResult.taxAmount;
-      console.log(`✅ Tax calculated: ${taxResult.taxRatePercent} for ${taxResult.stateName} (${taxResult.stateCode}) = $${taxResult.taxAmount}`);
+      // Get tax automatically from Shopify cart response
+      const shopifyTax = parseFloat(cart?.estimatedCost?.totalTaxAmount?.amount || '0');
+      session.tax = shopifyTax;
+      console.log(`✅ Tax from Shopify: $${shopifyTax}`);
 
       // Recalculate totals
       session.updatePricing({
@@ -1665,9 +1661,14 @@ export class CheckoutController extends Controller {
 
       await order.save();
 
-      // Async: Update inventory in Shopify
-      ShopifyOrderSyncService.updateInventory(order._id.toString())
-        .catch(err => console.error('[Checkout] Shopify inventory update error:', err));
+      // Sync: Update inventory in Shopify and MongoDB before responding
+      try {
+        await ShopifyOrderSyncService.updateInventory(order._id.toString());
+        console.log('[Checkout] Inventory updated successfully in Shopify and MongoDB');
+      } catch (err) {
+        console.error('[Checkout] Inventory update error:', err);
+        // Continue with order completion even if inventory update fails
+      }
 
       // Mark session as completed
       session.orderId = order._id;
