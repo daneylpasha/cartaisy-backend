@@ -16,6 +16,7 @@ import { ObjectId } from '../types';
 export interface IShopifyConnection {
   shop: string;
   accessToken: string;
+  storefrontAccessToken?: string; // Separate token for Storefront API
   scope: string;
   isConnected: boolean;
   connectedAt?: Date;
@@ -103,6 +104,11 @@ const ShopifyConnectionSchema = new Schema<IShopifyConnection>(
       type: String,
       sparse: true,
       select: false, // Don't include accessToken in queries by default
+    },
+    storefrontAccessToken: {
+      type: String,
+      sparse: true,
+      select: false, // Don't include storefrontAccessToken in queries by default
     },
     scope: {
       type: String,

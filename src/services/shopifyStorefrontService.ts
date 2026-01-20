@@ -9,6 +9,7 @@ import {
   ShopifySearchProductsResponse,
   SearchSortKey,
 } from '../types/api/search';
+import Store from '../models/Store';
 
 /**
  * Shopify Storefront API Service
@@ -1631,6 +1632,236 @@ class ShopifyStorefrontService {
    */
   isAdminConfigured(): boolean {
     return !!(this.storeUrl && this.adminToken);
+  }
+
+  /**
+   * Create a store-specific Storefront API query function
+   * Fetches credentials from the Store model and returns a query function
+   * @param storeId - MongoDB Store ID
+   * @returns Object with query function and isConfigured flag
+   */
+  async getStoreClient(storeId: string): Promise<{
+    query: <T>(graphqlQuery: string, variables?: any) => Promise<T>;
+    isConfigured: boolean;
+    shopDomain: string;
+  }> {
+    try {
+      const store = await Store.findById(storeId)
+        .select('isActive +shopify.accessToken +shopify.storefrontAccessToken shopify.shop shopify.isConnected')
+        .lean();
+
+      // Check if store exists
+      if (!store) {
+        console.warn(`Store ${storeId} not found`);
+        return {
+          query: async () => {
+            throw new Error('Store not found');
+          },
+          isConfigured: false,
+          shopDomain: '',
+        };
+      }
+
+      // Check if store is active
+      if (!store.isActive) {
+        console.warn(`Store ${storeId} is not active`);
+        return {
+          query: async () => {
+            throw new Error('Store is not active');
+          },
+          isConfigured: false,
+          shopDomain: '',
+        };
+      }
+
+      if (!store.shopify?.shop || !store.shopify.isConnected) {
+        console.warn(`Store ${storeId} not connected to Shopify`);
+        return {
+          query: async () => {
+            throw new Error('Store not connected to Shopify');
+          },
+          isConfigured: false,
+          shopDomain: '',
+        };
+      }
+
+      // Only use storefrontAccessToken - Admin API tokens won't work with Storefront API
+      const storefrontToken = store.shopify.storefrontAccessToken;
+
+      if (!storefrontToken) {
+        console.warn(`Store ${storeId} missing Storefront API access token`);
+        return {
+          query: async () => {
+            throw new Error('Store missing Storefront API access token. Please configure storefrontAccessToken.');
+          },
+          isConfigured: false,
+          shopDomain: '',
+        };
+      }
+
+      const shopDomain = store.shopify.shop;
+      const apiVersion = process.env.SHOPIFY_API_VERSION || '2025-01';
+
+      const client = axios.create({
+        baseURL: `https://${shopDomain}/api/${apiVersion}/graphql.json`,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Shopify-Storefront-Access-Token': storefrontToken,
+        },
+        timeout: 10000,
+      });
+
+      const query = async <T>(graphqlQuery: string, variables: any = {}): Promise<T> => {
+        try {
+          const response = await client.post('', {
+            query: graphqlQuery,
+            variables,
+          });
+
+          if (response.data.errors) {
+            console.error('Shopify GraphQL errors:', response.data.errors);
+            // Return the response with errors for controller to handle
+            return response.data;
+          }
+
+          return response.data;
+        } catch (error: any) {
+          console.error('Shopify API request failed:', error.message);
+          throw new Error(`Failed to fetch data from Shopify: ${error.message}`);
+        }
+      };
+
+      return {
+        query,
+        isConfigured: true,
+        shopDomain,
+      };
+    } catch (error) {
+      console.error(`Error creating store-specific Shopify client for store ${storeId}:`, error instanceof Error ? error.message : 'Unknown error');
+      return {
+        query: async () => {
+          throw new Error('Failed to initialize Shopify client');
+        },
+        isConfigured: false,
+        shopDomain: '',
+      };
+    }
+  }
+
+  /**
+   * Get collection products for a specific store
+   * Multi-tenant version that uses store-specific credentials
+   */
+  async getCollectionProductsForStore(
+    storeId: string,
+    collectionId: string,
+    options: {
+      limit?: number;
+      cursor?: string;
+      sortKey?: string;
+      reverse?: boolean;
+      filters?: any[];
+      countryCode?: string;
+    } = {}
+  ): Promise<any> {
+    const storeClient = await this.getStoreClient(storeId);
+
+    if (!storeClient.isConfigured) {
+      throw new Error('Shopify not configured for this store');
+    }
+
+    const { limit = 20, cursor, sortKey = 'COLLECTION_DEFAULT', reverse = false, filters = [], countryCode } = options;
+
+    const query = `
+      query getCollectionProducts($id: ID!, $limit: Int!, $cursor: String, $sortKey: ProductCollectionSortKeys, $reverse: Boolean, $filters: [ProductFilter!], $country: CountryCode) @inContext(country: $country) {
+        collection(id: $id) {
+          id
+          title
+          description
+          handle
+          products(first: $limit, after: $cursor, sortKey: $sortKey, reverse: $reverse, filters: $filters) {
+            edges {
+              node {
+                id
+                title
+                description
+                handle
+                vendor
+                productType
+                tags
+                availableForSale
+                totalInventory
+                priceRange {
+                  minVariantPrice {
+                    amount
+                    currencyCode
+                  }
+                  maxVariantPrice {
+                    amount
+                    currencyCode
+                  }
+                }
+                compareAtPriceRange {
+                  minVariantPrice {
+                    amount
+                    currencyCode
+                  }
+                }
+                images(first: 5) {
+                  edges {
+                    node {
+                      url
+                      altText
+                    }
+                  }
+                }
+                variants(first: 10) {
+                  edges {
+                    node {
+                      id
+                      title
+                      price {
+                        amount
+                        currencyCode
+                      }
+                      availableForSale
+                      quantityAvailable
+                      selectedOptions {
+                        name
+                        value
+                      }
+                    }
+                  }
+                }
+              }
+              cursor
+            }
+            pageInfo {
+              hasNextPage
+              hasPreviousPage
+              endCursor
+              startCursor
+            }
+          }
+        }
+      }
+    `;
+
+    // Ensure the collection ID has the correct Shopify GID format
+    const collectionIdStr = String(collectionId);
+    const formattedId = collectionIdStr.startsWith('gid://')
+      ? collectionIdStr
+      : `gid://shopify/Collection/${collectionIdStr}`;
+
+    return storeClient.query<any>(query, {
+      id: formattedId,
+      limit,
+      cursor: cursor || null,
+      sortKey,
+      reverse,
+      filters: filters.length > 0 ? filters : null,
+      country: countryCode || null,
+    });
   }
 }
 

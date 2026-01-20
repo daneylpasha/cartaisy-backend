@@ -7827,6 +7827,15 @@
 						}
 					},
 					{
+						"description": "- Store ID (from x-store-id header) for multi-tenant support",
+						"in": "header",
+						"name": "x-store-id",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
 						"description": "- Number of products per page (default: 20)",
 						"in": "query",
 						"name": "limit",

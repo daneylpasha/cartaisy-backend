@@ -294,8 +294,10 @@ app.use(`/api/${apiConfig.version}/customer/notifications`, pushNotificationRout
 try {
   const { RegisterRoutes } = require('./generated/routes');
   RegisterRoutes(app);
-} catch (error) {
-  console.warn('tsoa routes not generated yet. Run: npm run generate');
+  console.log('✅ TSOA routes registered successfully');
+} catch (error: any) {
+  console.error('❌ Failed to load TSOA routes:', error.message);
+  console.error(error.stack);
 }
 
 // OpenAPI/Swagger documentation
