@@ -126,7 +126,6 @@ class ShopifyStorefrontService {
                 productType
                 tags
                 availableForSale
-                totalInventory
                 priceRange {
                   minVariantPrice {
                     amount
@@ -161,7 +160,6 @@ class ShopifyStorefrontService {
                         currencyCode
                       }
                       availableForSale
-                      quantityAvailable
                       sku
                     }
                   }
@@ -227,7 +225,6 @@ class ShopifyStorefrontService {
                 productType
                 tags
                 availableForSale
-                totalInventory
                 priceRange {
                   minVariantPrice {
                     amount
@@ -262,7 +259,6 @@ class ShopifyStorefrontService {
                         currencyCode
                       }
                       availableForSale
-                      quantityAvailable
                       selectedOptions {
                         name
                         value
@@ -327,7 +323,6 @@ class ShopifyStorefrontService {
               productType
               tags
               availableForSale
-              totalInventory
               priceRange {
                 minVariantPrice {
                   amount
@@ -358,7 +353,6 @@ class ShopifyStorefrontService {
                       currencyCode
                     }
                     availableForSale
-                    quantityAvailable
                   }
                 }
               }
@@ -433,7 +427,6 @@ class ShopifyStorefrontService {
           productType
           tags
           availableForSale
-          totalInventory
           priceRange {
             minVariantPrice {
               amount
@@ -472,7 +465,6 @@ class ShopifyStorefrontService {
                   currencyCode
                 }
                 availableForSale
-                quantityAvailable
                 selectedOptions {
                   name
                   value
@@ -636,7 +628,6 @@ class ShopifyStorefrontService {
                         amount
                         currencyCode
                       }
-                      quantityAvailable
                       image {
                         url
                       }
@@ -713,7 +704,6 @@ class ShopifyStorefrontService {
                       amount
                       currencyCode
                     }
-                    quantityAvailable
                     image {
                       url
                     }
@@ -776,7 +766,6 @@ class ShopifyStorefrontService {
                         amount
                         currencyCode
                       }
-                      quantityAvailable
                       image {
                         url
                       }
@@ -844,7 +833,6 @@ class ShopifyStorefrontService {
                         amount
                         currencyCode
                       }
-                      quantityAvailable
                       image {
                         url
                       }
@@ -908,7 +896,6 @@ class ShopifyStorefrontService {
                         amount
                         currencyCode
                       }
-                      quantityAvailable
                       image {
                         url
                       }
@@ -986,7 +973,6 @@ class ShopifyStorefrontService {
                         amount
                         currencyCode
                       }
-                      quantityAvailable
                       image {
                         url
                       }
@@ -1123,7 +1109,6 @@ class ShopifyStorefrontService {
               productType
               tags
               availableForSale
-              totalInventory
               priceRange {
                 minVariantPrice {
                   amount
@@ -1158,7 +1143,6 @@ class ShopifyStorefrontService {
                       currencyCode
                     }
                     availableForSale
-                    quantityAvailable
                     selectedOptions {
                       name
                       value
@@ -1790,7 +1774,6 @@ class ShopifyStorefrontService {
                 productType
                 tags
                 availableForSale
-                totalInventory
                 priceRange {
                   minVariantPrice {
                     amount
@@ -1825,7 +1808,6 @@ class ShopifyStorefrontService {
                         currencyCode
                       }
                       availableForSale
-                      quantityAvailable
                       selectedOptions {
                         name
                         value
