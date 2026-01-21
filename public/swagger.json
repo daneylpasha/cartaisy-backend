@@ -3024,6 +3024,9 @@
 						"type": "number",
 						"format": "double"
 					},
+					"currencyCode": {
+						"type": "string"
+					},
 					"description": {
 						"type": "string"
 					},
@@ -3037,7 +3040,8 @@
 				"required": [
 					"handle",
 					"title",
-					"price"
+					"price",
+					"currencyCode"
 				],
 				"type": "object",
 				"additionalProperties": false

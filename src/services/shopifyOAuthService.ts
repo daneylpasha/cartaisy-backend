@@ -198,39 +198,70 @@ export const getShopInfo = async (
 };
 
 /**
- * Fetches the primary location ID from Shopify
+ * Fetches the primary location ID from Shopify with retry logic
+ * @param shop - Shopify shop domain
+ * @param accessToken - Shopify access token
+ * @param retries - Number of retry attempts (default: 3)
  */
-export const getPrimaryLocationId = async (shop: string, accessToken: string): Promise<string | null> => {
-  try {
-    const response = await fetch(
-      `https://${shop}/admin/api/${SHOPIFY_API_VERSION}/locations.json`,
-      {
-        headers: {
-          'X-Shopify-Access-Token': accessToken,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
+export const getPrimaryLocationId = async (
+  shop: string,
+  accessToken: string,
+  retries: number = 3
+): Promise<string | null> => {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      console.log(`[LocationID] Fetching location for ${shop} (attempt ${attempt}/${retries})`);
 
-    if (!response.ok) {
-      console.error('Failed to fetch Shopify locations:', response.status);
+      const response = await fetch(
+        `https://${shop}/admin/api/${SHOPIFY_API_VERSION}/locations.json`,
+        {
+          headers: {
+            'X-Shopify-Access-Token': accessToken,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[LocationID] API error (${response.status}): ${errorText}`);
+
+        // Retry on 5xx errors or rate limits
+        if (response.status >= 500 || response.status === 429) {
+          if (attempt < retries) {
+            const delay = attempt * 2000; // 2s, 4s, 6s
+            console.log(`[LocationID] Retrying in ${delay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            continue;
+          }
+        }
+        return null;
+      }
+
+      const data: any = await response.json();
+      // Get the first active location (primary location)
+      const primaryLocation = data.locations?.find((loc: any) => loc.active) || data.locations?.[0];
+
+      if (primaryLocation?.id) {
+        console.log(`✅ [LocationID] Found: ${primaryLocation.name} (ID: ${primaryLocation.id})`);
+        return primaryLocation.id.toString();
+      }
+
+      console.warn(`[LocationID] No locations found for ${shop}`);
+      return null;
+    } catch (error: any) {
+      console.error(`[LocationID] Error (attempt ${attempt}):`, error.message);
+
+      if (attempt < retries) {
+        const delay = attempt * 2000;
+        console.log(`[LocationID] Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
       return null;
     }
-
-    const data: any = await response.json();
-    // Get the first active location (primary location)
-    const primaryLocation = data.locations?.find((loc: any) => loc.active) || data.locations?.[0];
-
-    if (primaryLocation?.id) {
-      console.log(`✅ Found Shopify primary location: ${primaryLocation.name} (ID: ${primaryLocation.id})`);
-      return primaryLocation.id.toString();
-    }
-
-    return null;
-  } catch (error) {
-    console.error('Get primary location error:', error);
-    return null;
   }
+  return null;
 };
 
 /**
@@ -261,6 +292,11 @@ export const saveCredentials = async (
     // Add locationId if found
     if (locationId) {
       updateData['shopify.locationId'] = locationId;
+      console.log(`✅ [Shopify Connect] Store connected with locationId: ${locationId}`);
+    } else {
+      console.warn(`⚠️ [Shopify Connect] Store connected but locationId could not be fetched!`);
+      console.warn(`⚠️ [Shopify Connect] Inventory sync will NOT work until locationId is set.`);
+      console.warn(`⚠️ [Shopify Connect] Use POST /api/v1/admin/shopify/fetch-location to retry.`);
     }
 
     const store = await Store.findByIdAndUpdate(
