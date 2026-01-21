@@ -793,12 +793,28 @@ export class CheckoutController extends Controller {
         };
       }
 
-      // Calculate discount amount
+      // Calculate discount amount from both cart-level and line-item-level allocations
+      // Shopify returns allocations at cart level for cart-wide discounts,
+      // and at line item level for product-specific discounts
       let discountAmount = 0;
+
+      // Sum cart-level discount allocations
       if (cart.discountAllocations && cart.discountAllocations.length > 0) {
-        discountAmount = cart.discountAllocations.reduce((sum: number, allocation: any) => {
+        discountAmount += cart.discountAllocations.reduce((sum: number, allocation: any) => {
           return sum + parseFloat(allocation.discountedAmount?.amount || '0');
         }, 0);
+      }
+
+      // Sum line-item-level discount allocations (for product-specific discounts)
+      if (cart.lines?.edges && cart.lines.edges.length > 0) {
+        for (const edge of cart.lines.edges) {
+          const lineAllocations = edge.node?.discountAllocations;
+          if (lineAllocations && lineAllocations.length > 0) {
+            discountAmount += lineAllocations.reduce((sum: number, allocation: any) => {
+              return sum + parseFloat(allocation.discountedAmount?.amount || '0');
+            }, 0);
+          }
+        }
       }
 
       // Get current pricing from Shopify cart (real-time)
@@ -1071,10 +1087,24 @@ export class CheckoutController extends Controller {
 
       // Get discount from session if promo code was applied, otherwise check cart
       let currentDiscount = session.discountAmount || 0;
-      if (!currentDiscount && cart.discountAllocations && cart.discountAllocations.length > 0) {
-        currentDiscount = cart.discountAllocations.reduce((sum: number, allocation: any) => {
-          return sum + parseFloat(allocation.discountedAmount?.amount || '0');
-        }, 0);
+      if (!currentDiscount) {
+        // Sum cart-level discount allocations
+        if (cart.discountAllocations && cart.discountAllocations.length > 0) {
+          currentDiscount += cart.discountAllocations.reduce((sum: number, allocation: any) => {
+            return sum + parseFloat(allocation.discountedAmount?.amount || '0');
+          }, 0);
+        }
+        // Sum line-item-level discount allocations (for product-specific discounts)
+        if (cart.lines?.edges && cart.lines.edges.length > 0) {
+          for (const edge of cart.lines.edges) {
+            const lineAllocations = edge.node?.discountAllocations;
+            if (lineAllocations && lineAllocations.length > 0) {
+              currentDiscount += lineAllocations.reduce((sum: number, allocation: any) => {
+                return sum + parseFloat(allocation.discountedAmount?.amount || '0');
+              }, 0);
+            }
+          }
+        }
       }
 
       const shippingCost = session.shippingCost || 0;
@@ -1330,12 +1360,26 @@ export class CheckoutController extends Controller {
         // Use already calculated tax from session (calculated in save-shipping step)
         const currentTax = session.tax || 0;
 
-        // Calculate discount if promo code was applied
+        // Calculate discount from both cart-level and line-item-level allocations
         let currentDiscount = 0;
+
+        // Sum cart-level discount allocations
         if (cart.discountAllocations && cart.discountAllocations.length > 0) {
-          currentDiscount = cart.discountAllocations.reduce((sum: number, allocation: any) => {
+          currentDiscount += cart.discountAllocations.reduce((sum: number, allocation: any) => {
             return sum + parseFloat(allocation.discountedAmount?.amount || '0');
           }, 0);
+        }
+
+        // Sum line-item-level discount allocations (for product-specific discounts)
+        if (cart.lines?.edges && cart.lines.edges.length > 0) {
+          for (const edge of cart.lines.edges) {
+            const lineAllocations = edge.node?.discountAllocations;
+            if (lineAllocations && lineAllocations.length > 0) {
+              currentDiscount += lineAllocations.reduce((sum: number, allocation: any) => {
+                return sum + parseFloat(allocation.discountedAmount?.amount || '0');
+              }, 0);
+            }
+          }
         }
 
         // Fallback: if Shopify cart doesn't have discount allocations but session has discount, use that
