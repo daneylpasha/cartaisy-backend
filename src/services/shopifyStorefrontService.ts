@@ -1314,7 +1314,7 @@ class ShopifyStorefrontService {
    */
   async applyDiscountCodes(cartId: string, discountCodes: string[], countryCode?: string): Promise<any> {
     const query = `
-      mutation cartDiscountCodesUpdate($cartId: ID!, $discountCodes: [String!], $country: CountryCode) @inContext(country: $country) {
+      mutation cartDiscountCodesUpdate($cartId: ID!, $discountCodes: [String!]!, $country: CountryCode) @inContext(country: $country) {
         cartDiscountCodesUpdate(cartId: $cartId, discountCodes: $discountCodes) {
           cart {
             id
