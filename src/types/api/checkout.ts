@@ -13,6 +13,7 @@ export interface ShippingRate {
   handle: string;
   title: string;
   price: number;
+  currencyCode: string;
   description?: string;
   estimatedDelivery?: string;
   deliveryMethodType?: string;

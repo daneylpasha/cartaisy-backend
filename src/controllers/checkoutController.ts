@@ -360,6 +360,7 @@ export class CheckoutController extends Controller {
         handle: option.handle,
         title: option.title,
         price: parseFloat(option.estimatedCost?.amount || '0'),
+        currencyCode: option.estimatedCost?.currencyCode || 'PKR',
         description: option.description,
         deliveryMethodType: option.deliveryMethodType,
       }));
