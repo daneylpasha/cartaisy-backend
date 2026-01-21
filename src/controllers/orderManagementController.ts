@@ -4,6 +4,7 @@ import Order from '../models/Order';
 import { ShopifyOrderSyncService } from '../services/shopifyOrderSyncService';
 import { OrderExportService } from '../services/orderExportService';
 import { AuthenticatedRequest } from '../types';
+import { getStoreIdFromRequest } from '../middleware/storeAuth';
 
 /**
  * Order Management Controller
@@ -17,7 +18,17 @@ import { AuthenticatedRequest } from '../types';
  */
 export const getOrders = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const { storeId } = req.params as { storeId?: string };
+    // Get storeId from X-Store-ID header, query param, or authenticated user
+    const storeId = getStoreIdFromRequest(req);
+
+    if (!storeId) {
+      res.status(400).json({
+        status: 'error',
+        message: 'Store ID required. Provide X-Store-ID header or storeId query parameter.',
+      });
+      return;
+    }
+
     const {
       page = 1,
       limit = 20,
@@ -46,13 +57,10 @@ export const getOrders = async (req: AuthenticatedRequest, res: Response): Promi
       channel?: string;
     };
 
-    // Build query
-    const query: any = {};
-
-    // Add storeId filter if provided
-    if (storeId) {
-      query.storeId = new mongoose.Types.ObjectId(storeId);
-    }
+    // Build query - always filter by storeId for multi-tenant isolation
+    const query: any = {
+      storeId: new mongoose.Types.ObjectId(storeId),
+    };
 
     if (status) {
       query['mobileStatus.current'] = status;
@@ -140,7 +148,22 @@ export const getOrderDetails = async (req: AuthenticatedRequest, res: Response):
   try {
     const { orderId } = req.params as { orderId: string };
 
-    const order = await Order.findById(orderId)
+    // Get storeId from X-Store-ID header, query param, or authenticated user
+    const storeId = getStoreIdFromRequest(req);
+
+    if (!storeId) {
+      res.status(400).json({
+        status: 'error',
+        message: 'Store ID required. Provide X-Store-ID header or storeId query parameter.',
+      });
+      return;
+    }
+
+    // Find order by ID and verify it belongs to the requesting store
+    const order = await Order.findOne({
+      _id: orderId,
+      storeId: new mongoose.Types.ObjectId(storeId),
+    })
       .populate('user', 'name email phone')
       .populate('customer', 'name email phone')
       .populate('lineItems.productId', 'title images sku price');
@@ -180,6 +203,18 @@ export const getOrderDetails = async (req: AuthenticatedRequest, res: Response):
 export const updateOrderStatus = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const { orderId } = req.params as { orderId: string };
+
+    // Get storeId from X-Store-ID header, query param, or authenticated user
+    const storeId = getStoreIdFromRequest(req);
+
+    if (!storeId) {
+      res.status(400).json({
+        status: 'error',
+        message: 'Store ID required. Provide X-Store-ID header or storeId query parameter.',
+      });
+      return;
+    }
+
     let {
       action,
       status,
@@ -242,7 +277,11 @@ export const updateOrderStatus = async (req: AuthenticatedRequest, res: Response
       carrier = trackingCompany;
     }
 
-    const order = await Order.findById(orderId);
+    // Find order by ID and verify it belongs to the requesting store
+    const order = await Order.findOne({
+      _id: orderId,
+      storeId: new mongoose.Types.ObjectId(storeId),
+    });
     if (!order) {
       res.status(404).json({
         status: 'error',
@@ -669,6 +708,17 @@ export const addMerchantNote = async (req: AuthenticatedRequest, res: Response):
     const { orderId } = req.params as { orderId: string };
     const { note } = req.body as { note?: string };
 
+    // Get storeId from X-Store-ID header, query param, or authenticated user
+    const storeId = getStoreIdFromRequest(req);
+
+    if (!storeId) {
+      res.status(400).json({
+        status: 'error',
+        message: 'Store ID required. Provide X-Store-ID header or storeId query parameter.',
+      });
+      return;
+    }
+
     if (!note || typeof note !== 'string') {
       res.status(400).json({
         status: 'error',
@@ -677,7 +727,11 @@ export const addMerchantNote = async (req: AuthenticatedRequest, res: Response):
       return;
     }
 
-    const order = await Order.findById(orderId);
+    // Find order by ID and verify it belongs to the requesting store
+    const order = await Order.findOne({
+      _id: orderId,
+      storeId: new mongoose.Types.ObjectId(storeId),
+    });
     if (!order) {
       res.status(404).json({
         status: 'error',
