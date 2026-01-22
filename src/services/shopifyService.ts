@@ -835,6 +835,77 @@ export const getInventoryLevels = async (productId: string): Promise<InventoryLe
 };
 
 /**
+ * Adjust (decrement/increment) Shopify inventory for a variant
+ * Use this when order is placed to reduce inventory
+ */
+export const adjustInventory = async (
+  inventoryItemId: string,
+  adjustment: number,
+  locationId?: string
+): Promise<boolean> => {
+  const client = await getShopifyClient();
+
+  if (!client) {
+    console.warn('No Shopify client - skipping inventory adjustment');
+    return false;
+  }
+
+  try {
+    // If no location provided, get the first/primary location
+    let targetLocationId = locationId;
+    if (!targetLocationId) {
+      const locationsResponse = await client.get('/locations.json');
+      const locations = locationsResponse.data?.locations || [];
+      if (locations.length === 0) {
+        console.warn('No locations found in Shopify store');
+        return false;
+      }
+      targetLocationId = locations[0].id.toString();
+    }
+
+    // Use adjust endpoint to change inventory by delta amount
+    await client.post('/inventory_levels/adjust.json', {
+      inventory_item_id: inventoryItemId,
+      location_id: targetLocationId,
+      available_adjustment: adjustment // negative to reduce, positive to increase
+    });
+
+    console.log(`📦 Adjusted Shopify inventory for item ${inventoryItemId}: ${adjustment}`);
+    return true;
+  } catch (error: any) {
+    console.error(`Error adjusting Shopify inventory for item ${inventoryItemId}:`, error.response?.data || error.message);
+    return false;
+  }
+};
+
+/**
+ * Reduce Shopify inventory when order is placed
+ * Call this after order is confirmed to sync inventory with Shopify
+ */
+export const reduceShopifyInventoryForOrder = async (
+  items: Array<{ inventoryItemId: string; quantity: number }>
+): Promise<{ success: boolean; errors: string[] }> => {
+  const errors: string[] = [];
+
+  for (const item of items) {
+    if (!item.inventoryItemId) {
+      errors.push(`Missing inventoryItemId for item`);
+      continue;
+    }
+
+    const success = await adjustInventory(item.inventoryItemId, -item.quantity);
+    if (!success) {
+      errors.push(`Failed to adjust inventory for item ${item.inventoryItemId}`);
+    }
+  }
+
+  return {
+    success: errors.length === 0,
+    errors
+  };
+};
+
+/**
  * Update Shopify inventory for a variant using Inventory Levels API
  * Uses inventory_item_id and location_id for accurate inventory updates
  */

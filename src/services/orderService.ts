@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import Order from '../models/Order';
 import Product from '../models/Product';
 import User from '../models/User';
-import { createOrder as createShopifyOrder } from './shopifyService';
+import { createOrder as createShopifyOrder, reduceShopifyInventoryForOrder } from './shopifyService';
 import { reserveInventory, releaseInventory, checkInventoryAvailability } from './inventoryService';
 import { tenantConfig } from '../config/tenant';
 import { IOrder, IProduct, IUser, IAddress, IOrderLineItem, IMobileStatusHistory } from '../types/index';
@@ -699,8 +699,10 @@ async function reserveInventoryForOrder(items: ProcessedCartItem[]): Promise<Res
 }
 
 async function commitInventoryReservations(reservations: ReservationInfo[]): Promise<void> {
-  // In a real implementation, this would convert reservations to actual inventory deductions
-  // For now, we'll just update the product quantities directly
+  // Collect items for Shopify inventory update
+  const shopifyItems: Array<{ inventoryItemId: string; quantity: number }> = [];
+
+  // Update local database inventory
   for (const reservation of reservations) {
     const product = await Product.findById(reservation.productId);
     if (product) {
@@ -708,11 +710,19 @@ async function commitInventoryReservations(reservations: ReservationInfo[]): Pro
         const variant = product.variants.find(v => v.id === reservation.variantId);
         if (variant) {
           variant.inventory.quantity -= reservation.quantity;
+
+          // Collect inventoryItemId for Shopify update
+          if (variant.inventoryItemId) {
+            shopifyItems.push({
+              inventoryItemId: variant.inventoryItemId,
+              quantity: reservation.quantity
+            });
+          }
         }
       }
-      
+
       product.inventoryTracking.totalQuantity -= reservation.quantity;
-      
+
       // Add to inventory history
       product.inventoryTracking.history.push({
         date: new Date(),
@@ -721,9 +731,24 @@ async function commitInventoryReservations(reservations: ReservationInfo[]): Pro
         reason: 'order_placed',
         note: 'Inventory deducted for completed order'
       });
-      
+
       await product.save();
     }
+  }
+
+  // Update Shopify inventory (async, don't block order completion)
+  if (shopifyItems.length > 0) {
+    reduceShopifyInventoryForOrder(shopifyItems)
+      .then(result => {
+        if (result.errors.length > 0) {
+          console.warn('Shopify inventory sync errors:', result.errors);
+        } else {
+          console.log(`✅ Shopify inventory updated for ${shopifyItems.length} items`);
+        }
+      })
+      .catch(err => {
+        console.error('Failed to update Shopify inventory:', err);
+      });
   }
 }
 
