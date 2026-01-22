@@ -1686,10 +1686,11 @@ class ShopifyStorefrontService {
       }
 
       // Only use storefrontAccessToken - Admin API tokens won't work with Storefront API
-      const storefrontToken = store.shopify.storefrontAccessToken;
+      // Fallback to environment variable if not in Store document
+      const storefrontToken = store.shopify.storefrontAccessToken || process.env.SHOPIFY_STOREFRONT_ACCESS_TOKEN;
 
       if (!storefrontToken) {
-        console.warn(`Store ${storeId} missing Storefront API access token`);
+        console.warn(`Store ${storeId} missing Storefront API access token (checked both DB and env vars)`);
         return {
           query: async () => {
             throw new Error('Store missing Storefront API access token. Please configure storefrontAccessToken.');
@@ -1697,6 +1698,11 @@ class ShopifyStorefrontService {
           isConfigured: false,
           shopDomain: '',
         };
+      }
+
+      // Log which source the token came from (for debugging)
+      if (!store.shopify.storefrontAccessToken && process.env.SHOPIFY_STOREFRONT_ACCESS_TOKEN) {
+        console.log(`Store ${storeId} using SHOPIFY_STOREFRONT_ACCESS_TOKEN from env vars (fallback)`);
       }
 
       const shopDomain = store.shopify.shop;
