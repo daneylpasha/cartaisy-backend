@@ -111,16 +111,47 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // Generate a unique storeId (using storeName slug + timestamp)
+    // Generate a unique store slug
     const storeSlug = storeName.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
-    const storeId = `${storeSlug}-${Date.now()}`;
+    const uniqueSlug = `${storeSlug}-${Date.now()}`;
 
-    // Create new user with super_admin role
+    // Check if slug already exists (unlikely with timestamp, but good practice)
+    const existingStore = await Store.findOne({ slug: uniqueSlug });
+    if (existingStore) {
+      res.status(400).json({
+        status: 'error',
+        message: 'Store creation failed. Please try again.'
+      });
+      return;
+    }
+
+    // Create Store document first
+    const newStore = new Store({
+      name: storeName,
+      slug: uniqueSlug,
+      isActive: true,
+      plan: {
+        type: 'free',
+        maxMembers: 5
+      },
+      settings: {
+        timezone: 'UTC',
+        currency: 'USD',
+        language: 'en'
+      },
+      shopify: {
+        isConnected: false
+      }
+    });
+
+    await newStore.save();
+
+    // Create new user with super_admin role, linked to the Store
     const newUser = new User({
       email: email.toLowerCase(),
       password,
       name,
-      storeId,
+      storeId: newStore._id, // Use Store's ObjectId
       role: 'super_admin',
       isActive: true,
       isVerified: true, // Auto-verify for store creators

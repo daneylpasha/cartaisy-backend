@@ -922,6 +922,7 @@ const models: TsoaRoute.Models = {
             "handle": {"dataType":"string","required":true},
             "title": {"dataType":"string","required":true},
             "price": {"dataType":"double","required":true},
+            "currencyCode": {"dataType":"string","required":true},
             "description": {"dataType":"string"},
             "estimatedDelivery": {"dataType":"string"},
             "deliveryMethodType": {"dataType":"string"},

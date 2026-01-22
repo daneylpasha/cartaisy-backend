@@ -299,15 +299,27 @@ export const saveCredentials = async (
       console.warn(`⚠️ [Shopify Connect] Use POST /api/v1/admin/shopify/fetch-location to retry.`);
     }
 
+    // Use upsert to create Store if it doesn't exist (fallback for legacy data)
     const store = await Store.findByIdAndUpdate(
       storeId,
-      updateData,
-      { new: true }
+      {
+        $set: updateData,
+        $setOnInsert: {
+          name: `Store ${storeId.toString().slice(-6)}`, // Fallback name
+          slug: `store-${storeId.toString().slice(-6)}-${Date.now()}`, // Unique slug
+          isActive: true,
+          plan: { type: 'free', maxMembers: 5 },
+          settings: { timezone: 'UTC', currency: 'USD', language: 'en' }
+        }
+      },
+      { new: true, upsert: true }
     );
 
     if (!store) {
-      throw new Error('Store not found');
+      throw new Error('Failed to create or update store');
     }
+
+    console.log(`✅ [Shopify Connect] Store ${storeId} credentials saved successfully`);
   } catch (error) {
     console.error('Save credentials error:', error);
     throw new Error('Failed to save Shopify credentials');
