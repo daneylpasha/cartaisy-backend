@@ -1647,7 +1647,7 @@ class ShopifyStorefrontService {
   }> {
     try {
       const store = await Store.findById(storeId)
-        .select('isActive +shopify.accessToken +shopify.storefrontAccessToken shopify.shop shopify.isConnected')
+        .select('isActive shopify')
         .lean();
 
       // Check if store exists
