@@ -212,11 +212,20 @@ export const syncProducts = async (): Promise<SyncResult> => {
   }
 
   try {
-    let url = `/products.json?limit=${limit}&status=active`;
+    // Fetch all products (removed status filter to get all including unpublished)
+    let url = `/products.json?limit=${limit}`;
+    let pageCount = 0;
+
+    console.log(`📦 [Sync] Starting product sync...`);
 
     while (url) {
+      pageCount++;
+      console.log(`📦 [Sync] Fetching page ${pageCount}: ${url}`);
+
       const response = await client.get(url);
       const products = response.data?.products || [];
+
+      console.log(`📦 [Sync] Page ${pageCount} returned ${products.length} products`);
 
       if (products.length === 0) {
         break;
@@ -234,8 +243,8 @@ export const syncProducts = async (): Promise<SyncResult> => {
       }
 
       // Check for next page using Link header (axios stores headers in lowercase)
-      const linkHeader = response.headers?.link;
-      console.log(`[Sync] Page synced: ${products.length} products, Link header: ${linkHeader ? 'present' : 'none'}`);
+      const linkHeader = response.headers?.link || response.headers?.Link;
+      console.log(`📦 [Sync] Link header: ${linkHeader || 'NONE'}`);
 
       if (linkHeader && linkHeader.includes('rel="next"')) {
         const match = linkHeader.match(/<([^>]+)>;\s*rel="next"/);
@@ -260,7 +269,7 @@ export const syncProducts = async (): Promise<SyncResult> => {
       }
     }
 
-    console.log(`✅ Synced ${synced} products from Shopify`);
+    console.log(`✅ [Sync] Completed: ${synced} products synced across ${pageCount} page(s), ${errors.length} errors`);
     return { synced, errors };
   } catch (error: any) {
     console.error('Error syncing products from Shopify:', error.response?.data || error.message);
