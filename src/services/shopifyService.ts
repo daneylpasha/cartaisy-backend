@@ -198,9 +198,106 @@ export const testShopifyConnection = async (): Promise<boolean> => {
 };
 
 /**
+ * Verify which Shopify store is connected and return shop details
+ * This helps debug when products don't match
+ */
+export const verifyShopifyStoreInfo = async (): Promise<{
+  connected: boolean;
+  databaseShop: string | null;
+  databaseStoreId: string | null;
+  shopifyShopInfo: {
+    id: string;
+    name: string;
+    email: string;
+    domain: string;
+    myshopifyDomain: string;
+  } | null;
+  productCount: number | null;
+}> => {
+  try {
+    const store = await Store.findOne({ 'shopify.isConnected': true }).select('shopify.shop');
+
+    if (!store?.shopify?.shop) {
+      return {
+        connected: false,
+        databaseShop: null,
+        databaseStoreId: null,
+        shopifyShopInfo: null,
+        productCount: null
+      };
+    }
+
+    const client = await getShopifyClient();
+    if (!client) {
+      return {
+        connected: false,
+        databaseShop: store.shopify.shop,
+        databaseStoreId: store._id.toString(),
+        shopifyShopInfo: null,
+        productCount: null
+      };
+    }
+
+    // Get shop info from Shopify API
+    const shopResponse = await client.get('/shop.json');
+    const shopInfo = shopResponse.data?.shop;
+
+    // Get product count
+    const countResponse = await client.get('/products/count.json');
+    const productCount = countResponse.data?.count || 0;
+
+    return {
+      connected: true,
+      databaseShop: store.shopify.shop,
+      databaseStoreId: store._id.toString(),
+      shopifyShopInfo: shopInfo ? {
+        id: shopInfo.id?.toString(),
+        name: shopInfo.name,
+        email: shopInfo.email,
+        domain: shopInfo.domain,
+        myshopifyDomain: shopInfo.myshopify_domain
+      } : null,
+      productCount
+    };
+  } catch (error: any) {
+    console.error('Error verifying Shopify store info:', error.response?.data || error.message);
+    return {
+      connected: false,
+      databaseShop: null,
+      databaseStoreId: null,
+      shopifyShopInfo: null,
+      productCount: null
+    };
+  }
+};
+
+/**
+ * Get connected store info for debugging
+ */
+export const getConnectedStoreInfo = async (): Promise<{ shop: string; storeId: string } | null> => {
+  try {
+    const store = await Store.findOne({ 'shopify.isConnected': true }).select('shopify.shop');
+    if (!store?.shopify?.shop) {
+      return null;
+    }
+    return {
+      shop: store.shopify.shop,
+      storeId: store._id.toString()
+    };
+  } catch (error) {
+    console.error('Error getting connected store info:', error);
+    return null;
+  }
+};
+
+/**
  * Fetch all products from Shopify and sync with our Product model
  */
 export const syncProducts = async (): Promise<SyncResult> => {
+  // First log which store we're syncing from
+  const storeInfo = await getConnectedStoreInfo();
+  console.log(`📦 [Sync] Connected store info:`, storeInfo);
+
   const client = await getShopifyClient();
   const errors: string[] = [];
   let synced = 0;
@@ -216,7 +313,7 @@ export const syncProducts = async (): Promise<SyncResult> => {
     let url = `/products.json?limit=${limit}`;
     let pageCount = 0;
 
-    console.log(`📦 [Sync] Starting product sync...`);
+    console.log(`📦 [Sync] Starting product sync from shop: ${storeInfo?.shop}...`);
 
     while (url) {
       pageCount++;
@@ -279,6 +376,53 @@ export const syncProducts = async (): Promise<SyncResult> => {
 };
 
 /**
+ * Fetch inventory levels for variants using the Inventory Levels API
+ * Required for Shopify API 2023-10+ where inventory_quantity is deprecated
+ */
+const fetchInventoryLevels = async (
+  client: AxiosInstance,
+  variants: any[]
+): Promise<Map<string, number>> => {
+  const inventoryMap = new Map<string, number>();
+
+  try {
+    // Get all inventory_item_ids from variants
+    const inventoryItemIds = variants
+      .map((v: any) => v.inventory_item_id)
+      .filter((id: any) => id != null);
+
+    if (inventoryItemIds.length === 0) {
+      return inventoryMap;
+    }
+
+    // Fetch inventory levels (API allows up to 50 IDs per request)
+    const batchSize = 50;
+    for (let i = 0; i < inventoryItemIds.length; i += batchSize) {
+      const batch = inventoryItemIds.slice(i, i + batchSize);
+      const idsParam = batch.join(',');
+
+      const response = await client.get(`/inventory_levels.json?inventory_item_ids=${idsParam}`);
+      const levels = response.data?.inventory_levels || [];
+
+      // Sum up quantities across all locations for each inventory item
+      for (const level of levels) {
+        const itemId = level.inventory_item_id?.toString();
+        if (itemId) {
+          const currentQty = inventoryMap.get(itemId) || 0;
+          inventoryMap.set(itemId, currentQty + (level.available || 0));
+        }
+      }
+    }
+
+    console.log(`📦 Fetched inventory levels for ${inventoryItemIds.length} items`);
+  } catch (error: any) {
+    console.error('Error fetching inventory levels:', error.response?.data || error.message);
+  }
+
+  return inventoryMap;
+};
+
+/**
  * Sync single product with enhanced mobile features
  */
 export const syncProduct = async (productId: string, shopifyProduct?: IShopifyProduct): Promise<void> => {
@@ -293,6 +437,12 @@ export const syncProduct = async (productId: string, shopifyProduct?: IShopifyPr
 
     if (!shopifyProduct) {
       throw new Error(`Product ${productId} not found`);
+    }
+
+    // Fetch accurate inventory levels using Inventory Levels API
+    let inventoryLevels = new Map<string, number>();
+    if (client && shopifyProduct.variants?.length > 0) {
+      inventoryLevels = await fetchInventoryLevels(client, shopifyProduct.variants);
     }
 
     // Check if product already exists in our database
@@ -317,27 +467,35 @@ export const syncProduct = async (productId: string, shopifyProduct?: IShopifyPr
         height: img.height
       })) || [],
       
-      // Variants and pricing
-      variants: shopifyProduct.variants?.map((variant: any) => ({
-        id: variant.id.toString(),
-        inventoryItemId: variant.inventory_item_id?.toString(),
-        title: variant.title,
-        price: parseFloat(variant.price),
-        compareAtPrice: variant.compare_at_price ? parseFloat(variant.compare_at_price) : undefined,
-        sku: variant.sku,
-        inventory: {
-          quantity: variant.inventory_quantity || 0,
-          policy: variant.inventory_policy,
-          tracked: variant.inventory_management === 'shopify'
-        },
-        weight: variant.weight,
-        weightUnit: variant.weight_unit || 'kg',
-        options: {
-          option1: variant.option1,
-          option2: variant.option2,
-          option3: variant.option3
-        }
-      })) || [],
+      // Variants and pricing - using Inventory Levels API for accurate quantities
+      variants: shopifyProduct.variants?.map((variant: any) => {
+        const inventoryItemId = variant.inventory_item_id?.toString();
+        // Get quantity from Inventory Levels API (accurate) or fallback to deprecated field
+        const quantity = inventoryItemId && inventoryLevels.has(inventoryItemId)
+          ? inventoryLevels.get(inventoryItemId)!
+          : (variant.inventory_quantity || 0);
+
+        return {
+          id: variant.id.toString(),
+          inventoryItemId,
+          title: variant.title,
+          price: parseFloat(variant.price),
+          compareAtPrice: variant.compare_at_price ? parseFloat(variant.compare_at_price) : undefined,
+          sku: variant.sku,
+          inventory: {
+            quantity,
+            policy: variant.inventory_policy,
+            tracked: variant.inventory_management === 'shopify'
+          },
+          weight: variant.weight,
+          weightUnit: variant.weight_unit || 'kg',
+          options: {
+            option1: variant.option1,
+            option2: variant.option2,
+            option3: variant.option3
+          }
+        };
+      }) || [],
       
       // Set price from first variant
       price: shopifyProduct.variants?.[0] ? parseFloat(shopifyProduct.variants[0].price) : 0,
@@ -353,11 +511,16 @@ export const syncProduct = async (productId: string, shopifyProduct?: IShopifyPr
         keywords: shopifyProduct.tags ? shopifyProduct.tags.split(',').map((tag: string) => tag.trim()) : []
       },
       
-      // Inventory tracking
+      // Inventory tracking - using accurate quantities from Inventory Levels API
       inventoryTracking: {
-        totalQuantity: shopifyProduct.variants?.reduce((total: number, variant: any) => 
-          total + (variant.inventory_quantity || 0), 0) || 0,
-        tracked: shopifyProduct.variants?.some((variant: any) => 
+        totalQuantity: shopifyProduct.variants?.reduce((total: number, variant: any) => {
+          const inventoryItemId = variant.inventory_item_id?.toString();
+          const qty = inventoryItemId && inventoryLevels.has(inventoryItemId)
+            ? inventoryLevels.get(inventoryItemId)!
+            : (variant.inventory_quantity || 0);
+          return total + qty;
+        }, 0) || 0,
+        tracked: shopifyProduct.variants?.some((variant: any) =>
           variant.inventory_management === 'shopify') || false,
         lowStockThreshold: 5,
         history: []
@@ -672,9 +835,10 @@ export const getInventoryLevels = async (productId: string): Promise<InventoryLe
 };
 
 /**
- * Update Shopify inventory for a variant
+ * Update Shopify inventory for a variant using Inventory Levels API
+ * Uses inventory_item_id and location_id for accurate inventory updates
  */
-export const updateInventory = async (variantId: string, quantity: number): Promise<void> => {
+export const updateInventory = async (inventoryItemId: string, quantity: number, locationId?: string): Promise<void> => {
   const client = await getShopifyClient();
 
   if (!client) {
@@ -682,16 +846,27 @@ export const updateInventory = async (variantId: string, quantity: number): Prom
   }
 
   try {
-    await client.put(`/variants/${variantId}.json`, {
-      variant: {
-        id: variantId,
-        inventory_quantity: quantity
+    // If no location provided, get the first/primary location
+    let targetLocationId = locationId;
+    if (!targetLocationId) {
+      const locationsResponse = await client.get('/locations.json');
+      const locations = locationsResponse.data?.locations || [];
+      if (locations.length === 0) {
+        throw new Error('No locations found in Shopify store');
       }
+      targetLocationId = locations[0].id.toString();
+    }
+
+    // Use set endpoint to update inventory level
+    await client.post('/inventory_levels/set.json', {
+      inventory_item_id: inventoryItemId,
+      location_id: targetLocationId,
+      available: quantity
     });
 
-    console.log(`📦 Updated inventory for variant ${variantId}: ${quantity}`);
+    console.log(`📦 Updated inventory for item ${inventoryItemId} at location ${targetLocationId}: ${quantity}`);
   } catch (error: any) {
-    console.error(`Error updating inventory for variant ${variantId}:`, error.response?.data || error.message);
+    console.error(`Error updating inventory for item ${inventoryItemId}:`, error.response?.data || error.message);
     throw error;
   }
 };
