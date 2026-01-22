@@ -115,13 +115,22 @@ export const getShopifyClientForStore = async (storeId: string): Promise<AxiosIn
       return null;
     }
 
-    // Decrypt the access token before using
-    const decryptedToken = decrypt(store.shopify.accessToken);
+    // Try to decrypt the access token, fallback to raw token if not encrypted
+    let accessToken = store.shopify.accessToken;
+    const isEncrypted = accessToken.includes(':') && accessToken.split(':').length === 3;
+
+    if (isEncrypted) {
+      try {
+        accessToken = decrypt(store.shopify.accessToken);
+      } catch (decryptError) {
+        console.warn(`Failed to decrypt token for store ${storeId}, using raw token`);
+      }
+    }
 
     return axios.create({
       baseURL: `https://${store.shopify.shop}/admin/api/2024-01`,
       headers: {
-        'X-Shopify-Access-Token': decryptedToken,
+        'X-Shopify-Access-Token': accessToken,
         'Content-Type': 'application/json',
       },
       timeout: 30000,
@@ -146,13 +155,22 @@ export const getShopifyClient = async (): Promise<AxiosInstance | null> => {
       return null;
     }
 
-    // Decrypt the access token before using
-    const decryptedToken = decrypt(store.shopify.accessToken);
+    // Try to decrypt the access token, fallback to raw token if not encrypted
+    let accessToken = store.shopify.accessToken;
+    const isEncrypted = accessToken.includes(':') && accessToken.split(':').length === 3;
+
+    if (isEncrypted) {
+      try {
+        accessToken = decrypt(store.shopify.accessToken);
+      } catch (decryptError) {
+        console.warn(`Failed to decrypt token, using raw token`);
+      }
+    }
 
     return axios.create({
       baseURL: `https://${store.shopify.shop}/admin/api/2024-01`,
       headers: {
-        'X-Shopify-Access-Token': decryptedToken,
+        'X-Shopify-Access-Token': accessToken,
         'Content-Type': 'application/json',
       },
       timeout: 30000,
