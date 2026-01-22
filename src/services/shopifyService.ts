@@ -15,6 +15,7 @@ import {
   IMobileStatusHistory
 } from '../types/index';
 import { ApiError } from '../utils/errors';
+import { decrypt } from '../utils/encryption';
 
 /**
  * Default currency for new user preferences.
@@ -114,10 +115,13 @@ export const getShopifyClientForStore = async (storeId: string): Promise<AxiosIn
       return null;
     }
 
+    // Decrypt the access token before using
+    const decryptedToken = decrypt(store.shopify.accessToken);
+
     return axios.create({
       baseURL: `https://${store.shopify.shop}/admin/api/2024-01`,
       headers: {
-        'X-Shopify-Access-Token': store.shopify.accessToken,
+        'X-Shopify-Access-Token': decryptedToken,
         'Content-Type': 'application/json',
       },
       timeout: 30000,
@@ -142,10 +146,13 @@ export const getShopifyClient = async (): Promise<AxiosInstance | null> => {
       return null;
     }
 
+    // Decrypt the access token before using
+    const decryptedToken = decrypt(store.shopify.accessToken);
+
     return axios.create({
       baseURL: `https://${store.shopify.shop}/admin/api/2024-01`,
       headers: {
-        'X-Shopify-Access-Token': store.shopify.accessToken,
+        'X-Shopify-Access-Token': decryptedToken,
         'Content-Type': 'application/json',
       },
       timeout: 30000,
