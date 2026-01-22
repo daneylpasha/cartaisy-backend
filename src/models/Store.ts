@@ -108,7 +108,7 @@ const ShopifyConnectionSchema = new Schema<IShopifyConnection>(
     storefrontAccessToken: {
       type: String,
       sparse: true,
-      select: false, // Don't include storefrontAccessToken in queries by default
+      // Note: storefrontAccessToken is a public token (used in client-side), so select: false not needed
     },
     scope: {
       type: String,
