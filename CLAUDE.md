@@ -1,5 +1,7 @@
 # Cartaisy Backend - AI Development Guide
 
+See also: `AGENTS.md` for repository workflow rules, secrets guidance, tenant-isolation requirements, and AI-generated PR checklist expectations.
+
 ## Project Overview
 Cartaisy is an e-commerce backend API built with Node.js, Express, TypeScript, and MongoDB. It provides APIs for a mobile shopping app with features like product management, user authentication, orders, wishlists, and homescreen content.
 
