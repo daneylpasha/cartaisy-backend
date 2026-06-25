@@ -258,4 +258,32 @@ describe('ShopifyStorefrontService tenant-scoped client contract', () => {
     });
     expect(mockedAxios.create).not.toHaveBeenCalled();
   });
+
+  it('fails collection product browsing with a controlled error when the store does not exist', async () => {
+    const missingStoreId = new mongoose.Types.ObjectId().toString();
+
+    await expect(
+      shopifyStorefront.getCollectionProductsForStore(missingStoreId, '123')
+    ).rejects.toMatchObject({
+      name: ApiError.name,
+      message: 'Store not found',
+      statusCode: 404,
+      expose: true,
+    });
+    expect(mockedAxios.create).not.toHaveBeenCalled();
+  });
+
+  it('fails collection product browsing with a controlled error when the store is inactive', async () => {
+    const store = await createStore({ isActive: false });
+
+    await expect(
+      shopifyStorefront.getCollectionProductsForStore(store._id.toString(), '123')
+    ).rejects.toMatchObject({
+      name: ApiError.name,
+      message: 'Store is not active',
+      statusCode: 403,
+      expose: true,
+    });
+    expect(mockedAxios.create).not.toHaveBeenCalled();
+  });
 });
