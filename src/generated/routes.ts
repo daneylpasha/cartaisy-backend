@@ -1530,6 +1530,7 @@ export function RegisterRoutes(app: Router) {
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsShopifySearchController_shopifyGetPopularSearches: Record<string, TsoaRoute.ParameterSchema> = {
+                storeId: {"in":"header","name":"x-store-id","required":true,"dataType":"string"},
                 limit: {"in":"query","name":"limit","dataType":"double"},
                 days: {"in":"query","name":"days","dataType":"double"},
         };

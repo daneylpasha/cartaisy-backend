@@ -24,6 +24,7 @@ export interface ISearchFilters {
 }
 
 export interface ISearchHistory {
+  storeId?: mongoose.Types.ObjectId; // Tenant scope - which store the search was performed against
   userId?: mongoose.Types.ObjectId; // Optional - supports guest searches (dashboard users)
   customerId?: mongoose.Types.ObjectId; // Optional - for mobile app customers
   query: string; // The search query text
@@ -74,6 +75,12 @@ const SearchFiltersSchema = new Schema(
 
 const SearchHistorySchema = new Schema<ISearchHistory>(
   {
+    storeId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Store',
+      index: true,
+      sparse: true, // Legacy records (and non-tenant-scoped sources) may lack a store
+    },
     userId: {
       type: Schema.Types.ObjectId,
       ref: 'User',
@@ -152,6 +159,9 @@ const SearchHistorySchema = new Schema<ISearchHistory>(
 // =============================================================================
 
 // Compound indexes for common queries
+// Tenant-scoped analytics (popular searches per store)
+SearchHistorySchema.index({ storeId: 1, hasResults: 1, createdAt: -1 });
+SearchHistorySchema.index({ storeId: 1, query: 1, createdAt: -1 });
 SearchHistorySchema.index({ query: 1, createdAt: -1 });
 SearchHistorySchema.index({ userId: 1, createdAt: -1 });
 SearchHistorySchema.index({ customerId: 1, createdAt: -1 });  // Index for customer search history
@@ -175,20 +185,29 @@ SearchHistorySchema.index({ query: 'text' });
  * Get popular searches (most searched terms)
  * @param limit - Number of results to return
  * @param days - Number of days to look back (default: 30)
+ * @param storeId - Optional tenant scope; when provided, only that store's searches are counted
  */
 SearchHistorySchema.statics.getPopularSearches = async function (
   limit: number = 10,
-  days: number = 30
+  days: number = 30,
+  storeId?: string
 ): Promise<Array<{ query: string; searchCount: number; avgResultsCount: number }>> {
   const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() - days);
 
+  const match: Record<string, unknown> = {
+    createdAt: { $gte: cutoffDate },
+    hasResults: true, // Only successful searches
+  };
+
+  // Scope to a single tenant when a store is supplied (multi-tenant isolation)
+  if (storeId) {
+    match.storeId = new mongoose.Types.ObjectId(storeId);
+  }
+
   const results = await this.aggregate([
     {
-      $match: {
-        createdAt: { $gte: cutoffDate },
-        hasResults: true, // Only successful searches
-      },
+      $match: match,
     },
     {
       $group: {
@@ -558,7 +577,8 @@ SearchHistorySchema.statics.getSearchSuggestions = async function (
 export interface ISearchHistoryModel extends mongoose.Model<ISearchHistoryDocument> {
   getPopularSearches(
     limit?: number,
-    days?: number
+    days?: number,
+    storeId?: string
   ): Promise<Array<{ query: string; searchCount: number; avgResultsCount: number }>>;
   getFailedSearches(
     limit?: number,

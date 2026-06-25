@@ -65,7 +65,7 @@ export class ShopifySearchController extends Controller {
       const totalResults = products.length + collections.length;
 
       // Optionally track search in history (async, don't await)
-      this.trackSearch(q.trim(), totalResults).catch((err) =>
+      this.trackSearch(q.trim(), totalResults, storeId).catch((err) =>
         console.error('Error tracking search:', err)
       );
 
@@ -147,7 +147,7 @@ export class ShopifySearchController extends Controller {
       const pageInfo = shopifyResponse.data.products.pageInfo;
 
       // Track search in history (async, don't await)
-      this.trackSearch(q.trim(), products.length, {
+      this.trackSearch(q.trim(), products.length, storeId, {
         sortKey: effectiveSortKey,
         reverse: effectiveReverse,
       }).catch((err) => console.error('Error tracking search:', err));
@@ -212,22 +212,29 @@ export class ShopifySearchController extends Controller {
 
   /**
    * Get Popular Searches
-   * Returns most frequently searched terms
+   * Returns most frequently searched terms, scoped to the requesting store
    *
+   * @param storeId - Required Store ID (from x-store-id header) for multi-tenant scoping
    * @param limit - Number of results (default: 10)
    * @param days - Days to look back (default: 30)
    */
   @Get('popular')
+  @TsoaResponse(400, 'Bad Request')
   @TsoaResponse(500, 'Internal Server Error')
   public async shopifyGetPopularSearches(
+    @Header('x-store-id') storeId: string,
     @Query() limit?: number,
     @Query() days?: number
   ): Promise<PopularSearchesResponse> {
     try {
+      if (!storeId || !mongoose.Types.ObjectId.isValid(storeId)) {
+        throw new ApiError('A valid x-store-id header is required', 400);
+      }
+
       const effectiveLimit = limit || 10;
       const effectiveDays = days || 30;
 
-      const searches = await SearchHistory.getPopularSearches(effectiveLimit, effectiveDays);
+      const searches = await SearchHistory.getPopularSearches(effectiveLimit, effectiveDays, storeId);
 
       return {
         success: true,
@@ -238,9 +245,6 @@ export class ShopifySearchController extends Controller {
       };
     } catch (error) {
       console.error('Error fetching popular searches:', error);
-      if (!this.getStatus || this.getStatus() === 200) {
-        this.setStatus(500);
-      }
       throw error;
     }
   }
@@ -403,10 +407,14 @@ export class ShopifySearchController extends Controller {
   private async trackSearch(
     query: string,
     resultsCount: number,
+    storeId?: string,
     filters?: { sortKey?: SearchSortKey; reverse?: boolean }
   ): Promise<void> {
     try {
       await SearchHistory.create({
+        storeId: storeId && mongoose.Types.ObjectId.isValid(storeId)
+          ? new mongoose.Types.ObjectId(storeId)
+          : undefined,
         query: query.toLowerCase().trim(),
         resultsCount,
         hasResults: resultsCount > 0,

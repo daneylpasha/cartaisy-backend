@@ -5008,12 +5008,21 @@
 						}
 					}
 				},
-				"description": "Get Popular Searches\nReturns most frequently searched terms",
+				"description": "Get Popular Searches\nReturns most frequently searched terms, scoped to the requesting store",
 				"tags": [
 					"Search"
 				],
 				"security": [],
 				"parameters": [
+					{
+						"description": "- Required Store ID (from x-store-id header) for multi-tenant scoping",
+						"in": "header",
+						"name": "x-store-id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					},
 					{
 						"description": "- Number of results (default: 10)",
 						"in": "query",
