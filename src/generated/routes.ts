@@ -1434,6 +1434,7 @@ export function RegisterRoutes(app: Router) {
     
         const argsShopifySearchController_shopifyGetSearchSuggestions: Record<string, TsoaRoute.ParameterSchema> = {
                 q: {"in":"query","name":"q","required":true,"dataType":"string"},
+                storeId: {"in":"header","name":"x-store-id","required":true,"dataType":"string"},
                 limit: {"in":"query","name":"limit","dataType":"double"},
         };
         app.get('/api/v1/search/suggestions',
@@ -1465,6 +1466,7 @@ export function RegisterRoutes(app: Router) {
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsShopifySearchController_searchProducts: Record<string, TsoaRoute.ParameterSchema> = {
                 q: {"in":"query","name":"q","required":true,"dataType":"string"},
+                storeId: {"in":"header","name":"x-store-id","required":true,"dataType":"string"},
                 limit: {"in":"query","name":"limit","dataType":"double"},
                 cursor: {"in":"query","name":"cursor","dataType":"string"},
                 sortKey: {"in":"query","name":"sortKey","ref":"SearchSortKey"},
@@ -1498,6 +1500,7 @@ export function RegisterRoutes(app: Router) {
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsShopifySearchController_trackProductClick: Record<string, TsoaRoute.ParameterSchema> = {
+                storeId: {"in":"header","name":"x-store-id","required":true,"dataType":"string"},
                 body: {"in":"body","name":"body","required":true,"dataType":"nestedObjectLiteral","nestedProperties":{"productId":{"dataType":"string","required":true},"query":{"dataType":"string","required":true}}},
         };
         app.post('/api/v1/search/track-click',
@@ -1528,6 +1531,7 @@ export function RegisterRoutes(app: Router) {
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsShopifySearchController_shopifyGetPopularSearches: Record<string, TsoaRoute.ParameterSchema> = {
+                storeId: {"in":"header","name":"x-store-id","required":true,"dataType":"string"},
                 limit: {"in":"query","name":"limit","dataType":"double"},
                 days: {"in":"query","name":"days","dataType":"double"},
         };

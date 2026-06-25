@@ -4836,6 +4836,15 @@
 						}
 					},
 					{
+						"description": "- Required Store ID (from x-store-id header) for multi-tenant scoping",
+						"in": "header",
+						"name": "x-store-id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
 						"description": "- Number of results per type (default: 10, max: 10 per Shopify)",
 						"in": "query",
 						"name": "limit",
@@ -4873,6 +4882,15 @@
 						"description": "- Search query",
 						"in": "query",
 						"name": "q",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"description": "- Required Store ID (from x-store-id header) for multi-tenant scoping",
+						"in": "header",
+						"name": "x-store-id",
 						"required": true,
 						"schema": {
 							"type": "string"
@@ -4950,7 +4968,17 @@
 					"Search"
 				],
 				"security": [],
-				"parameters": [],
+				"parameters": [
+					{
+						"description": "- Required Store ID (from x-store-id header) for multi-tenant scoping",
+						"in": "header",
+						"name": "x-store-id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
 				"requestBody": {
 					"required": true,
 					"content": {
@@ -4990,12 +5018,21 @@
 						}
 					}
 				},
-				"description": "Get Popular Searches\nReturns most frequently searched terms",
+				"description": "Get Popular Searches\nReturns most frequently searched terms, scoped to the requesting store",
 				"tags": [
 					"Search"
 				],
 				"security": [],
 				"parameters": [
+					{
+						"description": "- Required Store ID (from x-store-id header) for multi-tenant scoping",
+						"in": "header",
+						"name": "x-store-id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					},
 					{
 						"description": "- Number of results (default: 10)",
 						"in": "query",

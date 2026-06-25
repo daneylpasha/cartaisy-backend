@@ -10,6 +10,7 @@ import {
   SearchSortKey,
 } from '../types/api/search';
 import Store from '../models/Store';
+import { ApiError } from '../utils/errors';
 
 /**
  * Shopify Storefront API Service
@@ -1666,13 +1667,21 @@ class ShopifyStorefrontService {
     query: <T>(graphqlQuery: string, variables?: any) => Promise<T>;
     isConfigured: boolean;
     shopDomain: string;
+    // When isConfigured is false, these describe the failure so callers can
+    // surface an accurate HTTP status instead of a generic 500. `expose` marks
+    // messages that are safe to return to API consumers in production (i.e. they
+    // carry no internal implementation details).
+    error?: string;
+    statusCode?: number;
+    expose?: boolean;
   }> {
     try {
       const store = await Store.findById(storeId)
         .select('isActive shopify')
         .lean();
 
-      // Check if store exists
+      // Check if store exists — a syntactically valid but unknown ID is a client
+      // error (404), not a server fault.
       if (!store) {
         console.warn(`Store ${storeId} not found`);
         return {
@@ -1681,6 +1690,9 @@ class ShopifyStorefrontService {
           },
           isConfigured: false,
           shopDomain: '',
+          error: 'Store not found',
+          statusCode: 404,
+          expose: true, // Innocuous lookup result, no internal details
         };
       }
 
@@ -1693,6 +1705,9 @@ class ShopifyStorefrontService {
           },
           isConfigured: false,
           shopDomain: '',
+          error: 'Store is not active',
+          statusCode: 403,
+          expose: true, // Innocuous tenant status, no internal details
         };
       }
 
@@ -1704,6 +1719,9 @@ class ShopifyStorefrontService {
           },
           isConfigured: false,
           shopDomain: '',
+          error: 'Store not connected to Shopify',
+          statusCode: 400,
+          expose: true, // Innocuous setup status, no internal details
         };
       }
 
@@ -1720,6 +1738,9 @@ class ShopifyStorefrontService {
           },
           isConfigured: false,
           shopDomain: '',
+          error: 'Store missing Storefront API access token. Please configure storefrontAccessToken.',
+          statusCode: 400,
+          // Intentionally NOT exposed: names an internal config field; admin-only diagnostic.
         };
       }
 
@@ -1768,8 +1789,191 @@ class ShopifyStorefrontService {
         },
         isConfigured: false,
         shopDomain: '',
+        error: 'Failed to initialize Shopify client',
+        statusCode: 500,
       };
     }
+  }
+
+
+  /**
+   * Predictive search for a specific store using tenant-scoped Storefront credentials.
+   */
+  async predictiveSearchForStore(
+    storeId: string,
+    searchQuery: string,
+    limit: number = 10,
+    countryCode?: string
+  ): Promise<ShopifyPredictiveSearchResponse> {
+    const storeClient = await this.getStoreClient(storeId);
+
+    if (!storeClient.isConfigured) {
+      throw new ApiError(
+        storeClient.error || 'Shopify not configured for this store',
+        storeClient.statusCode || 400,
+        true,
+        undefined,
+        storeClient.expose ?? false
+      );
+    }
+
+    const graphqlQuery = `
+      query PredictiveSearch($query: String!, $limit: Int!, $country: CountryCode) @inContext(country: $country) {
+        predictiveSearch(
+          query: $query
+          limit: $limit
+          limitScope: EACH
+          types: [PRODUCT, COLLECTION]
+        ) {
+          products {
+            id
+            title
+            handle
+            vendor
+            productType
+            tags
+            featuredImage {
+              url
+              altText
+            }
+            priceRange {
+              minVariantPrice {
+                amount
+                currencyCode
+              }
+            }
+            compareAtPriceRange {
+              minVariantPrice {
+                amount
+                currencyCode
+              }
+            }
+          }
+          collections {
+            id
+            title
+            handle
+            image {
+              url
+              altText
+            }
+          }
+        }
+      }
+    `;
+
+    return storeClient.query<ShopifyPredictiveSearchResponse>(graphqlQuery, {
+      query: searchQuery,
+      limit,
+      country: countryCode || null,
+    });
+  }
+
+  /**
+   * Full product search for a specific store using tenant-scoped Storefront credentials.
+   */
+  async searchProductsForStore(
+    storeId: string,
+    query: string,
+    options: {
+      limit?: number;
+      cursor?: string;
+      sortKey?: SearchSortKey;
+      reverse?: boolean;
+      countryCode?: string;
+    } = {}
+  ): Promise<ShopifySearchProductsResponse> {
+    const storeClient = await this.getStoreClient(storeId);
+
+    if (!storeClient.isConfigured) {
+      throw new ApiError(
+        storeClient.error || 'Shopify not configured for this store',
+        storeClient.statusCode || 400,
+        true,
+        undefined,
+        storeClient.expose ?? false
+      );
+    }
+
+    const { limit = 20, cursor, sortKey = 'RELEVANCE', reverse = false, countryCode } = options;
+
+    const graphqlQuery = `
+      query SearchProducts($query: String!, $limit: Int!, $cursor: String, $sortKey: ProductSortKeys!, $reverse: Boolean!, $country: CountryCode) @inContext(country: $country) {
+        products(first: $limit, after: $cursor, query: $query, sortKey: $sortKey, reverse: $reverse) {
+          edges {
+            node {
+              id
+              title
+              description
+              handle
+              vendor
+              productType
+              tags
+              availableForSale
+              totalInventory
+              priceRange {
+                minVariantPrice {
+                  amount
+                  currencyCode
+                }
+                maxVariantPrice {
+                  amount
+                  currencyCode
+                }
+              }
+              compareAtPriceRange {
+                minVariantPrice {
+                  amount
+                  currencyCode
+                }
+              }
+              images(first: 5) {
+                edges {
+                  node {
+                    url
+                    altText
+                  }
+                }
+              }
+              variants(first: 10) {
+                edges {
+                  node {
+                    id
+                    title
+                    price {
+                      amount
+                      currencyCode
+                    }
+                    availableForSale
+                    quantityAvailable
+                    selectedOptions {
+                      name
+                      value
+                    }
+                  }
+                }
+              }
+            }
+            cursor
+          }
+          pageInfo {
+            hasNextPage
+            hasPreviousPage
+            endCursor
+            startCursor
+          }
+        }
+      }
+    `;
+
+    return storeClient.query<ShopifySearchProductsResponse>(graphqlQuery, {
+      query,
+      limit,
+      cursor,
+      sortKey,
+      reverse,
+      country: countryCode || null,
+    });
   }
 
   /**

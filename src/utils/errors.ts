@@ -18,19 +18,24 @@ export class ApiError extends Error {
   public readonly statusCode: number;
   public readonly isOperational: boolean;
   public readonly context?: Record<string, unknown>;
+  // When true, the message is safe to surface to API consumers (incl. production).
+  // Defaults to false so internal diagnostics are not leaked unless opted in.
+  public readonly expose: boolean;
 
   constructor(
     message: string,
     statusCode: number = 500,
     isOperational: boolean = true,
-    context?: Record<string, unknown>
+    context?: Record<string, unknown>,
+    expose: boolean = false
   ) {
     super(message);
-    
+
     this.name = this.constructor.name;
     this.statusCode = statusCode;
     this.isOperational = isOperational;
     this.context = context;
+    this.expose = expose;
 
     // Maintains proper stack trace for where our error was thrown
     Error.captureStackTrace(this, this.constructor);

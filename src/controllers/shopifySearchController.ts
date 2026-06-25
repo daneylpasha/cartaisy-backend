@@ -1,6 +1,8 @@
-import { Body, Controller, Get, Post, Query, Request, Route, Security, Tags, Response as TsoaResponse } from 'tsoa';
+import { Body, Controller, Get, Header, Post, Query, Request, Route, Security, Tags, Response as TsoaResponse } from 'tsoa';
+import mongoose from 'mongoose';
 import shopifyStorefront from '../services/shopifyStorefrontService';
 import SearchHistory from '../models/SearchHistory';
+import { ApiError } from '../utils/errors';
 import {
   PredictiveSearchResponse,
   SearchProductsResponse,
@@ -25,6 +27,7 @@ export class ShopifySearchController extends Controller {
    * Fast search for autocomplete dropdown (< 100ms typical response time)
    *
    * @param q - Search query (2+ characters recommended)
+   * @param storeId - Required Store ID (from x-store-id header) for multi-tenant scoping
    * @param limit - Number of results per type (default: 10, max: 10 per Shopify)
    */
   @Get('suggestions')
@@ -32,32 +35,29 @@ export class ShopifySearchController extends Controller {
   @TsoaResponse(500, 'Internal Server Error')
   public async shopifyGetSearchSuggestions(
     @Query() q: string,
+    @Header('x-store-id') storeId: string,
     @Query() limit?: number
   ): Promise<PredictiveSearchResponse> {
     try {
       if (!q || q.trim().length < 2) {
-        this.setStatus(400);
-        throw new Error('Search query must be at least 2 characters');
+        throw new ApiError('Search query must be at least 2 characters', 400, true, undefined, true);
       }
 
-      if (!shopifyStorefront.isConfigured()) {
-        this.setStatus(500);
-        throw new Error('Shopify not configured');
+      if (!storeId || !mongoose.Types.ObjectId.isValid(storeId)) {
+        throw new ApiError('A valid x-store-id header is required', 400, true, undefined, true);
       }
 
       const effectiveLimit = Math.min(limit || 10, 10); // Shopify limit is 10
 
-      const shopifyResponse = await shopifyStorefront.predictiveSearch(q.trim(), effectiveLimit);
+      const shopifyResponse = await shopifyStorefront.predictiveSearchForStore(storeId, q.trim(), effectiveLimit);
 
       if (shopifyResponse?.errors) {
         console.error('Shopify GraphQL errors:', shopifyResponse.errors);
-        this.setStatus(500);
-        throw new Error(`Shopify API error: ${shopifyResponse.errors[0]?.message || 'Unknown error'}`);
+        throw new ApiError(`Shopify API error: ${shopifyResponse.errors[0]?.message || 'Unknown error'}`, 502);
       }
 
       if (!shopifyResponse?.data?.predictiveSearch) {
-        this.setStatus(500);
-        throw new Error('Invalid response from Shopify');
+        throw new ApiError('Invalid response from Shopify', 502);
       }
 
       const { products, collections } = shopifyResponse.data.predictiveSearch;
@@ -65,7 +65,7 @@ export class ShopifySearchController extends Controller {
       const totalResults = products.length + collections.length;
 
       // Optionally track search in history (async, don't await)
-      this.trackSearch(q.trim(), totalResults).catch((err) =>
+      this.trackSearch(q.trim(), totalResults, storeId).catch((err) =>
         console.error('Error tracking search:', err)
       );
 
@@ -80,9 +80,6 @@ export class ShopifySearchController extends Controller {
       };
     } catch (error) {
       console.error('Error in predictive search:', error);
-      if (!this.getStatus || this.getStatus() === 200) {
-        this.setStatus(500);
-      }
       throw error;
     }
   }
@@ -100,6 +97,7 @@ export class ShopifySearchController extends Controller {
    * - "available:true" - Only available products
    *
    * @param q - Search query
+   * @param storeId - Required Store ID (from x-store-id header) for multi-tenant scoping
    * @param limit - Results per page (default: 20)
    * @param cursor - Pagination cursor
    * @param sortKey - Sort order
@@ -110,6 +108,7 @@ export class ShopifySearchController extends Controller {
   @TsoaResponse(500, 'Internal Server Error')
   public async searchProducts(
     @Query() q: string,
+    @Header('x-store-id') storeId: string,
     @Query() limit?: number,
     @Query() cursor?: string,
     @Query() sortKey?: SearchSortKey,
@@ -117,20 +116,18 @@ export class ShopifySearchController extends Controller {
   ): Promise<SearchProductsResponse> {
     try {
       if (!q || q.trim().length < 2) {
-        this.setStatus(400);
-        throw new Error('Search query must be at least 2 characters');
+        throw new ApiError('Search query must be at least 2 characters', 400, true, undefined, true);
       }
 
-      if (!shopifyStorefront.isConfigured()) {
-        this.setStatus(500);
-        throw new Error('Shopify not configured');
+      if (!storeId || !mongoose.Types.ObjectId.isValid(storeId)) {
+        throw new ApiError('A valid x-store-id header is required', 400, true, undefined, true);
       }
 
       const effectiveLimit = limit || 20;
       const effectiveSortKey = sortKey || 'RELEVANCE';
       const effectiveReverse = reverse || false;
 
-      const shopifyResponse = await shopifyStorefront.searchProducts(q.trim(), {
+      const shopifyResponse = await shopifyStorefront.searchProductsForStore(storeId, q.trim(), {
         limit: effectiveLimit,
         cursor,
         sortKey: effectiveSortKey,
@@ -139,20 +136,18 @@ export class ShopifySearchController extends Controller {
 
       if (shopifyResponse?.errors) {
         console.error('Shopify GraphQL errors:', shopifyResponse.errors);
-        this.setStatus(500);
-        throw new Error(`Shopify API error: ${shopifyResponse.errors[0]?.message || 'Unknown error'}`);
+        throw new ApiError(`Shopify API error: ${shopifyResponse.errors[0]?.message || 'Unknown error'}`, 502);
       }
 
       if (!shopifyResponse?.data?.products) {
-        this.setStatus(500);
-        throw new Error('Invalid response from Shopify');
+        throw new ApiError('Invalid response from Shopify', 502);
       }
 
       const products = this.transformProducts(shopifyResponse.data.products.edges);
       const pageInfo = shopifyResponse.data.products.pageInfo;
 
       // Track search in history (async, don't await)
-      this.trackSearch(q.trim(), products.length, {
+      this.trackSearch(q.trim(), products.length, storeId, {
         sortKey: effectiveSortKey,
         reverse: effectiveReverse,
       }).catch((err) => console.error('Error tracking search:', err));
@@ -170,9 +165,6 @@ export class ShopifySearchController extends Controller {
       };
     } catch (error) {
       console.error('Error in product search:', error);
-      if (!this.getStatus || this.getStatus() === 200) {
-        this.setStatus(500);
-      }
       throw error;
     }
   }
@@ -181,6 +173,7 @@ export class ShopifySearchController extends Controller {
    * Track Product Click
    * Track when user clicks on a search result
    *
+   * @param storeId - Required Store ID (from x-store-id header) for multi-tenant scoping
    * @param query - The search query
    * @param productId - The clicked product ID
    */
@@ -188,19 +181,28 @@ export class ShopifySearchController extends Controller {
   @TsoaResponse(400, 'Bad Request')
   @TsoaResponse(500, 'Internal Server Error')
   public async trackProductClick(
+    @Header('x-store-id') storeId: string,
     @Body() body: { query: string; productId: string }
   ): Promise<{ success: boolean; message: string }> {
     try {
       const { query, productId } = body;
 
-      if (!query || !productId) {
-        this.setStatus(400);
-        throw new Error('Query and productId are required');
+      if (!storeId || !mongoose.Types.ObjectId.isValid(storeId)) {
+        throw new ApiError('A valid x-store-id header is required', 400, true, undefined, true);
       }
 
-      // Find the most recent search with this query and update it
+      if (!query || !productId) {
+        throw new ApiError('Query and productId are required', 400, true, undefined, true);
+      }
+
+      // Find the most recent search for this store with this query and update it.
+      // Scoping by storeId prevents a click in one store from overwriting another
+      // store's search record (cross-tenant analytics corruption).
       await SearchHistory.findOneAndUpdate(
-        { query: query.toLowerCase().trim() },
+        {
+          storeId: new mongoose.Types.ObjectId(storeId),
+          query: query.toLowerCase().trim(),
+        },
         { selectedProduct: productId },
         { sort: { createdAt: -1 } }
       );
@@ -211,31 +213,35 @@ export class ShopifySearchController extends Controller {
       };
     } catch (error) {
       console.error('Error tracking product click:', error);
-      if (!this.getStatus || this.getStatus() === 200) {
-        this.setStatus(500);
-      }
       throw error;
     }
   }
 
   /**
    * Get Popular Searches
-   * Returns most frequently searched terms
+   * Returns most frequently searched terms, scoped to the requesting store
    *
+   * @param storeId - Required Store ID (from x-store-id header) for multi-tenant scoping
    * @param limit - Number of results (default: 10)
    * @param days - Days to look back (default: 30)
    */
   @Get('popular')
+  @TsoaResponse(400, 'Bad Request')
   @TsoaResponse(500, 'Internal Server Error')
   public async shopifyGetPopularSearches(
+    @Header('x-store-id') storeId: string,
     @Query() limit?: number,
     @Query() days?: number
   ): Promise<PopularSearchesResponse> {
     try {
+      if (!storeId || !mongoose.Types.ObjectId.isValid(storeId)) {
+        throw new ApiError('A valid x-store-id header is required', 400, true, undefined, true);
+      }
+
       const effectiveLimit = limit || 10;
       const effectiveDays = days || 30;
 
-      const searches = await SearchHistory.getPopularSearches(effectiveLimit, effectiveDays);
+      const searches = await SearchHistory.getPopularSearches(effectiveLimit, effectiveDays, storeId);
 
       return {
         success: true,
@@ -246,9 +252,6 @@ export class ShopifySearchController extends Controller {
       };
     } catch (error) {
       console.error('Error fetching popular searches:', error);
-      if (!this.getStatus || this.getStatus() === 200) {
-        this.setStatus(500);
-      }
       throw error;
     }
   }
@@ -411,10 +414,14 @@ export class ShopifySearchController extends Controller {
   private async trackSearch(
     query: string,
     resultsCount: number,
+    storeId?: string,
     filters?: { sortKey?: SearchSortKey; reverse?: boolean }
   ): Promise<void> {
     try {
       await SearchHistory.create({
+        storeId: storeId && mongoose.Types.ObjectId.isValid(storeId)
+          ? new mongoose.Types.ObjectId(storeId)
+          : undefined,
         query: query.toLowerCase().trim(),
         resultsCount,
         hasResults: resultsCount > 0,
