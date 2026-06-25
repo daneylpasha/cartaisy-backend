@@ -1668,9 +1668,12 @@ class ShopifyStorefrontService {
     isConfigured: boolean;
     shopDomain: string;
     // When isConfigured is false, these describe the failure so callers can
-    // surface an accurate HTTP status instead of a generic 500.
+    // surface an accurate HTTP status instead of a generic 500. `expose` marks
+    // messages that are safe to return to API consumers in production (i.e. they
+    // carry no internal implementation details).
     error?: string;
     statusCode?: number;
+    expose?: boolean;
   }> {
     try {
       const store = await Store.findById(storeId)
@@ -1689,6 +1692,7 @@ class ShopifyStorefrontService {
           shopDomain: '',
           error: 'Store not found',
           statusCode: 404,
+          expose: true, // Innocuous lookup result, no internal details
         };
       }
 
@@ -1703,6 +1707,7 @@ class ShopifyStorefrontService {
           shopDomain: '',
           error: 'Store is not active',
           statusCode: 403,
+          expose: true, // Innocuous tenant status, no internal details
         };
       }
 
@@ -1716,6 +1721,7 @@ class ShopifyStorefrontService {
           shopDomain: '',
           error: 'Store not connected to Shopify',
           statusCode: 400,
+          expose: true, // Innocuous setup status, no internal details
         };
       }
 
@@ -1734,6 +1740,7 @@ class ShopifyStorefrontService {
           shopDomain: '',
           error: 'Store missing Storefront API access token. Please configure storefrontAccessToken.',
           statusCode: 400,
+          // Intentionally NOT exposed: names an internal config field; admin-only diagnostic.
         };
       }
 
@@ -1803,7 +1810,10 @@ class ShopifyStorefrontService {
     if (!storeClient.isConfigured) {
       throw new ApiError(
         storeClient.error || 'Shopify not configured for this store',
-        storeClient.statusCode || 400
+        storeClient.statusCode || 400,
+        true,
+        undefined,
+        storeClient.expose ?? false
       );
     }
 
@@ -1878,7 +1888,10 @@ class ShopifyStorefrontService {
     if (!storeClient.isConfigured) {
       throw new ApiError(
         storeClient.error || 'Shopify not configured for this store',
-        storeClient.statusCode || 400
+        storeClient.statusCode || 400,
+        true,
+        undefined,
+        storeClient.expose ?? false
       );
     }
 
