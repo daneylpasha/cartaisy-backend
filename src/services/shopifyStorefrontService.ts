@@ -522,10 +522,16 @@ class ShopifyStorefrontService {
    * Get a single product by ID using a specific store's Storefront credentials.
    */
   async getProductByIdForStore(storeId: string, productId: string, countryCode?: string): Promise<any> {
-    const storeClient = await this.getStoreClient(storeId);
+    const storeClient = await this.getStorefrontClientForStore(storeId);
 
     if (!storeClient.isConfigured) {
-      throw new Error('Shopify not configured for this store');
+      throw new ApiError(
+        storeClient.error || 'Shopify not configured for this store',
+        storeClient.statusCode || 400,
+        true,
+        undefined,
+        storeClient.expose ?? false
+      );
     }
 
     return storeClient.query<any>(this.getProductByIdQuery(), {
