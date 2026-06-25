@@ -31,7 +31,7 @@ The current response includes these module buckets:
 
 | Module type | Storage model | API/admin routes | Required saved fields | Optional/default fields | Shopify IDs / links |
 | --- | --- | --- | --- | --- | --- |
-| `carousel` | `CarouselItem` | `GET /carousel`, `POST /admin/carousel/item`, `POST /admin/carousel`, `PUT /admin/carousel`, `DELETE /admin/carousel/:id`, `PATCH /admin/carousel/:id/status` | `storeId`, `imageUrl`, `label`, `title`, `subtitle`, `collectionId`, `position` | `ctaText` defaults to `Shop Now`; `endsAt`; `promoTag`; `isActive` defaults to `true` | `collectionId` is a manually supplied string. |
+| `carousel` | `CarouselItem` | `GET /carousel`, `POST /admin/carousel/item`, `POST /admin/carousel`, `PUT /admin/carousel`, `DELETE /admin/carousel/:id`, `PATCH /admin/carousel/:id/status` | Persisted record requires `storeId`, `imageUrl`, `label`, `title`, `subtitle`, `collectionId`, and `position`; the aggregate home screen response omits `label` even though the query selects it | `ctaText` defaults to `Shop Now`; `endsAt`; `promoTag`; `isActive` defaults to `true` | `collectionId` is a manually supplied string. |
 | `promo_banners` / `promoBanners` | `PromoBanner` | `GET /promo-banners`, `POST /admin/promo-banners`, `PUT /admin/promo-banners`, `DELETE /admin/promo-banners/:id`, `PATCH /admin/promo-banners/:id/status` | `storeId`, `image`, `title`, `subtitle`, `ctaText`, `collectionId`, `position` | `backgroundColor`, `textColor`, and `buttonColor` have defaults; `isActive` defaults to `true` | `collectionId` is a manually supplied string. |
 | `callout_banners` / `calloutBanners` | `CalloutBanner` | `GET /callout-banners`, `POST /admin/callout-banners`, `PUT /admin/callout-banners`, `DELETE /admin/callout-banners/:id`, `PATCH /admin/callout-banners/:id/status` | `storeId`, `imageUrl`, `title`, `subTitle`, `buttonText`, `action`, `position` | `backgroundColor`, `textColor`, and `buttonColor` have defaults; `isActive` defaults to `true`; top-level numeric `collectionId` is optional/legacy | `action.type` can be `collection` or `navigation`; `action.collectionId` is required by schema when `type=collection`; `action.navigateTo` is required by schema when `type=navigation`. |
 | `category_grid` / `categoryGrid` | `CategoryGrid` | `GET /category-grid`, `POST /admin/category-grid`, `PUT /admin/category-grid`, `DELETE /admin/category-grid/:id`, `PATCH /admin/category-grid/:id/status` | `storeId`, `imageUrl`, `title`, `collectionId`, `position` | `isActive` defaults to `true` | `collectionId` is a manually supplied string. |
@@ -66,12 +66,13 @@ The current response includes these module buckets:
 - Most create/update controllers map request bodies directly into models and rely on Mongoose for required-field validation. That means invalid payloads generally surface as `500` responses instead of consistent `400` validation errors.
 - Public list endpoints for individual modules only filter by `storeId` when `req.storeId` is present. They can become unscoped if mounted without middleware that always resolves a store ID. The aggregate home screen endpoint is stricter and rejects missing store IDs.
 - Shopify `collectionId` values are manually entered strings in most modules. There is no backend pre-save validation that the ID exists in Shopify, belongs to the current store, or matches the expected Storefront/Admin GraphQL ID shape.
-- `collectionDisplays` are the only module type enriched against Shopify at home screen read time; invalid IDs are logged and omitted from the response. Other modules can return stale or incorrect IDs directly to clients.
+- `collectionDisplays` are the only module type enriched against Shopify at home screen read time. If Shopify Storefront is not configured, the entire `collectionDisplays` bucket is returned as an empty array even when matching records exist in MongoDB. If Shopify is configured but an individual collection lookup fails or returns no collection, that specific display is logged and omitted from the response. Other modules can return stale or incorrect IDs directly to clients.
 - No current home module stores a product ID. Product picker support would require new schema fields and validation rules if future modules deep-link to products.
 - Image fields are plain strings. There is no central validation for URL format, allowed asset host, image dimensions, or whether an image has been uploaded through the approved image pipeline.
 - Position/order fields are numeric but not normalized or uniqueness-constrained per store/module, so duplicated or sparse ordering can occur.
 - `CalloutBanner` has both `action.collectionId` as a string and a top-level `collectionId` as a number. The top-level field appears inconsistent with the rest of the home module configuration and should be treated carefully before dashboard editing exposes it.
 - `HomeLayout` has model-level enum validation, but this audit did not find a dedicated controller for validating or updating dashboard layout sections.
+- `CarouselItem.label` is required and selected from MongoDB, but the aggregate home screen mapper does not include `label` in the returned carousel item shape. Treat it as an internal/admin field unless a follow-up intentionally adds it to the mobile response contract.
 
 ## Shopify collection/product ID usage
 
@@ -85,7 +86,7 @@ Current home module Shopify ID usage is collection-centric:
 - `CategoryCollectionGrid.collections[].collectionId`
 - `CollectionShowcase.collections[].collectionId`
 
-`CollectionDisplay.collectionId` is used server-side to fetch Shopify collection details and products for the home screen response. The other collection IDs are passed through for client navigation or rendering.
+`CollectionDisplay.collectionId` is used server-side to fetch Shopify collection details and products for the home screen response. If Shopify Storefront credentials are unavailable, the collection display enrichment returns an empty array for the full bucket; with Shopify configured, per-item lookup failures are logged and omitted. The other collection IDs are passed through for client navigation or rendering.
 
 No home module model reviewed in this audit requires or stores a Shopify product ID today.
 
@@ -99,6 +100,7 @@ No home module model reviewed in this audit requires or stores a Shopify product
 6. Normalize `position`/`order` values during replace/update operations and consider a per-store uniqueness rule for each module bucket to prevent ambiguous layout order.
 7. Consolidate module type definitions into a single backend source of truth used by models, TSOA types, dashboard validation, and docs so the dashboard cannot publish unsupported module payloads.
 8. Clarify or remove the legacy top-level numeric `CalloutBanner.collectionId` before exposing callout editing broadly in the dashboard.
+9. Decide whether `CarouselItem.label` should be returned to mobile clients. If yes, add it to the response types and mapper; if no, stop selecting it in the aggregate home screen query or document it as admin-only metadata.
 
 ## Suggested future collection/product picker shape
 
