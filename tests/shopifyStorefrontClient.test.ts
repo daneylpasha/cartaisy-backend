@@ -2,6 +2,7 @@ import axios from 'axios';
 import mongoose from 'mongoose';
 import Store from '../src/models/Store';
 import shopifyStorefront from '../src/services/shopifyStorefrontService';
+import { ApiError } from '../src/utils/errors';
 
 jest.mock('axios');
 
@@ -182,5 +183,79 @@ describe('ShopifyStorefrontService tenant-scoped client contract', () => {
     await expect(client.query('query Test')).rejects.toThrow(
       'Store missing Storefront API access token. Please configure storefrontAccessToken.'
     );
+  });
+
+  it('fetches collection products with the tenant-scoped Storefront client', async () => {
+    const store = await createStore();
+    const shopifyResponse = {
+      data: {
+        collection: {
+          id: 'gid://shopify/Collection/123',
+          title: 'Featured',
+          products: {
+            edges: [],
+            pageInfo: {
+              hasNextPage: false,
+              hasPreviousPage: false,
+              endCursor: null,
+              startCursor: null,
+            },
+          },
+        },
+      },
+    };
+    postMock.mockResolvedValueOnce({ data: shopifyResponse });
+
+    const response = await shopifyStorefront.getCollectionProductsForStore(
+      store._id.toString(),
+      '123',
+      {
+        limit: 12,
+        sortKey: 'BEST_SELLING',
+        reverse: true,
+        filters: [{ available: true }],
+        countryCode: 'US',
+      }
+    );
+
+    expect(response).toEqual(shopifyResponse);
+    expect(mockedAxios.create).toHaveBeenCalledWith(expect.objectContaining({
+      baseURL: 'https://tenant-shop.myshopify.com/api/2025-01/graphql.json',
+      headers: expect.objectContaining({
+        'X-Shopify-Storefront-Access-Token': 'tenant-storefront-token',
+      }),
+    }));
+    expect(postMock).toHaveBeenCalledWith('', expect.objectContaining({
+      variables: {
+        id: 'gid://shopify/Collection/123',
+        limit: 12,
+        cursor: null,
+        sortKey: 'BEST_SELLING',
+        reverse: true,
+        filters: [{ available: true }],
+        country: 'US',
+      },
+    }));
+  });
+
+  it('fails collection product browsing with a controlled error for missing Storefront token', async () => {
+    const store = await createStore({
+      shopify: {
+        shop: 'tenant-shop.myshopify.com',
+        storefrontAccessToken: '',
+        scope: 'read_products',
+        isConnected: true,
+      },
+    });
+
+    await expect(
+      shopifyStorefront.getCollectionProductsForStore(store._id.toString(), '123')
+    ).rejects.toMatchObject({
+      name: ApiError.name,
+      message: 'Store missing Storefront API access token. Please configure storefrontAccessToken.',
+      statusCode: 400,
+      expose: false,
+    });
+    expect(mockedAxios.create).not.toHaveBeenCalled();
   });
 });
