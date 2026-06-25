@@ -10,6 +10,7 @@ import {
   CollectionFacets,
   FacetOption,
 } from '../types/api/collection';
+import { ApiError } from '../utils/errors';
 
 /**
  * Collection Controller
@@ -147,7 +148,9 @@ export class CollectionController extends Controller {
         error instanceof Error ? error.message : 'Unknown error'
       );
 
-      if (error instanceof Error && error.message === 'Collection not found') {
+      if (error instanceof ApiError) {
+        this.setStatus(error.statusCode);
+      } else if (error instanceof Error && error.message === 'Collection not found') {
         this.setStatus(404);
       } else if (error instanceof Error && (error.message.includes('Invalid filters') || error.message === 'Invalid Store ID format' || error.message === 'x-store-id header is required')) {
         this.setStatus(400);
