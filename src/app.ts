@@ -324,6 +324,7 @@ interface CustomError extends Error {
   status?: number;
   statusCode?: number;
   isOperational?: boolean;
+  expose?: boolean; // When true, the message is safe to return to API consumers in production
   stack?: string;
 }
 
@@ -334,16 +335,17 @@ const errorHandler: ErrorRequestHandler = (err: CustomError, req: Request, res: 
   // Resolve status from tsoa ValidateError (`status`) or our ApiError (`statusCode`).
   const statusCode = err.status || err.statusCode || 500;
 
-  // Determine if error message should be shown to user
-  // Show meaningful messages for checkout/payment errors even in production,
-  // and for operational client errors (4xx) which carry actionable messages.
+  // Determine if error message should be shown to user.
+  // Show meaningful messages for checkout/payment errors even in production.
+  // NOTE: We intentionally do NOT blanket-expose all 4xx messages in production —
+  // some operational errors (e.g. store-config diagnostics) carry internal details
+  // that must not leak to API consumers. Messages opt in explicitly via `expose`.
   const isCheckoutError = req.path.includes('/checkout');
   const isPaymentError = err.message?.includes('payment') ||
                          err.message?.includes('Payment') ||
                          err.message?.includes('Stripe') ||
                          err.message?.includes('card');
-  const isClientError = statusCode >= 400 && statusCode < 500;
-  const showMessage = !derivedConfig.isProduction || isCheckoutError || isPaymentError || isClientError;
+  const showMessage = !derivedConfig.isProduction || isCheckoutError || isPaymentError || err.expose === true;
 
   res.status(statusCode).json({
     status: 'error',

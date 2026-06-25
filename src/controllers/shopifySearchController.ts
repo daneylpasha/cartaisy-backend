@@ -40,11 +40,11 @@ export class ShopifySearchController extends Controller {
   ): Promise<PredictiveSearchResponse> {
     try {
       if (!q || q.trim().length < 2) {
-        throw new ApiError('Search query must be at least 2 characters', 400);
+        throw new ApiError('Search query must be at least 2 characters', 400, true, undefined, true);
       }
 
       if (!storeId || !mongoose.Types.ObjectId.isValid(storeId)) {
-        throw new ApiError('A valid x-store-id header is required', 400);
+        throw new ApiError('A valid x-store-id header is required', 400, true, undefined, true);
       }
 
       const effectiveLimit = Math.min(limit || 10, 10); // Shopify limit is 10
@@ -116,11 +116,11 @@ export class ShopifySearchController extends Controller {
   ): Promise<SearchProductsResponse> {
     try {
       if (!q || q.trim().length < 2) {
-        throw new ApiError('Search query must be at least 2 characters', 400);
+        throw new ApiError('Search query must be at least 2 characters', 400, true, undefined, true);
       }
 
       if (!storeId || !mongoose.Types.ObjectId.isValid(storeId)) {
-        throw new ApiError('A valid x-store-id header is required', 400);
+        throw new ApiError('A valid x-store-id header is required', 400, true, undefined, true);
       }
 
       const effectiveLimit = limit || 20;
@@ -188,11 +188,11 @@ export class ShopifySearchController extends Controller {
       const { query, productId } = body;
 
       if (!storeId || !mongoose.Types.ObjectId.isValid(storeId)) {
-        throw new ApiError('A valid x-store-id header is required', 400);
+        throw new ApiError('A valid x-store-id header is required', 400, true, undefined, true);
       }
 
       if (!query || !productId) {
-        throw new ApiError('Query and productId are required', 400);
+        throw new ApiError('Query and productId are required', 400, true, undefined, true);
       }
 
       // Find the most recent search for this store with this query and update it.
@@ -235,7 +235,7 @@ export class ShopifySearchController extends Controller {
   ): Promise<PopularSearchesResponse> {
     try {
       if (!storeId || !mongoose.Types.ObjectId.isValid(storeId)) {
-        throw new ApiError('A valid x-store-id header is required', 400);
+        throw new ApiError('A valid x-store-id header is required', 400, true, undefined, true);
       }
 
       const effectiveLimit = limit || 10;
