@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Header, Post, Query, Request, Response, Route, Security, Tags } from 'tsoa';
+import { Body, Controller, Get, Header, Post, Query, Request, Route, Security, Tags, Response as TsoaResponse } from 'tsoa';
 import mongoose from 'mongoose';
 import shopifyStorefront from '../services/shopifyStorefrontService';
 import SearchHistory from '../models/SearchHistory';
@@ -29,8 +29,8 @@ export class ShopifySearchController extends Controller {
    * @param limit - Number of results per type (default: 10, max: 10 per Shopify)
    */
   @Get('suggestions')
-  @Response(400, 'Bad Request')
-  @Response(500, 'Internal Server Error')
+  @TsoaResponse(400, 'Bad Request')
+  @TsoaResponse(500, 'Internal Server Error')
   public async shopifyGetSearchSuggestions(
     @Query() q: string,
     @Header('x-store-id') storeId?: string,
@@ -113,8 +113,8 @@ export class ShopifySearchController extends Controller {
    * @param reverse - Reverse sort (for high to low)
    */
   @Get('products')
-  @Response(400, 'Bad Request')
-  @Response(500, 'Internal Server Error')
+  @TsoaResponse(400, 'Bad Request')
+  @TsoaResponse(500, 'Internal Server Error')
   public async searchProducts(
     @Query() q: string,
     @Header('x-store-id') storeId?: string,
@@ -198,8 +198,8 @@ export class ShopifySearchController extends Controller {
    * @param productId - The clicked product ID
    */
   @Post('track-click')
-  @Response(400, 'Bad Request')
-  @Response(500, 'Internal Server Error')
+  @TsoaResponse(400, 'Bad Request')
+  @TsoaResponse(500, 'Internal Server Error')
   public async trackProductClick(
     @Body() body: { query: string; productId: string }
   ): Promise<{ success: boolean; message: string }> {
@@ -239,7 +239,7 @@ export class ShopifySearchController extends Controller {
    * @param days - Days to look back (default: 30)
    */
   @Get('popular')
-  @Response(500, 'Internal Server Error')
+  @TsoaResponse(500, 'Internal Server Error')
   public async shopifyGetPopularSearches(
     @Query() limit?: number,
     @Query() days?: number
@@ -272,8 +272,8 @@ export class ShopifySearchController extends Controller {
    */
   @Get('history')
   @Security('jwt')
-  @Response(401, 'Unauthorized')
-  @Response(500, 'Internal Server Error')
+  @TsoaResponse(401, 'Unauthorized')
+  @TsoaResponse(500, 'Internal Server Error')
   public async getRecentSearches(
     @Request() request: any,
     @Query() limit?: number
@@ -306,8 +306,8 @@ export class ShopifySearchController extends Controller {
    */
   @Post('history/clear')
   @Security('jwt')
-  @Response(401, 'Unauthorized')
-  @Response(500, 'Internal Server Error')
+  @TsoaResponse(401, 'Unauthorized')
+  @TsoaResponse(500, 'Internal Server Error')
   public async clearSearchHistory(
     @Request() request: any
   ): Promise<{ success: boolean; message: string; deletedCount: number }> {

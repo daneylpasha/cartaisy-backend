@@ -4802,6 +4802,7 @@
 	"info": {
 		"title": "Cartaisy API",
 		"version": "1.0.0",
+		"contact": {},
 		"description": "E-commerce backend API with Shopify integration"
 	},
 	"paths": {
@@ -9795,6 +9796,9 @@
 		}
 	},
 	"servers": [
+		{
+			"url": "/"
+		},
 		{
 			"url": "http://localhost:3000/api/v1",
 			"description": "Development server"

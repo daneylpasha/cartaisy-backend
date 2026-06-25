@@ -1,7 +1,9 @@
 {
   "entryFile": "src/app.ts",
   "noImplicitAdditionalProperties": "throw-on-extras",
-  "controllerPathGlobs": ["src/controllers/**/*.ts"],
+  "controllerPathGlobs": [
+    "src/controllers/**/*.ts"
+  ],
   "spec": {
     "outputDirectory": "public",
     "specVersion": 3,
@@ -23,8 +25,80 @@
           "url": "http://localhost:3000/api/v1",
           "description": "Development server"
         }
-      ]
-    }
+      ],
+      "paths": {
+        "/search/suggestions": {
+          "get": {
+            "responses": {
+              "400": {
+                "description": "Bad Request"
+              },
+              "500": {
+                "description": "Internal Server Error"
+              }
+            }
+          }
+        },
+        "/search/products": {
+          "get": {
+            "responses": {
+              "400": {
+                "description": "Bad Request"
+              },
+              "500": {
+                "description": "Internal Server Error"
+              }
+            }
+          }
+        },
+        "/search/track-click": {
+          "post": {
+            "responses": {
+              "400": {
+                "description": "Bad Request"
+              },
+              "500": {
+                "description": "Internal Server Error"
+              }
+            }
+          }
+        },
+        "/search/popular": {
+          "get": {
+            "responses": {
+              "500": {
+                "description": "Internal Server Error"
+              }
+            }
+          }
+        },
+        "/search/history": {
+          "get": {
+            "responses": {
+              "401": {
+                "description": "Unauthorized"
+              },
+              "500": {
+                "description": "Internal Server Error"
+              }
+            }
+          }
+        },
+        "/search/history/clear": {
+          "post": {
+            "responses": {
+              "401": {
+                "description": "Unauthorized"
+              },
+              "500": {
+                "description": "Internal Server Error"
+              }
+            }
+          }
+        }
+      }
+    },
+    "specMerging": "deepmerge"
   },
   "routes": {
     "routesDir": "src/generated",
