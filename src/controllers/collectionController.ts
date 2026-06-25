@@ -21,7 +21,7 @@ export class CollectionController extends Controller {
   /**
    * Get products from a collection with pagination, filtering, and sorting
    * @param collectionId - Shopify collection ID (numeric or GID format)
-   * @param storeId - Store ID (from x-store-id header) for multi-tenant support
+   * @param storeId - Required Store ID (from x-store-id header) for multi-tenant support
    * @param limit - Number of products per page (default: 20)
    * @param cursor - Pagination cursor for fetching next page
    * @param sortKey - Sort order for products
@@ -69,39 +69,25 @@ export class CollectionController extends Controller {
       // Shopify Storefront API may not support variantOption filtering
       const shopifyFilters = parsedFilters.filter(f => !f.variantOption);
 
-      // Validate storeId format if provided
-      if (storeId && !mongoose.Types.ObjectId.isValid(storeId)) {
+      // Require explicit store context so mobile collection reads cannot fall back to
+      // process-wide Shopify credentials and accidentally query another tenant.
+      if (!storeId) {
+        this.setStatus(400);
+        throw new Error('x-store-id header is required');
+      }
+
+      if (!mongoose.Types.ObjectId.isValid(storeId)) {
         this.setStatus(400);
         throw new Error('Invalid Store ID format');
       }
 
-      let shopifyResponse: any;
-
-      if (storeId) {
-        // Multi-tenant: Use store-specific credentials from Store document
-        // x-store-id determines which store's Shopify to query
-        shopifyResponse = await shopifyStorefront.getCollectionProductsForStore(storeId, collectionId, {
-          limit: effectiveLimit,
-          cursor,
-          sortKey: effectiveSortKey,
-          reverse: reverse || false,
-          filters: shopifyFilters.length > 0 ? shopifyFilters : [],
-        });
-      } else {
-        // No storeId: Use env vars (backward compatibility for single-tenant setups)
-        if (!shopifyStorefront.isConfigured()) {
-          this.setStatus(500);
-          throw new Error('Shopify not configured');
-        }
-
-        shopifyResponse = await shopifyStorefront.getCollectionProducts(collectionId, {
-          limit: effectiveLimit,
-          cursor,
-          sortKey: effectiveSortKey,
-          reverse: reverse || false,
-          filters: shopifyFilters.length > 0 ? shopifyFilters : [],
-        });
-      }
+      const shopifyResponse = await shopifyStorefront.getCollectionProductsForStore(storeId, collectionId, {
+        limit: effectiveLimit,
+        cursor,
+        sortKey: effectiveSortKey,
+        reverse: reverse || false,
+        filters: shopifyFilters.length > 0 ? shopifyFilters : [],
+      });
 
       // Check for Shopify GraphQL errors
       if (shopifyResponse?.errors) {
@@ -163,7 +149,7 @@ export class CollectionController extends Controller {
 
       if (error instanceof Error && error.message === 'Collection not found') {
         this.setStatus(404);
-      } else if (error instanceof Error && (error.message.includes('Invalid filters') || error.message === 'Invalid Store ID format')) {
+      } else if (error instanceof Error && (error.message.includes('Invalid filters') || error.message === 'Invalid Store ID format' || error.message === 'x-store-id header is required')) {
         this.setStatus(400);
       } else if (error instanceof Error && (error.message === 'Store not found' || error.message === 'Store is not active')) {
         this.setStatus(404);
