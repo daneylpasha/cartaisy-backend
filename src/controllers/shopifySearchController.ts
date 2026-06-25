@@ -173,6 +173,7 @@ export class ShopifySearchController extends Controller {
    * Track Product Click
    * Track when user clicks on a search result
    *
+   * @param storeId - Required Store ID (from x-store-id header) for multi-tenant scoping
    * @param query - The search query
    * @param productId - The clicked product ID
    */
@@ -180,19 +181,28 @@ export class ShopifySearchController extends Controller {
   @TsoaResponse(400, 'Bad Request')
   @TsoaResponse(500, 'Internal Server Error')
   public async trackProductClick(
+    @Header('x-store-id') storeId: string,
     @Body() body: { query: string; productId: string }
   ): Promise<{ success: boolean; message: string }> {
     try {
       const { query, productId } = body;
 
-      if (!query || !productId) {
-        this.setStatus(400);
-        throw new Error('Query and productId are required');
+      if (!storeId || !mongoose.Types.ObjectId.isValid(storeId)) {
+        throw new ApiError('A valid x-store-id header is required', 400);
       }
 
-      // Find the most recent search with this query and update it
+      if (!query || !productId) {
+        throw new ApiError('Query and productId are required', 400);
+      }
+
+      // Find the most recent search for this store with this query and update it.
+      // Scoping by storeId prevents a click in one store from overwriting another
+      // store's search record (cross-tenant analytics corruption).
       await SearchHistory.findOneAndUpdate(
-        { query: query.toLowerCase().trim() },
+        {
+          storeId: new mongoose.Types.ObjectId(storeId),
+          query: query.toLowerCase().trim(),
+        },
         { selectedProduct: productId },
         { sort: { createdAt: -1 } }
       );
@@ -203,9 +213,6 @@ export class ShopifySearchController extends Controller {
       };
     } catch (error) {
       console.error('Error tracking product click:', error);
-      if (!this.getStatus || this.getStatus() === 200) {
-        this.setStatus(500);
-      }
       throw error;
     }
   }

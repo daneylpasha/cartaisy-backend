@@ -1500,6 +1500,7 @@ export function RegisterRoutes(app: Router) {
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsShopifySearchController_trackProductClick: Record<string, TsoaRoute.ParameterSchema> = {
+                storeId: {"in":"header","name":"x-store-id","required":true,"dataType":"string"},
                 body: {"in":"body","name":"body","required":true,"dataType":"nestedObjectLiteral","nestedProperties":{"productId":{"dataType":"string","required":true},"query":{"dataType":"string","required":true}}},
         };
         app.post('/api/v1/search/track-click',

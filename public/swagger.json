@@ -4968,7 +4968,17 @@
 					"Search"
 				],
 				"security": [],
-				"parameters": [],
+				"parameters": [
+					{
+						"description": "- Required Store ID (from x-store-id header) for multi-tenant scoping",
+						"in": "header",
+						"name": "x-store-id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
 				"requestBody": {
 					"required": true,
 					"content": {
