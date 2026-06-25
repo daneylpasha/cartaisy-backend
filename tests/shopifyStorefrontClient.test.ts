@@ -286,4 +286,86 @@ describe('ShopifyStorefrontService tenant-scoped client contract', () => {
     });
     expect(mockedAxios.create).not.toHaveBeenCalled();
   });
+  it('fetches product detail with the tenant-scoped Storefront client', async () => {
+    const store = await createStore();
+    const shopifyResponse = {
+      data: {
+        product: {
+          id: 'gid://shopify/Product/123',
+          title: 'Tenant Product',
+        },
+      },
+    };
+    postMock.mockResolvedValueOnce({ data: shopifyResponse });
+
+    const response = await shopifyStorefront.getProductByIdForStore(
+      store._id.toString(),
+      '123',
+      'US'
+    );
+
+    expect(response).toEqual(shopifyResponse);
+    expect(mockedAxios.create).toHaveBeenCalledWith(expect.objectContaining({
+      baseURL: 'https://tenant-shop.myshopify.com/api/2025-01/graphql.json',
+      headers: expect.objectContaining({
+        'X-Shopify-Storefront-Access-Token': 'tenant-storefront-token',
+      }),
+    }));
+    expect(postMock).toHaveBeenCalledWith('', expect.objectContaining({
+      variables: {
+        id: 'gid://shopify/Product/123',
+        country: 'US',
+      },
+    }));
+  });
+
+  it('fails product detail with a controlled error for missing Storefront token', async () => {
+    const store = await createStore({
+      shopify: {
+        shop: 'tenant-shop.myshopify.com',
+        storefrontAccessToken: '',
+        scope: 'read_products',
+        isConnected: true,
+      },
+    });
+
+    await expect(
+      shopifyStorefront.getProductByIdForStore(store._id.toString(), '123')
+    ).rejects.toMatchObject({
+      name: ApiError.name,
+      // Sensitive misconfiguration is not leaked to clients; the specific reason is logged server-side only.
+      message: 'Shopify not configured for this store',
+      statusCode: 400,
+      expose: false,
+    });
+    expect(mockedAxios.create).not.toHaveBeenCalled();
+  });
+
+  it('fails product detail with a controlled error when the store does not exist', async () => {
+    const missingStoreId = new mongoose.Types.ObjectId().toString();
+
+    await expect(
+      shopifyStorefront.getProductByIdForStore(missingStoreId, '123')
+    ).rejects.toMatchObject({
+      name: ApiError.name,
+      message: 'Store not found',
+      statusCode: 404,
+      expose: true,
+    });
+    expect(mockedAxios.create).not.toHaveBeenCalled();
+  });
+
+  it('fails product detail with a controlled error when the store is inactive', async () => {
+    const store = await createStore({ isActive: false });
+
+    await expect(
+      shopifyStorefront.getProductByIdForStore(store._id.toString(), '123')
+    ).rejects.toMatchObject({
+      name: ApiError.name,
+      message: 'Store is not active',
+      statusCode: 403,
+      expose: true,
+    });
+    expect(mockedAxios.create).not.toHaveBeenCalled();
+  });
 });

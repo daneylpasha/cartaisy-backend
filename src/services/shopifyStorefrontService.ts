@@ -522,10 +522,24 @@ class ShopifyStorefrontService {
    * Get a single product by ID using a specific store's Storefront credentials.
    */
   async getProductByIdForStore(storeId: string, productId: string, countryCode?: string): Promise<any> {
-    const storeClient = await this.getStoreClient(storeId);
+    const storeClient = await this.getStorefrontClientForStore(storeId);
 
     if (!storeClient.isConfigured) {
-      throw new Error('Shopify not configured for this store');
+      // formatErrorResponse surfaces ApiError.message to clients regardless of the
+      // expose flag, so only emit the resolver's specific reason when it is safe to
+      // expose. Sensitive cases (e.g. a missing Storefront token) fall back to a
+      // generic message; the detailed reason is already logged by
+      // getStorefrontClientForStore.
+      const expose = storeClient.expose ?? false;
+      throw new ApiError(
+        expose
+          ? storeClient.error || 'Shopify not configured for this store'
+          : 'Shopify not configured for this store',
+        storeClient.statusCode || 400,
+        true,
+        undefined,
+        expose
+      );
     }
 
     return storeClient.query<any>(this.getProductByIdQuery(), {

@@ -11,6 +11,7 @@ import {
   ProductBadges,
   ProductMetafield,
 } from '../types/api/productDetail';
+import { ApiError } from '../utils/errors';
 
 /**
  * Product Detail Controller
@@ -122,8 +123,15 @@ export class ProductDetailController extends Controller {
         error instanceof Error ? error.message : 'Unknown error'
       );
 
-      if (error instanceof Error && error.message === 'Product not found') {
+      if (error instanceof ApiError) {
+        this.setStatus(error.statusCode);
+      } else if (error instanceof Error && error.message === 'Product not found') {
         this.setStatus(404);
+      } else if (
+        error instanceof Error &&
+        (error.message === 'Invalid Store ID format' || error.message === 'x-store-id header is required')
+      ) {
+        this.setStatus(400);
       } else {
         this.setStatus(500);
       }
