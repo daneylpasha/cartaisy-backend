@@ -2,6 +2,7 @@ import { Body, Controller, Get, Header, Post, Query, Request, Route, Security, T
 import mongoose from 'mongoose';
 import shopifyStorefront from '../services/shopifyStorefrontService';
 import SearchHistory from '../models/SearchHistory';
+import { ApiError } from '../utils/errors';
 import {
   PredictiveSearchResponse,
   SearchProductsResponse,
@@ -26,6 +27,7 @@ export class ShopifySearchController extends Controller {
    * Fast search for autocomplete dropdown (< 100ms typical response time)
    *
    * @param q - Search query (2+ characters recommended)
+   * @param storeId - Required Store ID (from x-store-id header) for multi-tenant scoping
    * @param limit - Number of results per type (default: 10, max: 10 per Shopify)
    */
   @Get('suggestions')
@@ -33,23 +35,16 @@ export class ShopifySearchController extends Controller {
   @TsoaResponse(500, 'Internal Server Error')
   public async shopifyGetSearchSuggestions(
     @Query() q: string,
-    @Header('x-store-id') storeId?: string,
+    @Header('x-store-id') storeId: string,
     @Query() limit?: number
   ): Promise<PredictiveSearchResponse> {
     try {
       if (!q || q.trim().length < 2) {
-        this.setStatus(400);
-        throw new Error('Search query must be at least 2 characters');
+        throw new ApiError('Search query must be at least 2 characters', 400);
       }
 
-      if (!storeId) {
-        this.setStatus(400);
-        throw new Error('x-store-id header is required');
-      }
-
-      if (!mongoose.Types.ObjectId.isValid(storeId)) {
-        this.setStatus(400);
-        throw new Error('Invalid Store ID format');
+      if (!storeId || !mongoose.Types.ObjectId.isValid(storeId)) {
+        throw new ApiError('A valid x-store-id header is required', 400);
       }
 
       const effectiveLimit = Math.min(limit || 10, 10); // Shopify limit is 10
@@ -58,13 +53,11 @@ export class ShopifySearchController extends Controller {
 
       if (shopifyResponse?.errors) {
         console.error('Shopify GraphQL errors:', shopifyResponse.errors);
-        this.setStatus(500);
-        throw new Error(`Shopify API error: ${shopifyResponse.errors[0]?.message || 'Unknown error'}`);
+        throw new ApiError(`Shopify API error: ${shopifyResponse.errors[0]?.message || 'Unknown error'}`, 502);
       }
 
       if (!shopifyResponse?.data?.predictiveSearch) {
-        this.setStatus(500);
-        throw new Error('Invalid response from Shopify');
+        throw new ApiError('Invalid response from Shopify', 502);
       }
 
       const { products, collections } = shopifyResponse.data.predictiveSearch;
@@ -87,9 +80,6 @@ export class ShopifySearchController extends Controller {
       };
     } catch (error) {
       console.error('Error in predictive search:', error);
-      if (!this.getStatus || this.getStatus() === 200) {
-        this.setStatus(500);
-      }
       throw error;
     }
   }
@@ -107,6 +97,7 @@ export class ShopifySearchController extends Controller {
    * - "available:true" - Only available products
    *
    * @param q - Search query
+   * @param storeId - Required Store ID (from x-store-id header) for multi-tenant scoping
    * @param limit - Results per page (default: 20)
    * @param cursor - Pagination cursor
    * @param sortKey - Sort order
@@ -117,7 +108,7 @@ export class ShopifySearchController extends Controller {
   @TsoaResponse(500, 'Internal Server Error')
   public async searchProducts(
     @Query() q: string,
-    @Header('x-store-id') storeId?: string,
+    @Header('x-store-id') storeId: string,
     @Query() limit?: number,
     @Query() cursor?: string,
     @Query() sortKey?: SearchSortKey,
@@ -125,18 +116,11 @@ export class ShopifySearchController extends Controller {
   ): Promise<SearchProductsResponse> {
     try {
       if (!q || q.trim().length < 2) {
-        this.setStatus(400);
-        throw new Error('Search query must be at least 2 characters');
+        throw new ApiError('Search query must be at least 2 characters', 400);
       }
 
-      if (!storeId) {
-        this.setStatus(400);
-        throw new Error('x-store-id header is required');
-      }
-
-      if (!mongoose.Types.ObjectId.isValid(storeId)) {
-        this.setStatus(400);
-        throw new Error('Invalid Store ID format');
+      if (!storeId || !mongoose.Types.ObjectId.isValid(storeId)) {
+        throw new ApiError('A valid x-store-id header is required', 400);
       }
 
       const effectiveLimit = limit || 20;
@@ -152,13 +136,11 @@ export class ShopifySearchController extends Controller {
 
       if (shopifyResponse?.errors) {
         console.error('Shopify GraphQL errors:', shopifyResponse.errors);
-        this.setStatus(500);
-        throw new Error(`Shopify API error: ${shopifyResponse.errors[0]?.message || 'Unknown error'}`);
+        throw new ApiError(`Shopify API error: ${shopifyResponse.errors[0]?.message || 'Unknown error'}`, 502);
       }
 
       if (!shopifyResponse?.data?.products) {
-        this.setStatus(500);
-        throw new Error('Invalid response from Shopify');
+        throw new ApiError('Invalid response from Shopify', 502);
       }
 
       const products = this.transformProducts(shopifyResponse.data.products.edges);
@@ -183,9 +165,6 @@ export class ShopifySearchController extends Controller {
       };
     } catch (error) {
       console.error('Error in product search:', error);
-      if (!this.getStatus || this.getStatus() === 200) {
-        this.setStatus(500);
-      }
       throw error;
     }
   }

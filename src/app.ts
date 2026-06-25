@@ -322,6 +322,8 @@ try {
 // Custom error interface
 interface CustomError extends Error {
   status?: number;
+  statusCode?: number;
+  isOperational?: boolean;
   stack?: string;
 }
 
@@ -329,16 +331,21 @@ interface CustomError extends Error {
 const errorHandler: ErrorRequestHandler = (err: CustomError, req: Request, res: Response, _next: NextFunction) => {
   console.error('Error details:', err);
 
+  // Resolve status from tsoa ValidateError (`status`) or our ApiError (`statusCode`).
+  const statusCode = err.status || err.statusCode || 500;
+
   // Determine if error message should be shown to user
-  // Show meaningful messages for checkout/payment errors even in production
+  // Show meaningful messages for checkout/payment errors even in production,
+  // and for operational client errors (4xx) which carry actionable messages.
   const isCheckoutError = req.path.includes('/checkout');
   const isPaymentError = err.message?.includes('payment') ||
                          err.message?.includes('Payment') ||
                          err.message?.includes('Stripe') ||
                          err.message?.includes('card');
-  const showMessage = !derivedConfig.isProduction || isCheckoutError || isPaymentError;
+  const isClientError = statusCode >= 400 && statusCode < 500;
+  const showMessage = !derivedConfig.isProduction || isCheckoutError || isPaymentError || isClientError;
 
-  res.status(err.status || 500).json({
+  res.status(statusCode).json({
     status: 'error',
     message: showMessage ? err.message : 'Something went wrong!',
     ...(derivedConfig.isDevelopment && { stack: err.stack })

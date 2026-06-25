@@ -10,6 +10,7 @@ import {
   SearchSortKey,
 } from '../types/api/search';
 import Store from '../models/Store';
+import { ApiError } from '../utils/errors';
 
 /**
  * Shopify Storefront API Service
@@ -1666,13 +1667,18 @@ class ShopifyStorefrontService {
     query: <T>(graphqlQuery: string, variables?: any) => Promise<T>;
     isConfigured: boolean;
     shopDomain: string;
+    // When isConfigured is false, these describe the failure so callers can
+    // surface an accurate HTTP status instead of a generic 500.
+    error?: string;
+    statusCode?: number;
   }> {
     try {
       const store = await Store.findById(storeId)
         .select('isActive shopify')
         .lean();
 
-      // Check if store exists
+      // Check if store exists — a syntactically valid but unknown ID is a client
+      // error (404), not a server fault.
       if (!store) {
         console.warn(`Store ${storeId} not found`);
         return {
@@ -1681,6 +1687,8 @@ class ShopifyStorefrontService {
           },
           isConfigured: false,
           shopDomain: '',
+          error: 'Store not found',
+          statusCode: 404,
         };
       }
 
@@ -1693,6 +1701,8 @@ class ShopifyStorefrontService {
           },
           isConfigured: false,
           shopDomain: '',
+          error: 'Store is not active',
+          statusCode: 403,
         };
       }
 
@@ -1704,6 +1714,8 @@ class ShopifyStorefrontService {
           },
           isConfigured: false,
           shopDomain: '',
+          error: 'Store not connected to Shopify',
+          statusCode: 400,
         };
       }
 
@@ -1720,6 +1732,8 @@ class ShopifyStorefrontService {
           },
           isConfigured: false,
           shopDomain: '',
+          error: 'Store missing Storefront API access token. Please configure storefrontAccessToken.',
+          statusCode: 400,
         };
       }
 
@@ -1768,6 +1782,8 @@ class ShopifyStorefrontService {
         },
         isConfigured: false,
         shopDomain: '',
+        error: 'Failed to initialize Shopify client',
+        statusCode: 500,
       };
     }
   }
@@ -1785,7 +1801,10 @@ class ShopifyStorefrontService {
     const storeClient = await this.getStoreClient(storeId);
 
     if (!storeClient.isConfigured) {
-      throw new Error('Shopify not configured for this store');
+      throw new ApiError(
+        storeClient.error || 'Shopify not configured for this store',
+        storeClient.statusCode || 400
+      );
     }
 
     const graphqlQuery = `
@@ -1857,7 +1876,10 @@ class ShopifyStorefrontService {
     const storeClient = await this.getStoreClient(storeId);
 
     if (!storeClient.isConfigured) {
-      throw new Error('Shopify not configured for this store');
+      throw new ApiError(
+        storeClient.error || 'Shopify not configured for this store',
+        storeClient.statusCode || 400
+      );
     }
 
     const { limit = 20, cursor, sortKey = 'RELEVANCE', reverse = false, countryCode } = options;
