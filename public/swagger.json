@@ -4818,6 +4818,12 @@
 								}
 							}
 						}
+					},
+					"400": {
+						"description": "Bad Request"
+					},
+					"500": {
+						"description": "Internal Server Error"
 					}
 				},
 				"description": "Predictive Search - Autocomplete/Suggestions\nFast search for autocomplete dropdown (< 100ms typical response time)",
@@ -4869,6 +4875,12 @@
 								}
 							}
 						}
+					},
+					"400": {
+						"description": "Bad Request"
+					},
+					"500": {
+						"description": "Internal Server Error"
 					}
 				},
 				"description": "Full Product Search - Search Results Page\nComprehensive search with pagination, filtering, and sorting\n\nShopify search query syntax:\n- \"laptop\" - Simple keyword\n- \"title:laptop\" - Search in title only\n- \"tag:electronics\" - Filter by tag\n- \"vendor:Apple\" - Filter by vendor\n- \"product_type:Computers\" - Filter by product type\n- \"available:true\" - Only available products",
@@ -4959,6 +4971,12 @@
 								}
 							}
 						}
+					},
+					"400": {
+						"description": "Bad Request"
+					},
+					"500": {
+						"description": "Internal Server Error"
 					}
 				},
 				"description": "Track Product Click\nTrack when user clicks on a search result",
@@ -5004,6 +5022,9 @@
 								}
 							}
 						}
+					},
+					"500": {
+						"description": "Internal Server Error"
 					}
 				},
 				"description": "Get Popular Searches\nReturns most frequently searched terms",
@@ -5048,6 +5069,12 @@
 								}
 							}
 						}
+					},
+					"401": {
+						"description": "Unauthorized"
+					},
+					"500": {
+						"description": "Internal Server Error"
 					}
 				},
 				"description": "Get User's Recent Searches\nReturns authenticated user's recent search history",
@@ -5102,6 +5129,12 @@
 								}
 							}
 						}
+					},
+					"401": {
+						"description": "Unauthorized"
+					},
+					"500": {
+						"description": "Internal Server Error"
 					}
 				},
 				"description": "Clear User's Search History\nDeletes authenticated user's search history",
