@@ -2129,6 +2129,7 @@ export function RegisterRoutes(app: Router) {
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsProductDetailController_getProductDetail: Record<string, TsoaRoute.ParameterSchema> = {
                 productId: {"in":"path","name":"productId","required":true,"dataType":"string"},
+                storeId: {"in":"header","name":"x-store-id","dataType":"string"},
                 country: {"in":"query","name":"country","dataType":"string"},
         };
         app.get('/api/v1/products/:productId',

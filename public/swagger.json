@@ -6057,6 +6057,9 @@
 							}
 						}
 					},
+					"400": {
+						"description": "Bad Request"
+					},
 					"404": {
 						"description": "Product not found"
 					},
@@ -6075,6 +6078,15 @@
 						"in": "path",
 						"name": "productId",
 						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"description": "- Required Store ID (from x-store-id header) for multi-tenant support",
+						"in": "header",
+						"name": "x-store-id",
+						"required": false,
 						"schema": {
 							"type": "string"
 						}
@@ -7831,7 +7843,7 @@
 						}
 					},
 					{
-						"description": "- Store ID (from x-store-id header) for multi-tenant support",
+						"description": "- Required Store ID (from x-store-id header) for multi-tenant support",
 						"in": "header",
 						"name": "x-store-id",
 						"required": false,

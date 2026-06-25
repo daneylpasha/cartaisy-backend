@@ -415,13 +415,14 @@ class ShopifyStorefrontService {
    * @param productId - Shopify product ID
    * @param countryCode - ISO country code for multi-currency pricing (e.g., 'US', 'GB', 'CA')
    */
-  async getProductById(productId: string, countryCode?: string): Promise<any> {
-    // Format ID to Shopify GID format if needed
-    const formattedId = productId.startsWith('gid://shopify/Product/')
+  private formatProductId(productId: string): string {
+    return productId.startsWith('gid://shopify/Product/')
       ? productId
       : `gid://shopify/Product/${productId}`;
+  }
 
-    const query = `
+  private getProductByIdQuery(): string {
+    return `
       query getProductById($id: ID!, $country: CountryCode) @inContext(country: $country) {
         product(id: $id) {
           id
@@ -487,8 +488,29 @@ class ShopifyStorefrontService {
         }
       }
     `;
+  }
 
-    return this.query<any>(query, { id: formattedId, country: countryCode || null });
+  async getProductById(productId: string, countryCode?: string): Promise<any> {
+    return this.query<any>(this.getProductByIdQuery(), {
+      id: this.formatProductId(productId),
+      country: countryCode || null,
+    });
+  }
+
+  /**
+   * Get a single product by ID using a specific store's Storefront credentials.
+   */
+  async getProductByIdForStore(storeId: string, productId: string, countryCode?: string): Promise<any> {
+    const storeClient = await this.getStoreClient(storeId);
+
+    if (!storeClient.isConfigured) {
+      throw new Error('Shopify not configured for this store');
+    }
+
+    return storeClient.query<any>(this.getProductByIdQuery(), {
+      id: this.formatProductId(productId),
+      country: countryCode || null,
+    });
   }
 
   /**

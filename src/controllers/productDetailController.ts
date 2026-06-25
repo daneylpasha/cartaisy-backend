@@ -1,5 +1,6 @@
-import { Get, Route, Tags, Response, Path, Query } from 'tsoa';
+import { Get, Route, Tags, Response, Path, Query, Header } from 'tsoa';
 import { Controller } from '@tsoa/runtime';
+import mongoose from 'mongoose';
 import shopifyStorefront from '../services/shopifyStorefrontService';
 import ProductMetrics from '../models/ProductMetrics';
 import Product from '../models/Product';
@@ -21,23 +22,33 @@ export class ProductDetailController extends Controller {
   /**
    * Get detailed product information by ID
    * @param productId - Shopify product ID (numeric or GID format)
+   * @param storeId - Required Store ID (from x-store-id header) for multi-tenant support
    * @param country - ISO 3166-1 alpha-2 country code for multi-currency pricing (e.g., 'US', 'GB', 'CA')
    */
   @Get('{productId}')
+  @Response(400, 'Bad Request')
   @Response(404, 'Product not found')
   @Response(500, 'Internal Server Error')
   public async getProductDetail(
     @Path() productId: string,
+    @Header('x-store-id') storeId?: string,
     @Query() country?: string
   ): Promise<ProductDetailResponse> {
     try {
-      if (!shopifyStorefront.isConfigured()) {
-        this.setStatus(500);
-        throw new Error('Shopify not configured');
+      // Require explicit store context so mobile product reads cannot fall back to
+      // process-wide Shopify credentials and accidentally query another tenant.
+      if (!storeId) {
+        this.setStatus(400);
+        throw new Error('x-store-id header is required');
       }
 
-      // Fetch product from Shopify with country context for multi-currency pricing
-      const shopifyResponse = await shopifyStorefront.getProductById(productId, country);
+      if (!mongoose.Types.ObjectId.isValid(storeId)) {
+        this.setStatus(400);
+        throw new Error('Invalid Store ID format');
+      }
+
+      // Fetch product from Shopify with store-specific credentials and country context.
+      const shopifyResponse = await shopifyStorefront.getProductByIdForStore(storeId, productId, country);
 
       if (!shopifyResponse?.data?.product) {
         this.setStatus(404);
@@ -53,13 +64,9 @@ export class ProductDetailController extends Controller {
       const [productMetrics, productData, metafieldsResponse] = await Promise.all([
         ProductMetrics.findOne({ productId: numericProductId }).lean(),
         Product.findOne({ productId: numericProductId }).lean(),
-        // Fetch metafields from Admin API (gracefully handle if not configured)
-        shopifyStorefront.isAdminConfigured()
-          ? shopifyStorefront.getProductMetafields(productId).catch((error) => {
-              console.error('Failed to fetch metafields from Admin API:', error.message);
-              return { data: { product: { metafields: { edges: [] } } } };
-            })
-          : Promise.resolve({ data: { product: { metafields: { edges: [] } } } }),
+        // Avoid the process-wide Admin API client in tenant-scoped mobile reads.
+        // Store-scoped metafield hydration should be added with a tenant-specific Admin client.
+        Promise.resolve({ data: { product: { metafields: { edges: [] } } } }),
       ]);
 
       // Transform Shopify product data
