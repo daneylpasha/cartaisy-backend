@@ -12,8 +12,19 @@ import {
 import Store from '../models/Store';
 import { ApiError } from '../utils/errors';
 
+export interface ShopifyStorefrontResponse<TData = unknown> {
+  data: TData;
+  errors?: Array<{
+    message: string;
+    extensions?: Record<string, unknown>;
+  }>;
+}
+
 export interface ShopifyStorefrontClient {
-  query: <T>(graphqlQuery: string, variables?: any) => Promise<T>;
+  query: <TData = unknown>(
+    graphqlQuery: string,
+    variables?: any
+  ) => Promise<ShopifyStorefrontResponse<TData>>;
   isConfigured: boolean;
   shopDomain: string;
   error?: string;
@@ -1673,7 +1684,9 @@ class ShopifyStorefrontService {
    * @returns Object with query function and isConfigured flag
    */
   async getStorefrontClientForStore(storeId: string): Promise<ShopifyStorefrontClient> {
-    if (!storeId) {
+    const normalizedStoreId = storeId?.trim();
+
+    if (!normalizedStoreId) {
       return {
         query: async () => {
           throw new Error('storeId is required');
@@ -1686,8 +1699,21 @@ class ShopifyStorefrontService {
       };
     }
 
+    if (!/^[0-9a-fA-F]{24}$/.test(normalizedStoreId)) {
+      return {
+        query: async () => {
+          throw new Error('storeId must be a valid ObjectId');
+        },
+        isConfigured: false,
+        shopDomain: '',
+        error: 'storeId must be a valid ObjectId',
+        statusCode: 400,
+        expose: true,
+      };
+    }
+
     try {
-      const store = await Store.findById(storeId)
+      const store = await Store.findById(normalizedStoreId)
         .select('isActive shopify')
         .lean();
 
@@ -1781,7 +1807,10 @@ class ShopifyStorefrontService {
         timeout: 10000,
       });
 
-      const query = async <T>(graphqlQuery: string, variables: any = {}): Promise<T> => {
+      const query = async <TData = unknown>(
+        graphqlQuery: string,
+        variables: any = {}
+      ): Promise<ShopifyStorefrontResponse<TData>> => {
         try {
           const response = await client.post('', {
             query: graphqlQuery,
@@ -1893,7 +1922,7 @@ class ShopifyStorefrontService {
       }
     `;
 
-    return storeClient.query<ShopifyPredictiveSearchResponse>(graphqlQuery, {
+    return storeClient.query<ShopifyPredictiveSearchResponse['data']>(graphqlQuery, {
       query: searchQuery,
       limit,
       country: countryCode || null,
@@ -1997,7 +2026,7 @@ class ShopifyStorefrontService {
       }
     `;
 
-    return storeClient.query<ShopifySearchProductsResponse>(graphqlQuery, {
+    return storeClient.query<ShopifySearchProductsResponse['data']>(graphqlQuery, {
       query,
       limit,
       cursor,

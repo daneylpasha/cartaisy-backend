@@ -50,7 +50,7 @@ describe('ShopifyStorefrontService tenant-scoped client contract', () => {
       }),
     }));
 
-    await expect(client.query('query TestStorefrontClient')).resolves.toEqual({
+    await expect(client.query<{ ok: boolean }>('query TestStorefrontClient')).resolves.toEqual({
       data: { ok: true },
     });
     expect(postMock).toHaveBeenCalledWith('', {
@@ -70,6 +70,20 @@ describe('ShopifyStorefrontService tenant-scoped client contract', () => {
       expose: true,
     });
     await expect(client.query('query Test')).rejects.toThrow('storeId is required');
+  });
+
+  it('fails clearly when storeId is malformed', async () => {
+    const client = await shopifyStorefront.getStorefrontClientForStore('not-an-object-id');
+
+    expect(client).toMatchObject({
+      isConfigured: false,
+      shopDomain: '',
+      error: 'storeId must be a valid ObjectId',
+      statusCode: 400,
+      expose: true,
+    });
+    await expect(client.query('query Test')).rejects.toThrow('storeId must be a valid ObjectId');
+    expect(mockedAxios.create).not.toHaveBeenCalled();
   });
 
   it('fails clearly when the store does not exist', async () => {
@@ -124,6 +138,28 @@ describe('ShopifyStorefrontService tenant-scoped client contract', () => {
     await expect(client.query('query Test')).rejects.toThrow('Store missing Shopify shop domain');
   });
 
+  it('fails clearly when Shopify is disconnected', async () => {
+    const store = await createStore({
+      shopify: {
+        shop: 'tenant-shop.myshopify.com',
+        storefrontAccessToken: 'tenant-storefront-token',
+        scope: 'read_products',
+        isConnected: false,
+      },
+    });
+
+    const client = await shopifyStorefront.getStorefrontClientForStore(store._id.toString());
+
+    expect(client).toMatchObject({
+      isConfigured: false,
+      shopDomain: '',
+      error: 'Store not connected to Shopify',
+      statusCode: 400,
+      expose: true,
+    });
+    await expect(client.query('query Test')).rejects.toThrow('Store not connected to Shopify');
+  });
+
   it('fails clearly when Storefront token is missing', async () => {
     const store = await createStore({
       shopify: {
@@ -142,6 +178,7 @@ describe('ShopifyStorefrontService tenant-scoped client contract', () => {
       error: 'Store missing Storefront API access token. Please configure storefrontAccessToken.',
       statusCode: 400,
     });
+    expect(client.expose).toBeUndefined();
     await expect(client.query('query Test')).rejects.toThrow(
       'Store missing Storefront API access token. Please configure storefrontAccessToken.'
     );
