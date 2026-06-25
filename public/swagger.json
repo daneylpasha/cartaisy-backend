@@ -4838,7 +4838,7 @@
 					{
 						"in": "header",
 						"name": "x-store-id",
-						"required": false,
+						"required": true,
 						"schema": {
 							"type": "string"
 						}
@@ -4889,7 +4889,7 @@
 					{
 						"in": "header",
 						"name": "x-store-id",
-						"required": false,
+						"required": true,
 						"schema": {
 							"type": "string"
 						}

@@ -33,7 +33,7 @@ export class ShopifySearchController extends Controller {
   @TsoaResponse(500, 'Internal Server Error')
   public async shopifyGetSearchSuggestions(
     @Query() q: string,
-    @Header('x-store-id') storeId?: string,
+    @Header('x-store-id') storeId: string,
     @Query() limit?: number
   ): Promise<PredictiveSearchResponse> {
     try {
@@ -117,7 +117,7 @@ export class ShopifySearchController extends Controller {
   @TsoaResponse(500, 'Internal Server Error')
   public async searchProducts(
     @Query() q: string,
-    @Header('x-store-id') storeId?: string,
+    @Header('x-store-id') storeId: string,
     @Query() limit?: number,
     @Query() cursor?: string,
     @Query() sortKey?: SearchSortKey,
