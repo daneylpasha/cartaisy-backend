@@ -12,6 +12,26 @@ import {
 import Store from '../models/Store';
 import { ApiError } from '../utils/errors';
 
+export interface ShopifyStorefrontResponse<TData = unknown> {
+  data: TData;
+  errors?: Array<{
+    message: string;
+    extensions?: Record<string, unknown>;
+  }>;
+}
+
+export interface ShopifyStorefrontClient {
+  query: <TData = unknown>(
+    graphqlQuery: string,
+    variables?: any
+  ) => Promise<ShopifyStorefrontResponse<TData>>;
+  isConfigured: boolean;
+  shopDomain: string;
+  error?: string;
+  statusCode?: number;
+  expose?: boolean;
+}
+
 /**
  * Shopify Storefront API Service
  * Handles all GraphQL queries to Shopify Storefront API
@@ -1658,25 +1678,42 @@ class ShopifyStorefrontService {
   }
 
   /**
-   * Create a store-specific Storefront API query function
-   * Fetches credentials from the Store model and returns a query function
+   * Create a tenant-scoped Storefront API query function.
+   * Fetches credentials from the Store model and never falls back to global credentials.
    * @param storeId - MongoDB Store ID
    * @returns Object with query function and isConfigured flag
    */
-  async getStoreClient(storeId: string): Promise<{
-    query: <T>(graphqlQuery: string, variables?: any) => Promise<T>;
-    isConfigured: boolean;
-    shopDomain: string;
-    // When isConfigured is false, these describe the failure so callers can
-    // surface an accurate HTTP status instead of a generic 500. `expose` marks
-    // messages that are safe to return to API consumers in production (i.e. they
-    // carry no internal implementation details).
-    error?: string;
-    statusCode?: number;
-    expose?: boolean;
-  }> {
+  async getStorefrontClientForStore(storeId: string): Promise<ShopifyStorefrontClient> {
+    const normalizedStoreId = storeId?.trim();
+
+    if (!normalizedStoreId) {
+      return {
+        query: async () => {
+          throw new Error('storeId is required');
+        },
+        isConfigured: false,
+        shopDomain: '',
+        error: 'storeId is required',
+        statusCode: 400,
+        expose: true,
+      };
+    }
+
+    if (!/^[0-9a-fA-F]{24}$/.test(normalizedStoreId)) {
+      return {
+        query: async () => {
+          throw new Error('storeId must be a valid ObjectId');
+        },
+        isConfigured: false,
+        shopDomain: '',
+        error: 'storeId must be a valid ObjectId',
+        statusCode: 400,
+        expose: true,
+      };
+    }
+
     try {
-      const store = await Store.findById(storeId)
+      const store = await Store.findById(normalizedStoreId)
         .select('isActive shopify')
         .lean();
 
@@ -1711,7 +1748,21 @@ class ShopifyStorefrontService {
         };
       }
 
-      if (!store.shopify?.shop || !store.shopify.isConnected) {
+      if (!store.shopify?.shop) {
+        console.warn(`Store ${storeId} missing Shopify shop domain`);
+        return {
+          query: async () => {
+            throw new Error('Store missing Shopify shop domain');
+          },
+          isConfigured: false,
+          shopDomain: '',
+          error: 'Store missing Shopify shop domain',
+          statusCode: 400,
+          expose: true,
+        };
+      }
+
+      if (!store.shopify.isConnected) {
         console.warn(`Store ${storeId} not connected to Shopify`);
         return {
           query: async () => {
@@ -1756,7 +1807,10 @@ class ShopifyStorefrontService {
         timeout: 10000,
       });
 
-      const query = async <T>(graphqlQuery: string, variables: any = {}): Promise<T> => {
+      const query = async <TData = unknown>(
+        graphqlQuery: string,
+        variables: any = {}
+      ): Promise<ShopifyStorefrontResponse<TData>> => {
         try {
           const response = await client.post('', {
             query: graphqlQuery,
@@ -1795,6 +1849,12 @@ class ShopifyStorefrontService {
     }
   }
 
+  /**
+   * Backward-compatible alias for existing store-scoped callers.
+   */
+  async getStoreClient(storeId: string): Promise<ShopifyStorefrontClient> {
+    return this.getStorefrontClientForStore(storeId);
+  }
 
   /**
    * Predictive search for a specific store using tenant-scoped Storefront credentials.
@@ -1862,7 +1922,7 @@ class ShopifyStorefrontService {
       }
     `;
 
-    return storeClient.query<ShopifyPredictiveSearchResponse>(graphqlQuery, {
+    return storeClient.query<ShopifyPredictiveSearchResponse['data']>(graphqlQuery, {
       query: searchQuery,
       limit,
       country: countryCode || null,
@@ -1966,7 +2026,7 @@ class ShopifyStorefrontService {
       }
     `;
 
-    return storeClient.query<ShopifySearchProductsResponse>(graphqlQuery, {
+    return storeClient.query<ShopifySearchProductsResponse['data']>(graphqlQuery, {
       query,
       limit,
       cursor,
