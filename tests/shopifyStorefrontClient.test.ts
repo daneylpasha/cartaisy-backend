@@ -333,7 +333,8 @@ describe('ShopifyStorefrontService tenant-scoped client contract', () => {
       shopifyStorefront.getProductByIdForStore(store._id.toString(), '123')
     ).rejects.toMatchObject({
       name: ApiError.name,
-      message: 'Store missing Storefront API access token. Please configure storefrontAccessToken.',
+      // Sensitive misconfiguration is not leaked to clients; the specific reason is logged server-side only.
+      message: 'Shopify not configured for this store',
       statusCode: 400,
       expose: false,
     });
@@ -349,6 +350,20 @@ describe('ShopifyStorefrontService tenant-scoped client contract', () => {
       name: ApiError.name,
       message: 'Store not found',
       statusCode: 404,
+      expose: true,
+    });
+    expect(mockedAxios.create).not.toHaveBeenCalled();
+  });
+
+  it('fails product detail with a controlled error when the store is inactive', async () => {
+    const store = await createStore({ isActive: false });
+
+    await expect(
+      shopifyStorefront.getProductByIdForStore(store._id.toString(), '123')
+    ).rejects.toMatchObject({
+      name: ApiError.name,
+      message: 'Store is not active',
+      statusCode: 403,
       expose: true,
     });
     expect(mockedAxios.create).not.toHaveBeenCalled();

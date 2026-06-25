@@ -525,12 +525,20 @@ class ShopifyStorefrontService {
     const storeClient = await this.getStorefrontClientForStore(storeId);
 
     if (!storeClient.isConfigured) {
+      // formatErrorResponse surfaces ApiError.message to clients regardless of the
+      // expose flag, so only emit the resolver's specific reason when it is safe to
+      // expose. Sensitive cases (e.g. a missing Storefront token) fall back to a
+      // generic message; the detailed reason is already logged by
+      // getStorefrontClientForStore.
+      const expose = storeClient.expose ?? false;
       throw new ApiError(
-        storeClient.error || 'Shopify not configured for this store',
+        expose
+          ? storeClient.error || 'Shopify not configured for this store'
+          : 'Shopify not configured for this store',
         storeClient.statusCode || 400,
         true,
         undefined,
-        storeClient.expose ?? false
+        expose
       );
     }
 
