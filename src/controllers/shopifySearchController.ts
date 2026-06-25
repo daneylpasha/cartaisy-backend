@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Post, Query, Request, Route, Security, Tags, Response as TsoaResponse } from 'tsoa';
+import { Body, Controller, Get, Header, Post, Query, Request, Route, Security, Tags, Response as TsoaResponse } from 'tsoa';
+import mongoose from 'mongoose';
 import shopifyStorefront from '../services/shopifyStorefrontService';
 import SearchHistory from '../models/SearchHistory';
 import {
@@ -32,6 +33,7 @@ export class ShopifySearchController extends Controller {
   @TsoaResponse(500, 'Internal Server Error')
   public async shopifyGetSearchSuggestions(
     @Query() q: string,
+    @Header('x-store-id') storeId?: string,
     @Query() limit?: number
   ): Promise<PredictiveSearchResponse> {
     try {
@@ -40,14 +42,19 @@ export class ShopifySearchController extends Controller {
         throw new Error('Search query must be at least 2 characters');
       }
 
-      if (!shopifyStorefront.isConfigured()) {
-        this.setStatus(500);
-        throw new Error('Shopify not configured');
+      if (!storeId) {
+        this.setStatus(400);
+        throw new Error('x-store-id header is required');
+      }
+
+      if (!mongoose.Types.ObjectId.isValid(storeId)) {
+        this.setStatus(400);
+        throw new Error('Invalid Store ID format');
       }
 
       const effectiveLimit = Math.min(limit || 10, 10); // Shopify limit is 10
 
-      const shopifyResponse = await shopifyStorefront.predictiveSearch(q.trim(), effectiveLimit);
+      const shopifyResponse = await shopifyStorefront.predictiveSearchForStore(storeId, q.trim(), effectiveLimit);
 
       if (shopifyResponse?.errors) {
         console.error('Shopify GraphQL errors:', shopifyResponse.errors);
@@ -110,6 +117,7 @@ export class ShopifySearchController extends Controller {
   @TsoaResponse(500, 'Internal Server Error')
   public async searchProducts(
     @Query() q: string,
+    @Header('x-store-id') storeId?: string,
     @Query() limit?: number,
     @Query() cursor?: string,
     @Query() sortKey?: SearchSortKey,
@@ -121,16 +129,21 @@ export class ShopifySearchController extends Controller {
         throw new Error('Search query must be at least 2 characters');
       }
 
-      if (!shopifyStorefront.isConfigured()) {
-        this.setStatus(500);
-        throw new Error('Shopify not configured');
+      if (!storeId) {
+        this.setStatus(400);
+        throw new Error('x-store-id header is required');
+      }
+
+      if (!mongoose.Types.ObjectId.isValid(storeId)) {
+        this.setStatus(400);
+        throw new Error('Invalid Store ID format');
       }
 
       const effectiveLimit = limit || 20;
       const effectiveSortKey = sortKey || 'RELEVANCE';
       const effectiveReverse = reverse || false;
 
-      const shopifyResponse = await shopifyStorefront.searchProducts(q.trim(), {
+      const shopifyResponse = await shopifyStorefront.searchProductsForStore(storeId, q.trim(), {
         limit: effectiveLimit,
         cursor,
         sortKey: effectiveSortKey,

@@ -1772,6 +1772,175 @@ class ShopifyStorefrontService {
     }
   }
 
+
+  /**
+   * Predictive search for a specific store using tenant-scoped Storefront credentials.
+   */
+  async predictiveSearchForStore(
+    storeId: string,
+    searchQuery: string,
+    limit: number = 10,
+    countryCode?: string
+  ): Promise<ShopifyPredictiveSearchResponse> {
+    const storeClient = await this.getStoreClient(storeId);
+
+    if (!storeClient.isConfigured) {
+      throw new Error('Shopify not configured for this store');
+    }
+
+    const graphqlQuery = `
+      query PredictiveSearch($query: String!, $limit: Int!, $country: CountryCode) @inContext(country: $country) {
+        predictiveSearch(
+          query: $query
+          limit: $limit
+          limitScope: EACH
+          types: [PRODUCT, COLLECTION]
+        ) {
+          products {
+            id
+            title
+            handle
+            vendor
+            productType
+            tags
+            featuredImage {
+              url
+              altText
+            }
+            priceRange {
+              minVariantPrice {
+                amount
+                currencyCode
+              }
+            }
+            compareAtPriceRange {
+              minVariantPrice {
+                amount
+                currencyCode
+              }
+            }
+          }
+          collections {
+            id
+            title
+            handle
+            image {
+              url
+              altText
+            }
+          }
+        }
+      }
+    `;
+
+    return storeClient.query<ShopifyPredictiveSearchResponse>(graphqlQuery, {
+      query: searchQuery,
+      limit,
+      country: countryCode || null,
+    });
+  }
+
+  /**
+   * Full product search for a specific store using tenant-scoped Storefront credentials.
+   */
+  async searchProductsForStore(
+    storeId: string,
+    query: string,
+    options: {
+      limit?: number;
+      cursor?: string;
+      sortKey?: SearchSortKey;
+      reverse?: boolean;
+      countryCode?: string;
+    } = {}
+  ): Promise<ShopifySearchProductsResponse> {
+    const storeClient = await this.getStoreClient(storeId);
+
+    if (!storeClient.isConfigured) {
+      throw new Error('Shopify not configured for this store');
+    }
+
+    const { limit = 20, cursor, sortKey = 'RELEVANCE', reverse = false, countryCode } = options;
+
+    const graphqlQuery = `
+      query SearchProducts($query: String!, $limit: Int!, $cursor: String, $sortKey: ProductSortKeys!, $reverse: Boolean!, $country: CountryCode) @inContext(country: $country) {
+        products(first: $limit, after: $cursor, query: $query, sortKey: $sortKey, reverse: $reverse) {
+          edges {
+            node {
+              id
+              title
+              description
+              handle
+              vendor
+              productType
+              tags
+              availableForSale
+              totalInventory
+              priceRange {
+                minVariantPrice {
+                  amount
+                  currencyCode
+                }
+                maxVariantPrice {
+                  amount
+                  currencyCode
+                }
+              }
+              compareAtPriceRange {
+                minVariantPrice {
+                  amount
+                  currencyCode
+                }
+              }
+              images(first: 5) {
+                edges {
+                  node {
+                    url
+                    altText
+                  }
+                }
+              }
+              variants(first: 10) {
+                edges {
+                  node {
+                    id
+                    title
+                    price {
+                      amount
+                      currencyCode
+                    }
+                    availableForSale
+                    quantityAvailable
+                    selectedOptions {
+                      name
+                      value
+                    }
+                  }
+                }
+              }
+            }
+            cursor
+          }
+          pageInfo {
+            hasNextPage
+            hasPreviousPage
+            endCursor
+            startCursor
+          }
+        }
+      }
+    `;
+
+    return storeClient.query<ShopifySearchProductsResponse>(graphqlQuery, {
+      query,
+      limit,
+      cursor,
+      sortKey,
+      reverse,
+      country: countryCode || null,
+    });
+  }
+
   /**
    * Get collection products for a specific store
    * Multi-tenant version that uses store-specific credentials

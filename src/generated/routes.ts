@@ -1434,6 +1434,7 @@ export function RegisterRoutes(app: Router) {
     
         const argsShopifySearchController_shopifyGetSearchSuggestions: Record<string, TsoaRoute.ParameterSchema> = {
                 q: {"in":"query","name":"q","required":true,"dataType":"string"},
+                storeId: {"in":"header","name":"x-store-id","dataType":"string"},
                 limit: {"in":"query","name":"limit","dataType":"double"},
         };
         app.get('/api/v1/search/suggestions',
@@ -1465,6 +1466,7 @@ export function RegisterRoutes(app: Router) {
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsShopifySearchController_searchProducts: Record<string, TsoaRoute.ParameterSchema> = {
                 q: {"in":"query","name":"q","required":true,"dataType":"string"},
+                storeId: {"in":"header","name":"x-store-id","dataType":"string"},
                 limit: {"in":"query","name":"limit","dataType":"double"},
                 cursor: {"in":"query","name":"cursor","dataType":"string"},
                 sortKey: {"in":"query","name":"sortKey","ref":"SearchSortKey"},
