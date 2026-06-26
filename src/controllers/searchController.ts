@@ -503,6 +503,46 @@ export class SearchController extends Controller {
         }
       })();
 
+      const emptyProductSearchPage = {
+        data: {
+          products: {
+            edges: [],
+            pageInfo: {
+              hasNextPage: false,
+              hasPreviousPage: pageNum > 1,
+              endCursor: null,
+              startCursor: null,
+            },
+          },
+        },
+      };
+
+      const fetchProductSearchPage = async (): Promise<any> => {
+        let cursor: string | undefined;
+        let response: any = emptyProductSearchPage;
+
+        for (let currentPage = 1; currentPage <= pageNum; currentPage += 1) {
+          response = await ShopifyStorefrontService.searchProductsForStore(validatedStoreId, searchQuery, {
+            limit: limitNum,
+            cursor,
+            sortKey: sortOptions.sortKey,
+            reverse: sortOptions.reverse,
+          });
+
+          if (currentPage < pageNum) {
+            const pageInfo = response?.data?.products?.pageInfo;
+
+            if (!pageInfo?.hasNextPage || !pageInfo.endCursor) {
+              return emptyProductSearchPage;
+            }
+
+            cursor = pageInfo.endCursor;
+          }
+        }
+
+        return response;
+      };
+
       // If no filters: Use Shopify predictive search for both products and collections
       if (!hasFilters && pageNum === 1) {
         try {
@@ -565,11 +605,7 @@ export class SearchController extends Controller {
             );
           }
 
-          const shopifySearchResults = await ShopifyStorefrontService.searchProductsForStore(validatedStoreId, searchQuery, {
-            limit: limitNum,
-            sortKey: sortOptions.sortKey,
-            reverse: sortOptions.reverse
-          });
+          const shopifySearchResults = await fetchProductSearchPage();
 
           if (shopifySearchResults?.data?.products?.edges) {
             const shopifyProducts = shopifySearchResults.data.products.edges.map((edge: any) => edge.node);

@@ -54,6 +54,15 @@ const predictiveResponse = {
   },
 };
 
+const emptyPredictiveResponse = {
+  data: {
+    predictiveSearch: {
+      products: [],
+      collections: [],
+    },
+  },
+};
+
 const searchProductsResponse = {
   data: {
     products: {
@@ -89,6 +98,64 @@ const searchProductsResponse = {
           },
         },
       ],
+      pageInfo: {
+        hasNextPage: false,
+        hasPreviousPage: false,
+        endCursor: null,
+        startCursor: null,
+      },
+    },
+  },
+};
+
+const paginatedFirstPageResponse = {
+  data: {
+    products: {
+      edges: [],
+      pageInfo: {
+        hasNextPage: true,
+        hasPreviousPage: false,
+        endCursor: 'cursor-page-1',
+        startCursor: 'cursor-start-1',
+      },
+    },
+  },
+};
+
+const paginatedSecondPageResponse = {
+  data: {
+    products: {
+      edges: [
+        {
+          node: {
+            id: 'gid://shopify/Product/3',
+            title: 'Page Two Shirt',
+            description: 'A second page shirt',
+            handle: 'page-two-shirt',
+            vendor: 'Cartaisy',
+            productType: 'Apparel',
+            tags: ['shirt'],
+            availableForSale: true,
+            totalInventory: 4,
+            priceRange: {
+              minVariantPrice: {
+                amount: '35.00',
+                currencyCode: 'USD',
+              },
+            },
+            compareAtPriceRange: null,
+            images: {
+              edges: [],
+            },
+          },
+        },
+      ],
+      pageInfo: {
+        hasNextPage: false,
+        hasPreviousPage: true,
+        endCursor: 'cursor-page-2',
+        startCursor: 'cursor-start-2',
+      },
     },
   },
 };
@@ -165,18 +232,20 @@ describe('SearchController tenant-scoped Storefront search', () => {
   it('keeps successful product results when the secondary collection fetch fails', async () => {
     const storeId = new mongoose.Types.ObjectId().toString();
     const controller = new SearchController();
+    storefrontService.predictiveSearchForStore
+      .mockResolvedValueOnce(emptyPredictiveResponse as any)
+      .mockRejectedValueOnce(new Error('collections timeout'));
     storefrontService.searchProductsForStore.mockResolvedValueOnce(searchProductsResponse as any);
-    storefrontService.predictiveSearchForStore.mockRejectedValueOnce(new Error('collections timeout'));
 
     const response = await controller.search(
       { headers: { 'user-agent': 'Mobile Safari' }, sessionID: 'session-1' },
       storeId,
-      'shirt',
-      2
+      'shirt'
     );
 
     expect(storefrontService.searchProductsForStore).toHaveBeenCalledWith(storeId, 'shirt', {
       limit: 20,
+      cursor: undefined,
       sortKey: 'RELEVANCE',
       reverse: false,
     });
@@ -189,6 +258,40 @@ describe('SearchController tenant-scoped Storefront search', () => {
     });
     expect(response.data.collections).toEqual([]);
     expect(response.data.pagination.totalResults).toBe(1);
+  });
+
+  it('walks Storefront cursors for page-number pagination', async () => {
+    const storeId = new mongoose.Types.ObjectId().toString();
+    const controller = new SearchController();
+    storefrontService.searchProductsForStore
+      .mockResolvedValueOnce(paginatedFirstPageResponse as any)
+      .mockResolvedValueOnce(paginatedSecondPageResponse as any);
+
+    const response = await controller.search(
+      { headers: { 'user-agent': 'Mobile Safari' }, sessionID: 'session-1' },
+      storeId,
+      'shirt',
+      2
+    );
+
+    expect(storefrontService.searchProductsForStore).toHaveBeenNthCalledWith(1, storeId, 'shirt', {
+      limit: 20,
+      cursor: undefined,
+      sortKey: 'RELEVANCE',
+      reverse: false,
+    });
+    expect(storefrontService.searchProductsForStore).toHaveBeenNthCalledWith(2, storeId, 'shirt', {
+      limit: 20,
+      cursor: 'cursor-page-1',
+      sortKey: 'RELEVANCE',
+      reverse: false,
+    });
+    expect(response.data.products).toHaveLength(1);
+    expect(response.data.products[0]).toMatchObject({
+      productId: 'gid://shopify/Product/3',
+      title: 'Page Two Shirt',
+      handle: 'page-two-shirt',
+    });
   });
 
   it('uses tenant-scoped Storefront predictive search and scoped history for suggestions', async () => {
