@@ -71,6 +71,23 @@ describe('ProductDetailController tenant-scoped Storefront access', () => {
     expect(mockedShopifyStorefront.getProductById).not.toHaveBeenCalled();
   });
 
+  it('returns 404 when the tenant-scoped Storefront response has no product', async () => {
+    const controller = new ProductDetailController();
+    mockedShopifyStorefront.getProductByIdForStore.mockResolvedValue({
+      data: {
+        product: null,
+      },
+    });
+
+    await expect(controller.getProductDetail('123', storeId)).rejects.toThrow('Product not found');
+
+    expect(controller.getStatus()).toBe(404);
+    expect(mockedShopifyStorefront.getProductByIdForStore).toHaveBeenCalledWith(storeId, '123', undefined);
+    expect(mockedShopifyStorefront.getProductById).not.toHaveBeenCalled();
+    expect(mockedProductMetrics.findOne).not.toHaveBeenCalled();
+    expect(mockedProduct.findOne).not.toHaveBeenCalled();
+  });
+
   it('fetches product detail through the tenant-scoped Storefront client and preserves response shape', async () => {
     const controller = new ProductDetailController();
     mockedShopifyStorefront.getProductByIdForStore.mockResolvedValue({
