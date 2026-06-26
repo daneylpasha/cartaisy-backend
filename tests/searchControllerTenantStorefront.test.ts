@@ -54,6 +54,45 @@ const predictiveResponse = {
   },
 };
 
+const searchProductsResponse = {
+  data: {
+    products: {
+      edges: [
+        {
+          node: {
+            id: 'gid://shopify/Product/2',
+            title: 'Search Shirt',
+            description: 'A searchable shirt',
+            handle: 'search-shirt',
+            vendor: 'Cartaisy',
+            productType: 'Apparel',
+            tags: ['shirt'],
+            availableForSale: true,
+            totalInventory: 7,
+            priceRange: {
+              minVariantPrice: {
+                amount: '31.00',
+                currencyCode: 'USD',
+              },
+            },
+            compareAtPriceRange: null,
+            images: {
+              edges: [
+                {
+                  node: {
+                    url: 'https://cdn.example.com/search-shirt.jpg',
+                    altText: 'Search Shirt',
+                  },
+                },
+              ],
+            },
+          },
+        },
+      ],
+    },
+  },
+};
+
 describe('SearchController tenant-scoped Storefront search', () => {
   beforeEach(() => {
     storefrontService.predictiveSearchForStore.mockReset();
@@ -121,6 +160,35 @@ describe('SearchController tenant-scoped Storefront search', () => {
 
     expect(storefrontService.searchProductsForStore).not.toHaveBeenCalled();
     await expect(SearchHistory.findOne({ query: 'shirt' }).lean()).resolves.toBeNull();
+  });
+
+  it('keeps successful product results when the secondary collection fetch fails', async () => {
+    const storeId = new mongoose.Types.ObjectId().toString();
+    const controller = new SearchController();
+    storefrontService.searchProductsForStore.mockResolvedValueOnce(searchProductsResponse as any);
+    storefrontService.predictiveSearchForStore.mockRejectedValueOnce(new Error('collections timeout'));
+
+    const response = await controller.search(
+      { headers: { 'user-agent': 'Mobile Safari' }, sessionID: 'session-1' },
+      storeId,
+      'shirt',
+      2
+    );
+
+    expect(storefrontService.searchProductsForStore).toHaveBeenCalledWith(storeId, 'shirt', {
+      limit: 20,
+      sortKey: 'RELEVANCE',
+      reverse: false,
+    });
+    expect(storefrontService.predictiveSearchForStore).toHaveBeenCalledWith(storeId, 'shirt', 5);
+    expect(response.data.products).toHaveLength(1);
+    expect(response.data.products[0]).toMatchObject({
+      productId: 'gid://shopify/Product/2',
+      title: 'Search Shirt',
+      handle: 'search-shirt',
+    });
+    expect(response.data.collections).toEqual([]);
+    expect(response.data.pagination.totalResults).toBe(1);
   });
 
   it('uses tenant-scoped Storefront predictive search and scoped history for suggestions', async () => {

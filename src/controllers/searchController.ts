@@ -614,7 +614,7 @@ export class SearchController extends Controller {
                 }
               } catch (collectionError) {
                 console.error('Failed to fetch collections after searchProducts:', collectionError);
-                this.throwStorefrontSearchError(collectionError);
+                collections = [];
               }
             }
           }
