@@ -238,6 +238,48 @@ describe('ShopifyStorefrontService tenant-scoped client contract', () => {
     }));
   });
 
+  it('fetches a collection by ID with the tenant-scoped Storefront client', async () => {
+    const store = await createStore();
+    const shopifyResponse = {
+      data: {
+        collection: {
+          id: 'gid://shopify/Collection/123',
+          title: 'Featured',
+          products: {
+            edges: [],
+            pageInfo: {
+              hasNextPage: false,
+              hasPreviousPage: false,
+            },
+          },
+        },
+      },
+    };
+    postMock.mockResolvedValueOnce({ data: shopifyResponse });
+
+    const response = await shopifyStorefront.getCollectionByIdForStore(
+      store._id.toString(),
+      '123',
+      8,
+      'US'
+    );
+
+    expect(response).toEqual(shopifyResponse);
+    expect(mockedAxios.create).toHaveBeenCalledWith(expect.objectContaining({
+      baseURL: 'https://tenant-shop.myshopify.com/api/2025-01/graphql.json',
+      headers: expect.objectContaining({
+        'X-Shopify-Storefront-Access-Token': 'tenant-storefront-token',
+      }),
+    }));
+    expect(postMock).toHaveBeenCalledWith('', expect.objectContaining({
+      variables: {
+        id: 'gid://shopify/Collection/123',
+        productsLimit: 8,
+        country: 'US',
+      },
+    }));
+  });
+
   it('fails collection product browsing with a controlled error for missing Storefront token', async () => {
     const store = await createStore({
       shopify: {
@@ -253,6 +295,27 @@ describe('ShopifyStorefrontService tenant-scoped client contract', () => {
     ).rejects.toMatchObject({
       name: ApiError.name,
       message: 'Store missing Storefront API access token. Please configure storefrontAccessToken.',
+      statusCode: 400,
+      expose: false,
+    });
+    expect(mockedAxios.create).not.toHaveBeenCalled();
+  });
+
+  it('fails collection-by-ID enrichment with a controlled error for missing Storefront token', async () => {
+    const store = await createStore({
+      shopify: {
+        shop: 'tenant-shop.myshopify.com',
+        storefrontAccessToken: '',
+        scope: 'read_products',
+        isConnected: true,
+      },
+    });
+
+    await expect(
+      shopifyStorefront.getCollectionByIdForStore(store._id.toString(), '123')
+    ).rejects.toMatchObject({
+      name: ApiError.name,
+      message: 'Shopify not configured for this store',
       statusCode: 400,
       expose: false,
     });

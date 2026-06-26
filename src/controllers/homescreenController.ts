@@ -20,6 +20,7 @@ import {
 import { Collection } from '../types/api/products';
 import { getStoreIdFromRequest } from '../middleware/storeAuth';
 import { AuthenticatedRequest } from '../types';
+import { ApiError } from '../utils/errors';
 
 /**
  * Homescreen Controller
@@ -31,7 +32,7 @@ export class HomescreenController {
    * Returns all components needed to render the mobile app home screen
    * Includes layout array indicating the display order from dashboard configuration
    */
-  public async getHomescreenData(storeId: string): Promise<HomescreenResponse> {
+  public async getHomescreenData(storeId: string): Promise<HomescreenResponse & { error?: string; statusCode?: number }> {
     if (!storeId) {
       return {
         success: false,
@@ -84,7 +85,7 @@ export class HomescreenController {
       ]);
 
       // Fetch Shopify collections for collectionDisplays
-      const collectionDisplays = await this.enrichCollectionDisplays(collectionDisplaysRaw);
+      const collectionDisplays = await this.enrichCollectionDisplays(storeId, collectionDisplaysRaw);
 
       // Get layout sections from database or use defaults
       const sections: IHomeLayoutSection[] = homeLayout?.sections || DEFAULT_HOME_SECTIONS;
@@ -125,8 +126,14 @@ export class HomescreenController {
       };
     } catch (error) {
       console.error('Error fetching homescreen data:', error instanceof Error ? error.message : 'Unknown error');
+      const isApiError = error instanceof ApiError;
+      const expose = isApiError ? error.expose : false;
       return {
         success: false,
+        error: expose && error instanceof Error
+          ? error.message
+          : 'Failed to fetch homescreen data',
+        statusCode: isApiError ? error.statusCode : 500,
         data: {
           carousel: [],
           categoryGrid: [],
@@ -240,17 +247,16 @@ export class HomescreenController {
   /**
    * Enrich collection displays with Shopify data
    */
-  private async enrichCollectionDisplays(displays: any[]): Promise<CollectionDisplayType[]> {
-    if (!shopifyStorefront.isConfigured()) {
-      console.warn('Shopify not configured, returning empty collection displays');
-      return [];
-    }
-
+  private async enrichCollectionDisplays(storeId: string, displays: any[]): Promise<CollectionDisplayType[]> {
     const enrichedDisplays = await Promise.all(
       displays.map(async (display) => {
         try {
           // Fetch collection from Shopify
-          const shopifyResponse = await shopifyStorefront.getCollectionById(display.collectionId, 20);
+          const shopifyResponse = await shopifyStorefront.getCollectionByIdForStore(
+            storeId,
+            display.collectionId,
+            20
+          );
 
           if (!shopifyResponse?.data?.collection) {
             console.warn(`Collection ${display.collectionId} not found in Shopify`);
@@ -276,6 +282,10 @@ export class HomescreenController {
             collection,
           };
         } catch (error) {
+          if (error instanceof ApiError) {
+            throw error;
+          }
+
           console.error(
             `Failed to fetch collection ${display.collectionId}:`,
             error instanceof Error ? error.message : 'Unknown error'
@@ -312,7 +322,7 @@ export const homescreenController = {
 
       const controller = new HomescreenController();
       const result = await controller.getHomescreenData(storeId);
-      res.status(result.success ? 200 : 500).json(result);
+      res.status(result.success ? 200 : result.statusCode || 500).json(result);
     } catch (error: any) {
       res.status(500).json({
         success: false,

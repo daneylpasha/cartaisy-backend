@@ -186,7 +186,7 @@ export class HomescreenTsoaController extends Controller {
       const controller = new HomescreenController();
       const result = await controller.getHomescreenData(resolvedStoreId);
 
-      this.setStatus(result.success ? 200 : 500);
+      this.setStatus(result.success ? 200 : result.statusCode || 500);
       return result as any;
     } catch (error: any) {
       console.error('Homescreen TSOA controller error:', error);

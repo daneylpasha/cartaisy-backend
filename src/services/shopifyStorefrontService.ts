@@ -120,12 +120,15 @@ class ShopifyStorefrontService {
    * @param productsLimit - Number of products to fetch
    * @param countryCode - ISO country code for multi-currency pricing (e.g., 'US', 'GB', 'CA')
    */
-  async getCollectionById(
-    collectionId: string,
-    productsLimit: number = 20,
-    countryCode?: string
-  ): Promise<ShopifyCollectionByIdResponse> {
-    const query = `
+  private formatCollectionId(collectionId: string): string {
+    const collectionIdStr = String(collectionId);
+    return collectionIdStr.startsWith('gid://')
+      ? collectionIdStr
+      : `gid://shopify/Collection/${collectionIdStr}`;
+  }
+
+  private getCollectionByIdQuery(): string {
+    return `
       query getCollectionById($id: ID!, $productsLimit: Int!, $country: CountryCode) @inContext(country: $country) {
         collection(id: $id) {
           id
@@ -198,15 +201,15 @@ class ShopifyStorefrontService {
         }
       }
     `;
+  }
 
-    // Ensure the collection ID has the correct Shopify GID format
-    const collectionIdStr = String(collectionId);
-    const formattedId = collectionIdStr.startsWith('gid://')
-      ? collectionIdStr
-      : `gid://shopify/Collection/${collectionIdStr}`;
-
-    return this.query<ShopifyCollectionByIdResponse>(query, {
-      id: formattedId,
+  async getCollectionById(
+    collectionId: string,
+    productsLimit: number = 20,
+    countryCode?: string
+  ): Promise<ShopifyCollectionByIdResponse> {
+    return this.query<ShopifyCollectionByIdResponse>(this.getCollectionByIdQuery(), {
+      id: this.formatCollectionId(collectionId),
       productsLimit,
       country: countryCode || null,
     });
@@ -544,6 +547,37 @@ class ShopifyStorefrontService {
 
     return storeClient.query<any>(this.getProductByIdQuery(), {
       id: this.formatProductId(productId),
+      country: countryCode || null,
+    });
+  }
+
+  /**
+   * Get a collection by ID using a specific store's Storefront credentials.
+   */
+  async getCollectionByIdForStore(
+    storeId: string,
+    collectionId: string,
+    productsLimit: number = 20,
+    countryCode?: string
+  ): Promise<ShopifyCollectionByIdResponse> {
+    const storeClient = await this.getStorefrontClientForStore(storeId);
+
+    if (!storeClient.isConfigured) {
+      const expose = storeClient.expose ?? false;
+      throw new ApiError(
+        expose
+          ? storeClient.error || 'Shopify not configured for this store'
+          : 'Shopify not configured for this store',
+        storeClient.statusCode || 400,
+        true,
+        undefined,
+        expose
+      );
+    }
+
+    return storeClient.query<ShopifyCollectionByIdResponse['data']>(this.getCollectionByIdQuery(), {
+      id: this.formatCollectionId(collectionId),
+      productsLimit,
       country: countryCode || null,
     });
   }
