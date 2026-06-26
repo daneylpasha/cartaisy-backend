@@ -561,7 +561,19 @@ class ShopifyStorefrontService {
     countryCode?: string
   ): Promise<ShopifyCollectionByIdResponse> {
     const storeClient = await this.getStorefrontClientForStore(storeId);
+    return this.getCollectionByIdWithClient(storeClient, collectionId, productsLimit, countryCode);
+  }
 
+  /**
+   * Get a collection by ID using a pre-resolved Storefront client.
+   * Useful when callers need to fetch multiple collections for the same store.
+   */
+  async getCollectionByIdWithClient(
+    storeClient: ShopifyStorefrontClient,
+    collectionId: string,
+    productsLimit: number = 20,
+    countryCode?: string
+  ): Promise<ShopifyCollectionByIdResponse> {
     if (!storeClient.isConfigured) {
       const expose = storeClient.expose ?? false;
       throw new ApiError(
