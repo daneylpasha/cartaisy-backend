@@ -188,14 +188,14 @@ describe('ProductDetailController tenant-scoped Storefront access', () => {
   it('surfaces tenant Storefront credential failures as controlled errors', async () => {
     const controller = new ProductDetailController();
     mockedShopifyStorefront.getProductByIdForStore.mockRejectedValue(
-      new ApiError('Shopify not configured for this store', 400, true, undefined, false)
+      new ApiError('Shopify not configured for this store', 400, true, undefined, true)
     );
 
     await expect(controller.getProductDetail('123', storeId)).rejects.toMatchObject({
       name: ApiError.name,
       message: 'Shopify not configured for this store',
       statusCode: 400,
-      expose: false,
+      expose: true,
     });
 
     expect(controller.getStatus()).toBe(400);
