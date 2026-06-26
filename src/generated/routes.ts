@@ -1731,7 +1731,7 @@ export function RegisterRoutes(app: Router) {
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsSearchController_getSearchSuggestions: Record<string, TsoaRoute.ParameterSchema> = {
-                storeId: {"in":"header","name":"x-store-id","dataType":"string"},
+                storeId: {"in":"header","name":"x-store-id","required":true,"dataType":"string"},
                 q: {"in":"query","name":"q","dataType":"string"},
                 limit: {"in":"query","name":"limit","dataType":"double"},
         };

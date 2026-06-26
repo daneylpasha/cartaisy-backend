@@ -105,6 +105,24 @@ describe('SearchController tenant-scoped Storefront search', () => {
     expect(storefrontService.predictiveSearchForStore).not.toHaveBeenCalled();
   });
 
+  it('does not fall back to unscoped MongoDB products when Storefront search fails', async () => {
+    const storeId = new mongoose.Types.ObjectId().toString();
+    const controller = new SearchController();
+    storefrontService.predictiveSearchForStore.mockRejectedValueOnce(new Error('network timeout'));
+
+    await expect(
+      controller.search({ headers: {}, sessionID: 'session-1' }, storeId, 'shirt')
+    ).rejects.toMatchObject({
+      name: ApiError.name,
+      statusCode: 502,
+      message: 'Failed to fetch tenant-scoped Storefront search results',
+      expose: true,
+    });
+
+    expect(storefrontService.searchProductsForStore).not.toHaveBeenCalled();
+    await expect(SearchHistory.findOne({ query: 'shirt' }).lean()).resolves.toBeNull();
+  });
+
   it('uses tenant-scoped Storefront predictive search and scoped history for suggestions', async () => {
     const storeId = new mongoose.Types.ObjectId();
     const otherStoreId = new mongoose.Types.ObjectId();
@@ -136,5 +154,41 @@ describe('SearchController tenant-scoped Storefront search', () => {
         categories: [{ type: 'category', text: 'Shirts', slug: 'shirts' }],
       },
     });
+  });
+
+  it('does not fall back to unscoped MongoDB suggestions when Storefront suggestions fail', async () => {
+    const storeId = new mongoose.Types.ObjectId().toString();
+    const controller = new SearchController();
+    storefrontService.predictiveSearchForStore.mockRejectedValueOnce(new Error('network timeout'));
+
+    await expect(controller.getSearchSuggestions(storeId, 'sh', 10)).rejects.toMatchObject({
+      name: ApiError.name,
+      statusCode: 502,
+      message: 'Failed to fetch tenant-scoped Storefront search results',
+      expose: true,
+    });
+  });
+
+  it('escapes regex metacharacters in scoped search-history suggestions', async () => {
+    const storeId = new mongoose.Types.ObjectId();
+
+    await SearchHistory.create([
+      {
+        storeId,
+        query: 'sh.* literal',
+        resultsCount: 2,
+        hasResults: true,
+      },
+      {
+        storeId,
+        query: 'shirt',
+        resultsCount: 3,
+        hasResults: true,
+      },
+    ]);
+
+    const suggestions = await SearchHistory.getSearchSuggestions('sh.*', 10, storeId.toString());
+
+    expect(suggestions).toEqual([{ query: 'sh.* literal', popularity: 1 }]);
   });
 });

@@ -539,8 +539,9 @@ SearchHistorySchema.statics.getSearchSuggestions = async function (
   limit: number = 5,
   storeId?: string
 ): Promise<Array<{ query: string; popularity: number }>> {
+  const escapedQuery = partialQuery.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const matchStage: Record<string, unknown> = {
-    query: { $regex: `^${partialQuery.toLowerCase()}`, $options: 'i' },
+    query: { $regex: `^${escapedQuery}`, $options: 'i' },
     hasResults: true,
     createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }, // Last 30 days
   };

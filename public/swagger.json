@@ -5249,6 +5249,14 @@
 				"security": [],
 				"parameters": [
 					{
+						"in": "header",
+						"name": "x-store-id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
 						"description": "- Search query",
 						"in": "query",
 						"name": "q",
@@ -5365,6 +5373,14 @@
 				],
 				"security": [],
 				"parameters": [
+					{
+						"in": "header",
+						"name": "x-store-id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					},
 					{
 						"description": "- Search query (minimum 2 characters)",
 						"in": "query",
