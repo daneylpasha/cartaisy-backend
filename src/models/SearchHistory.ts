@@ -536,15 +536,23 @@ SearchHistorySchema.statics.getTrendingEnrichedSearches = async function (
  */
 SearchHistorySchema.statics.getSearchSuggestions = async function (
   partialQuery: string,
-  limit: number = 5
+  limit: number = 5,
+  storeId?: string
 ): Promise<Array<{ query: string; popularity: number }>> {
+  const escapedQuery = partialQuery.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const matchStage: Record<string, unknown> = {
+    query: { $regex: `^${escapedQuery}`, $options: 'i' },
+    hasResults: true,
+    createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }, // Last 30 days
+  };
+
+  if (storeId) {
+    matchStage.storeId = new mongoose.Types.ObjectId(storeId);
+  }
+
   const results = await this.aggregate([
     {
-      $match: {
-        query: { $regex: `^${partialQuery.toLowerCase()}`, $options: 'i' },
-        hasResults: true,
-        createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }, // Last 30 days
-      },
+      $match: matchStage,
     },
     {
       $group: {
@@ -611,7 +619,8 @@ export interface ISearchHistoryModel extends mongoose.Model<ISearchHistoryDocume
   }>>;
   getSearchSuggestions(
     partialQuery: string,
-    limit?: number
+    limit?: number,
+    storeId?: string
   ): Promise<Array<{ query: string; popularity: number }>>;
   getUserSearchHistory(
     userId: string,

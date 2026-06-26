@@ -1,13 +1,12 @@
-import { Body, Controller, Get, Post, Query, Request, Route, Security, Tags, Response as TsoaResponse } from 'tsoa';
+import { Body, Controller, Get, Header, Post, Query, Request, Route, Security, Tags, Response as TsoaResponse } from 'tsoa';
 import mongoose from 'mongoose';
 import SearchHistory from '../models/SearchHistory';
-import Product from '../models/Product';
 import ProductView from '../models/ProductView';
-import ProductCategory from '../models/ProductCategory';
 import CollectionView from '../models/CollectionView';
 import ShopifyStorefrontService from '../services/shopifyStorefrontService';
 import productEnrichment from '../services/productEnrichmentService';
 import { transformShopifyCollection, transformShopifyProductEdges } from '../utils/shopifyTransformers';
+import { ApiError } from '../utils/errors';
 import {
   InitialSearchScreenResponse,
   SearchContextResponse,
@@ -20,6 +19,36 @@ import {
 @Route('customer/search')
 @Tags('Search')
 export class SearchController extends Controller {
+  private validateStoreId(storeId?: string): string {
+    if (!storeId || !mongoose.Types.ObjectId.isValid(storeId)) {
+      throw new ApiError('A valid x-store-id header is required', 400, true, undefined, true);
+    }
+
+    return storeId;
+  }
+
+  private throwStorefrontSearchError(error: unknown): never {
+    if (error instanceof ApiError) {
+      throw error;
+    }
+
+    throw new ApiError(
+      'Failed to fetch tenant-scoped Storefront search results',
+      502,
+      true,
+      undefined,
+      true
+    );
+  }
+
+  private setErrorStatus(error: unknown): void {
+    if (error instanceof ApiError) {
+      this.setStatus(error.statusCode);
+    } else {
+      this.setStatus(500);
+    }
+  }
+
   /**
    * Get Initial Search Screen Data
    * Returns trending products and collections for the search screen with complete data including images, ratings, and enriched product information.
@@ -405,6 +434,7 @@ export class SearchController extends Controller {
   @TsoaResponse(500, 'Internal Server Error')
   public async search(
     @Request() request: any,
+    @Header('x-store-id') storeId: string,
     @Query() q: string,
     @Query() page?: number,
     @Query() limit?: number,
@@ -424,8 +454,8 @@ export class SearchController extends Controller {
 
       const pageNum = page || 1;
       const limitNum = limit || 20;
-      const skip = (pageNum - 1) * limitNum;
       const searchQuery = q.trim();
+      const validatedStoreId = this.validateStoreId(storeId);
 
       // Check if filters are applied
       const hasFilters = !!(category || priceMin || priceMax || brand || rating || inStock);
@@ -434,10 +464,106 @@ export class SearchController extends Controller {
       let collections: any[] = [];
       let total = 0;
 
+      const applySupportedFilters = (items: any[]): any[] => {
+        const normalizedBrand = brand?.toLowerCase();
+
+        return items.filter((product) => {
+          if (normalizedBrand && !(product.vendor || '').toLowerCase().includes(normalizedBrand)) {
+            return false;
+          }
+          if (priceMin && product.price < priceMin) {
+            return false;
+          }
+          if (priceMax && product.price > priceMax) {
+            return false;
+          }
+          if (rating && (product.rating || 0) < rating) {
+            return false;
+          }
+          if (inStock === 'true' && !product.inStock) {
+            return false;
+          }
+
+          return true;
+        });
+      };
+
+      const sortOptions = (() => {
+        switch (sortBy) {
+          case 'price_low':
+            return { sortKey: 'PRICE' as const, reverse: false };
+          case 'price_high':
+            return { sortKey: 'PRICE' as const, reverse: true };
+          case 'newest':
+            return { sortKey: 'CREATED_AT' as const, reverse: true };
+          case 'popular':
+            return { sortKey: 'BEST_SELLING' as const, reverse: false };
+          default:
+            return { sortKey: 'RELEVANCE' as const, reverse: false };
+        }
+      })();
+
+      let productPageInfo: {
+        hasNextPage: boolean;
+        hasPreviousPage: boolean;
+        endCursor: string | null;
+        startCursor: string | null;
+      } = {
+        hasNextPage: false,
+        hasPreviousPage: pageNum > 1,
+        endCursor: null,
+        startCursor: null,
+      };
+
+      const emptyProductSearchPage = {
+        data: {
+          products: {
+            edges: [],
+            pageInfo: productPageInfo,
+          },
+        },
+      };
+
+      const inferTotalResults = () => {
+        const previousPageResults = (pageNum - 1) * limitNum;
+
+        if (productPageInfo.hasNextPage) {
+          return pageNum * limitNum + 1;
+        }
+
+        return previousPageResults + products.length;
+      };
+
+      const fetchProductSearchPage = async (): Promise<any> => {
+        let cursor: string | undefined;
+        let response: any = emptyProductSearchPage;
+
+        for (let currentPage = 1; currentPage <= pageNum; currentPage += 1) {
+          response = await ShopifyStorefrontService.searchProductsForStore(validatedStoreId, searchQuery, {
+            limit: limitNum,
+            cursor,
+            sortKey: sortOptions.sortKey,
+            reverse: sortOptions.reverse,
+          });
+
+          if (currentPage < pageNum) {
+            const pageInfo = response?.data?.products?.pageInfo;
+
+            if (!pageInfo?.hasNextPage || !pageInfo.endCursor) {
+              return emptyProductSearchPage;
+            }
+
+            cursor = pageInfo.endCursor;
+          }
+        }
+
+        return response;
+      };
+
       // If no filters: Use Shopify predictive search for both products and collections
       if (!hasFilters && pageNum === 1) {
         try {
-          const shopifyResults = await ShopifyStorefrontService.predictiveSearch(searchQuery, limitNum);
+          const shopifyResults = await ShopifyStorefrontService.predictiveSearchForStore(validatedStoreId, searchQuery, limitNum);
 
           if (shopifyResults?.data?.predictiveSearch) {
             // Transform and enrich products
@@ -478,17 +604,28 @@ export class SearchController extends Controller {
             total = products.length;
           }
         } catch (shopifyError) {
-          console.error('Shopify predictive search failed, falling back to MongoDB:', shopifyError);
-          // Fall through to MongoDB search below
+          console.error('Shopify predictive search failed:', shopifyError);
+          this.throwStorefrontSearchError(shopifyError);
         }
       }
 
-      // If Shopify predictiveSearch returned 0 products, try Shopify searchProducts as fallback
-      if (products.length === 0 && !hasFilters && pageNum === 1) {
+      // Use tenant-scoped Storefront product search for filters, later pages, or zero predictive products.
+      if (hasFilters || pageNum > 1 || products.length === 0) {
         try {
-          const shopifySearchResults = await ShopifyStorefrontService.searchProducts(searchQuery, { limit: limitNum });
+          if (category) {
+            throw new ApiError(
+              'Category filter is not supported for tenant-scoped Storefront search',
+              400,
+              true,
+              undefined,
+              true
+            );
+          }
+
+          const shopifySearchResults = await fetchProductSearchPage();
 
           if (shopifySearchResults?.data?.products?.edges) {
+            productPageInfo = shopifySearchResults.data.products.pageInfo || productPageInfo;
             const shopifyProducts = shopifySearchResults.data.products.edges.map((edge: any) => edge.node);
             const transformedProducts = shopifyProducts.map((product: any) => ({
               productId: product.id,
@@ -512,13 +649,13 @@ export class SearchController extends Controller {
             }));
 
             // Enrich with ratings from MongoDB
-            products = await productEnrichment.enrichProducts(transformedProducts);
-            total = products.length;
+            products = applySupportedFilters(await productEnrichment.enrichProducts(transformedProducts));
+            total = inferTotalResults();
 
             // Also try to get collections from Shopify predictiveSearch
-            if (collections.length === 0) {
+            if (!hasFilters && collections.length === 0) {
               try {
-                const collectionsResult = await ShopifyStorefrontService.predictiveSearch(searchQuery, 5);
+                const collectionsResult = await ShopifyStorefrontService.predictiveSearchForStore(validatedStoreId, searchQuery, 5);
                 if (collectionsResult?.data?.predictiveSearch?.collections) {
                   const shopifyCollections = collectionsResult.data.predictiveSearch.collections;
                   collections = shopifyCollections.map((collection: any) => ({
@@ -531,125 +668,13 @@ export class SearchController extends Controller {
                 }
               } catch (collectionError) {
                 console.error('Failed to fetch collections after searchProducts:', collectionError);
+                collections = [];
               }
             }
           }
         } catch (shopifySearchError) {
           console.error('Shopify searchProducts fallback failed:', shopifySearchError);
-        }
-      }
-
-      // If filters are applied OR all Shopify searches failed: Use MongoDB for products
-      if (hasFilters || products.length === 0) {
-        // Build search aggregation pipeline
-        const pipeline: any[] = [
-          {
-            $match: {
-              $text: { $search: searchQuery },
-              status: 'active'
-            }
-          },
-          {
-            $addFields: {
-              score: { $meta: 'textScore' }
-            }
-          }
-        ];
-
-        // Add filters
-        const filterStage: any = {};
-
-        if (category) {
-          filterStage.category = new mongoose.Types.ObjectId(category);
-        }
-        if (brand) {
-          filterStage.vendor = new RegExp(brand, 'i');
-        }
-        if (priceMin || priceMax) {
-          filterStage.price = {};
-          if (priceMin) filterStage.price.$gte = priceMin;
-          if (priceMax) filterStage.price.$lte = priceMax;
-        }
-        if (rating) {
-          filterStage['reviews.averageRating'] = { $gte: rating };
-        }
-        if (inStock === 'true') {
-          filterStage['inventoryTracking.totalQuantity'] = { $gt: 0 };
-        }
-
-        if (Object.keys(filterStage).length > 0) {
-          pipeline.push({ $match: filterStage });
-        }
-
-        // Add sorting
-        let sortStage: any = {};
-        switch (sortBy) {
-          case 'price_low':
-            sortStage = { price: 1 };
-            break;
-          case 'price_high':
-            sortStage = { price: -1 };
-            break;
-          case 'rating':
-            sortStage = { 'reviews.averageRating': -1 };
-            break;
-          case 'popular':
-            sortStage = { 'analytics.viewCount': -1 };
-            break;
-          case 'newest':
-            sortStage = { createdAt: -1 };
-            break;
-          case 'relevance':
-          default:
-            sortStage = { score: -1 };
-            break;
-        }
-
-        pipeline.push({ $sort: sortStage });
-
-        // Get total count for pagination
-        const countPipeline = [...pipeline];
-        countPipeline.push({ $count: 'total' });
-        const countResult = await Product.aggregate(countPipeline);
-        total = countResult.length > 0 ? countResult[0].total : 0;
-
-        // Add pagination and lookup
-        pipeline.push({ $skip: skip });
-        pipeline.push({ $limit: limitNum });
-        pipeline.push({
-          $lookup: {
-            from: 'productcategories',
-            localField: 'category',
-            foreignField: '_id',
-            as: 'category'
-          }
-        });
-        pipeline.push({
-          $unwind: {
-            path: '$category',
-            preserveNullAndEmptyArrays: true
-          }
-        });
-
-        products = await Product.aggregate(pipeline);
-
-        // For filtered searches, still try to get collections from Shopify
-        if (!hasFilters && collections.length === 0) {
-          try {
-            const shopifyResults = await ShopifyStorefrontService.predictiveSearch(searchQuery, 5);
-            if (shopifyResults?.data?.predictiveSearch?.collections) {
-              const shopifyCollections = shopifyResults.data.predictiveSearch.collections;
-              collections = shopifyCollections.map((collection: any) => ({
-                id: collection.id,
-                title: collection.title,
-                handle: collection.handle,
-                image: collection.image?.url || null,
-                description: null
-              }));
-            }
-          } catch (collectionError) {
-            console.error('Failed to fetch collections:', collectionError);
-          }
+          this.throwStorefrontSearchError(shopifySearchError);
         }
       }
 
@@ -658,10 +683,14 @@ export class SearchController extends Controller {
       const sessionId = request.sessionID || 'anonymous';
 
       await SearchHistory.create({
+        storeId: new mongoose.Types.ObjectId(validatedStoreId),
         user: userId,
         anonymousId: !userId ? sessionId : undefined,
         sessionId,
         query: searchQuery,
+        searchType: 'text',
+        resultsCount: total,
+        hasResults: products.length > 0,
         normalizedQuery: searchQuery.toLowerCase(),
         queryType: 'text',
         source: 'search_bar',
@@ -706,7 +735,11 @@ export class SearchController extends Controller {
             current: pageNum,
             total: Math.ceil(total / limitNum),
             count: products.length,
-            totalResults: total
+            totalResults: total,
+            hasNextPage: productPageInfo.hasNextPage,
+            hasPreviousPage: productPageInfo.hasPreviousPage,
+            endCursor: productPageInfo.endCursor,
+            startCursor: productPageInfo.startCursor
           },
           metadata: {
             productsCount: products.length,
@@ -718,7 +751,7 @@ export class SearchController extends Controller {
     } catch (error) {
       console.error('Error performing search:', error);
       if (!this.getStatus || this.getStatus() === 200) {
-        this.setStatus(500);
+        this.setErrorStatus(error);
       }
       throw error;
     }
@@ -732,8 +765,10 @@ export class SearchController extends Controller {
    * @param limit - Number of suggestions (default: 10)
    */
   @Get('suggestions')
+  @TsoaResponse(400, 'Bad Request')
   @TsoaResponse(500, 'Internal Server Error')
   public async getSearchSuggestions(
+    @Header('x-store-id') storeId: string,
     @Query() q?: string,
     @Query() limit?: number
   ): Promise<any> {
@@ -749,45 +784,49 @@ export class SearchController extends Controller {
 
       const limitNum = limit || 10;
       const searchQuery = q.trim();
+      const validatedStoreId = this.validateStoreId(storeId);
 
       // Get suggestions from search history
-      const suggestions = await SearchHistory.getSearchSuggestions(searchQuery, limitNum);
+      const suggestions = await SearchHistory.getSearchSuggestions(searchQuery, limitNum, validatedStoreId);
+      let productSuggestions: Array<{ type: string; text: string; handle: string }> = [];
+      let categorySuggestions: Array<{ type: string; text: string; slug: string }> = [];
 
-      // Get product suggestions based on title/tags
-      const productSuggestions = await Product.find({
-        $text: { $search: searchQuery },
-        status: 'active'
-      })
-        .sort({ score: { $meta: 'textScore' } })
-        .limit(5)
-        .select('title handle');
+      try {
+        const shopifyResults = await ShopifyStorefrontService.predictiveSearchForStore(
+          validatedStoreId,
+          searchQuery,
+          Math.min(limitNum, 10)
+        );
 
-      // Get category suggestions
-      const categorySuggestions = await ProductCategory.find({
-        $text: { $search: searchQuery }
-      })
-        .limit(3)
-        .select('name slug');
+        if (shopifyResults?.data?.predictiveSearch) {
+          productSuggestions = (shopifyResults.data.predictiveSearch.products || []).map((product: any) => ({
+            type: 'product',
+            text: product.title,
+            handle: product.handle
+          }));
+
+          categorySuggestions = (shopifyResults.data.predictiveSearch.collections || []).map((collection: any) => ({
+            type: 'category',
+            text: collection.title,
+            slug: collection.handle
+          }));
+        }
+      } catch (shopifyError) {
+        console.error('Shopify predictive suggestions failed:', shopifyError);
+        this.throwStorefrontSearchError(shopifyError);
+      }
 
       return {
         success: true,
         data: {
           suggestions: suggestions.slice(0, limitNum),
-          products: productSuggestions.map(p => ({
-            type: 'product',
-            text: p.title,
-            handle: p.handle
-          })),
-          categories: categorySuggestions.map(c => ({
-            type: 'category',
-            text: c.name,
-            slug: (c as any).slug || c.name.toLowerCase().replace(/\s+/g, '-')
-          }))
+          products: productSuggestions,
+          categories: categorySuggestions
         }
       };
     } catch (error) {
       console.error('Error getting search suggestions:', error);
-      this.setStatus(500);
+      this.setErrorStatus(error);
       throw error;
     }
   }
