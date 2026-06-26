@@ -503,18 +503,35 @@ export class SearchController extends Controller {
         }
       })();
 
+      let productPageInfo: {
+        hasNextPage: boolean;
+        hasPreviousPage: boolean;
+        endCursor: string | null;
+        startCursor: string | null;
+      } = {
+        hasNextPage: false,
+        hasPreviousPage: pageNum > 1,
+        endCursor: null,
+        startCursor: null,
+      };
+
       const emptyProductSearchPage = {
         data: {
           products: {
             edges: [],
-            pageInfo: {
-              hasNextPage: false,
-              hasPreviousPage: pageNum > 1,
-              endCursor: null,
-              startCursor: null,
-            },
+            pageInfo: productPageInfo,
           },
         },
+      };
+
+      const inferTotalResults = () => {
+        const previousPageResults = (pageNum - 1) * limitNum;
+
+        if (productPageInfo.hasNextPage) {
+          return pageNum * limitNum + 1;
+        }
+
+        return previousPageResults + products.length;
       };
 
       const fetchProductSearchPage = async (): Promise<any> => {
@@ -608,6 +625,7 @@ export class SearchController extends Controller {
           const shopifySearchResults = await fetchProductSearchPage();
 
           if (shopifySearchResults?.data?.products?.edges) {
+            productPageInfo = shopifySearchResults.data.products.pageInfo || productPageInfo;
             const shopifyProducts = shopifySearchResults.data.products.edges.map((edge: any) => edge.node);
             const transformedProducts = shopifyProducts.map((product: any) => ({
               productId: product.id,
@@ -632,7 +650,7 @@ export class SearchController extends Controller {
 
             // Enrich with ratings from MongoDB
             products = applySupportedFilters(await productEnrichment.enrichProducts(transformedProducts));
-            total = products.length;
+            total = inferTotalResults();
 
             // Also try to get collections from Shopify predictiveSearch
             if (!hasFilters && collections.length === 0) {
@@ -717,7 +735,11 @@ export class SearchController extends Controller {
             current: pageNum,
             total: Math.ceil(total / limitNum),
             count: products.length,
-            totalResults: total
+            totalResults: total,
+            hasNextPage: productPageInfo.hasNextPage,
+            hasPreviousPage: productPageInfo.hasPreviousPage,
+            endCursor: productPageInfo.endCursor,
+            startCursor: productPageInfo.startCursor
           },
           metadata: {
             productsCount: products.length,

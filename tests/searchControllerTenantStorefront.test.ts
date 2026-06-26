@@ -292,6 +292,52 @@ describe('SearchController tenant-scoped Storefront search', () => {
       title: 'Page Two Shirt',
       handle: 'page-two-shirt',
     });
+    expect(response.data.pagination).toMatchObject({
+      current: 2,
+      total: 2,
+      count: 1,
+      totalResults: 21,
+      hasNextPage: false,
+      hasPreviousPage: true,
+      endCursor: 'cursor-page-2',
+      startCursor: 'cursor-start-2',
+    });
+  });
+
+  it('exposes Storefront next-page metadata for search pagination', async () => {
+    const storeId = new mongoose.Types.ObjectId().toString();
+    const controller = new SearchController();
+    storefrontService.predictiveSearchForStore.mockResolvedValueOnce(emptyPredictiveResponse as any);
+    storefrontService.searchProductsForStore.mockResolvedValueOnce({
+      data: {
+        products: {
+          ...searchProductsResponse.data.products,
+          pageInfo: {
+            hasNextPage: true,
+            hasPreviousPage: false,
+            endCursor: 'cursor-page-1',
+            startCursor: 'cursor-start-1',
+          },
+        },
+      },
+    } as any);
+
+    const response = await controller.search(
+      { headers: { 'user-agent': 'Mobile Safari' }, sessionID: 'session-1' },
+      storeId,
+      'shirt'
+    );
+
+    expect(response.data.pagination).toMatchObject({
+      current: 1,
+      total: 2,
+      count: 1,
+      totalResults: 21,
+      hasNextPage: true,
+      hasPreviousPage: false,
+      endCursor: 'cursor-page-1',
+      startCursor: 'cursor-start-1',
+    });
   });
 
   it('uses tenant-scoped Storefront predictive search and scoped history for suggestions', async () => {
