@@ -114,6 +114,25 @@ class ShopifyStorefrontService {
     }
   }
 
+  private isTruthyEnv(value: string | undefined): boolean {
+    return ['1', 'true', 'yes', 'on'].includes(value?.toLowerCase() || '');
+  }
+
+  private assertGlobalStorefrontReadsAllowed(): void {
+    const isProduction = process.env.NODE_ENV === 'production';
+    const isSaasMode = this.isTruthyEnv(process.env.SAAS_MODE) || this.isTruthyEnv(process.env.MULTI_TENANT_MODE);
+
+    if (isProduction || isSaasMode) {
+      throw new ApiError(
+        'Storefront store context is required for this request',
+        400,
+        true,
+        undefined,
+        true
+      );
+    }
+  }
+
   /**
    * Get a collection by its ID with products
    * @param collectionId - Shopify collection ID
@@ -208,6 +227,8 @@ class ShopifyStorefrontService {
     productsLimit: number = 20,
     countryCode?: string
   ): Promise<ShopifyCollectionByIdResponse> {
+    this.assertGlobalStorefrontReadsAllowed();
+
     return this.query<ShopifyCollectionByIdResponse>(this.getCollectionByIdQuery(), {
       id: this.formatCollectionId(collectionId),
       productsLimit,
@@ -231,6 +252,8 @@ class ShopifyStorefrontService {
       countryCode?: string;
     } = {}
   ): Promise<any> {
+    this.assertGlobalStorefrontReadsAllowed();
+
     const { limit = 20, cursor, sortKey = 'COLLECTION_DEFAULT', reverse = false, filters = [], countryCode } = options;
 
     const query = `
@@ -338,6 +361,8 @@ class ShopifyStorefrontService {
     sortKey?: string,
     countryCode?: string
   ): Promise<ShopifyProductsQueryResponse> {
+    this.assertGlobalStorefrontReadsAllowed();
+
     const graphqlQuery = `
       query getProducts($limit: Int!, $query: String, $sortKey: ProductSortKeys, $country: CountryCode) @inContext(country: $country) {
         products(first: $limit, query: $query, sortKey: $sortKey) {
@@ -410,6 +435,8 @@ class ShopifyStorefrontService {
    * Get all collections
    */
   async getCollections(limit: number = 20): Promise<ShopifyCollectionsQueryResponse> {
+    this.assertGlobalStorefrontReadsAllowed();
+
     const query = `
       query getCollections($limit: Int!) {
         collections(first: $limit) {
@@ -515,6 +542,8 @@ class ShopifyStorefrontService {
   }
 
   async getProductById(productId: string, countryCode?: string): Promise<any> {
+    this.assertGlobalStorefrontReadsAllowed();
+
     return this.query<any>(this.getProductByIdQuery(), {
       id: this.formatProductId(productId),
       country: countryCode || null,
@@ -1142,6 +1171,8 @@ class ShopifyStorefrontService {
     limit: number = 10,
     countryCode?: string
   ): Promise<ShopifyPredictiveSearchResponse> {
+    this.assertGlobalStorefrontReadsAllowed();
+
     const graphqlQuery = `
       query PredictiveSearch($query: String!, $limit: Int!, $country: CountryCode) @inContext(country: $country) {
         predictiveSearch(
@@ -1211,6 +1242,8 @@ class ShopifyStorefrontService {
       countryCode?: string;
     } = {}
   ): Promise<ShopifySearchProductsResponse> {
+    this.assertGlobalStorefrontReadsAllowed();
+
     const { limit = 20, cursor, sortKey = 'RELEVANCE', reverse = false, countryCode } = options;
 
     const graphqlQuery = `
@@ -1839,7 +1872,7 @@ class ShopifyStorefrontService {
       // Store-scoped Storefront requests must use the tenant's own Storefront API token.
       // Admin API tokens and process-wide fallback tokens can query the wrong Shopify shop in
       // multi-tenant mobile flows, so missing per-store credentials are treated as a setup error.
-      const storefrontToken = store.shopify.storefrontAccessToken;
+      const storefrontToken = store.shopify.storefrontAccessToken?.trim();
 
       if (!storefrontToken) {
         console.warn(`Store ${storeId} missing Storefront API access token`);
