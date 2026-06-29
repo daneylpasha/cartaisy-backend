@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { AuthenticatedRequest } from '../types';
 import { getProductRecommendations, getCartRecommendations } from '../services/recommendationsService';
 import { ApiError } from '../utils/errors';
+import { getStoreIdFromRequest } from '../middleware/storeAuth';
 
 /**
  * Recommendations Controller
@@ -36,8 +37,10 @@ export const getProductRecommendationsController = async (
       throw new ApiError('Limit must be a number between 1 and 50', 400);
     }
 
+    const storeId = getStoreIdFromRequest(req as AuthenticatedRequest);
+
     // Fetch recommendations from Shopify
-    const recommendations = await getProductRecommendations(shopifyProductId, limitNum);
+    const recommendations = await getProductRecommendations(shopifyProductId, limitNum, { storeId });
 
     return res.status(200).json({
       success: true,
@@ -103,8 +106,10 @@ export const getCartRecommendationsController = async (
       throw new ApiError('No valid product IDs provided in cart items', 400);
     }
 
+    const storeId = getStoreIdFromRequest(req as AuthenticatedRequest);
+
     // Fetch recommendations
-    const recommendations = await getCartRecommendations(validCartItems, limitNum);
+    const recommendations = await getCartRecommendations(validCartItems, limitNum, { storeId });
 
     return res.status(200).json({
       success: true,
