@@ -1,4 +1,5 @@
-import shopifyStorefront from './shopifyStorefrontService';
+import shopifyStorefront, { ShopifyStorefrontClient } from './shopifyStorefrontService';
+import { ApiError } from '../utils/errors';
 
 /**
  * Recommendations Service
@@ -62,6 +63,94 @@ interface ShopifyProduct {
   };
 }
 
+interface RecommendationOptions {
+  storeId?: string | null;
+  storefrontClient?: ShopifyStorefrontClient;
+}
+
+type RecommendationContext = {
+  storefrontClient: ShopifyStorefrontClient;
+};
+
+const getLegacyStorefrontClient = (): ShopifyStorefrontClient | null => {
+  if (!shopifyStorefront.isConfigured()) {
+    return null;
+  }
+
+  return {
+    query: (graphqlQuery, variables) => (shopifyStorefront as any).query(graphqlQuery, variables),
+    isConfigured: true,
+    shopDomain: '',
+  };
+};
+
+const getStorefrontClientError = (storefrontClient: ShopifyStorefrontClient): {
+  message: string;
+  expose: boolean;
+} => {
+  const expose = storefrontClient.expose ?? false;
+
+  return {
+    message: expose
+      ? storefrontClient.error || 'Shopify not configured for this store'
+      : 'Shopify not configured for this store',
+    expose,
+  };
+};
+
+const getRecommendationContext = async (
+  options: RecommendationOptions = {}
+): Promise<RecommendationContext | null> => {
+  if (options.storefrontClient) {
+    if (!options.storefrontClient.isConfigured) {
+      const { message, expose } = getStorefrontClientError(options.storefrontClient);
+
+      throw new ApiError(
+        message,
+        options.storefrontClient.statusCode || 400,
+        true,
+        undefined,
+        expose
+      );
+    }
+
+    return {
+      storefrontClient: options.storefrontClient,
+    };
+  }
+
+  if (options.storeId) {
+    const storefrontClient = await shopifyStorefront.getStorefrontClientForStore(options.storeId);
+
+    if (!storefrontClient.isConfigured) {
+      const { message, expose } = getStorefrontClientError(storefrontClient);
+
+      throw new ApiError(
+        message,
+        storefrontClient.statusCode || 400,
+        true,
+        undefined,
+        expose
+      );
+    }
+
+    return {
+      storefrontClient,
+    };
+  }
+
+  const storefrontClient = getLegacyStorefrontClient();
+
+  if (!storefrontClient) {
+    console.warn('Shopify Storefront not configured');
+    return null;
+  }
+
+  return {
+    storefrontClient,
+  };
+};
+
 /**
  * Get product recommendations from Shopify for a specific product (PDP)
  * Uses Shopify's Recommendations API and Storefront API
@@ -71,7 +160,8 @@ interface ShopifyProduct {
  */
 export const getProductRecommendations = async (
   shopifyProductId: string,
-  limit: number = 6
+  limit: number = 6,
+  options: RecommendationOptions = {}
 ): Promise<any[]> => {
   try {
     // Validate Shopify product ID
@@ -80,11 +170,12 @@ export const getProductRecommendations = async (
       return [];
     }
 
-    // Check if Shopify Storefront is configured
-    if (!shopifyStorefront.isConfigured()) {
-      console.warn('Shopify Storefront not configured');
+    const context = await getRecommendationContext(options);
+    if (!context) {
       return [];
     }
+
+    const { storefrontClient } = context;
 
     // Step 1: Try Shopify Storefront GraphQL productRecommendations query
     // Docs: https://shopify.dev/docs/api/storefront/latest/queries/productrecommendations
@@ -101,7 +192,7 @@ export const getProductRecommendations = async (
       `;
 
       const gid = `gid://shopify/Product/${shopifyProductId}`;
-      const response: any = await shopifyStorefront['query'](query, { productId: gid });
+      const response: any = await storefrontClient.query(query, { productId: gid });
 
       if (response.data?.productRecommendations) {
         recommendedHandles = response.data.productRecommendations
@@ -121,24 +212,27 @@ export const getProductRecommendations = async (
     // Step 2: If no recommendations from Shopify, use fallback strategy
     if (recommendedHandles.length === 0) {
       console.log(`No Shopify recommendations for ${shopifyProductId}, using smart fallback`);
-      return await getSmartRecommendations(shopifyProductId, limit);
+      return await getSmartRecommendations(context, shopifyProductId, limit);
     }
 
     // Step 3: Fetch full product data from Shopify Storefront API
-    const products = await fetchProductsByHandles(recommendedHandles, limit);
+    const products = await fetchProductsByHandles(context, recommendedHandles, limit);
 
     // Step 4: Validate if Shopify recommendations are relevant
-    const isRelevant = await validateRecommendations(shopifyProductId, products);
+    const isRelevant = await validateRecommendations(context, shopifyProductId, products);
 
     if (!isRelevant) {
       console.log(`Shopify recommendations not relevant for ${shopifyProductId}, using smart fallback`);
-      return await getSmartRecommendations(shopifyProductId, limit);
+      return await getSmartRecommendations(context, shopifyProductId, limit);
     }
 
     console.log(`Using Shopify recommendations for ${shopifyProductId}`);
     return products;
   } catch (error) {
     console.error('Error fetching Shopify recommendations:', error);
+    if (error instanceof ApiError) {
+      throw error;
+    }
     return [];
   }
 };
@@ -152,11 +246,17 @@ export const getProductRecommendations = async (
  */
 export const getCartRecommendations = async (
   cartShopifyProductIds: string[],
-  limit: number = 6
+  limit: number = 6,
+  options: RecommendationOptions = {}
 ): Promise<any[]> => {
   try {
     if (!cartShopifyProductIds || cartShopifyProductIds.length === 0) {
       console.warn('No cart items provided');
+      return [];
+    }
+
+    const context = await getRecommendationContext(options);
+    if (!context) {
       return [];
     }
 
@@ -166,7 +266,9 @@ export const getCartRecommendations = async (
     const seenShopifyIds = new Set<string>(cartShopifyProductIds); // Track cart items
 
     for (const shopifyProductId of cartShopifyProductIds) {
-      const recommendations = await getProductRecommendations(shopifyProductId, limit * 2);
+      const recommendations = await getProductRecommendations(shopifyProductId, limit * 2, {
+        storefrontClient: context.storefrontClient,
+      });
 
       recommendations.forEach((product: any) => {
         const productShopifyId = product.shopifyProductId;
@@ -197,6 +299,9 @@ export const getCartRecommendations = async (
     return sortedRecommendations.slice(0, limit);
   } catch (error) {
     console.error('Error fetching cart recommendations:', error);
+    if (error instanceof ApiError) {
+      throw error;
+    }
     return [];
   }
 };
@@ -205,7 +310,11 @@ export const getCartRecommendations = async (
  * Validate if Shopify recommendations are relevant to the source product
  * Checks if recommended products have similar product type
  */
-async function validateRecommendations(shopifyProductId: string, recommendedProducts: any[]): Promise<boolean> {
+async function validateRecommendations(
+  context: RecommendationContext,
+  shopifyProductId: string,
+  recommendedProducts: any[]
+): Promise<boolean> {
   try {
     if (recommendedProducts.length === 0) {
       return false;
@@ -222,7 +331,7 @@ async function validateRecommendations(shopifyProductId: string, recommendedProd
     `;
 
     const gid = `gid://shopify/Product/${shopifyProductId}`;
-    const response: any = await shopifyStorefront['query'](sourceQuery, { id: gid });
+    const response: any = await context.storefrontClient.query(sourceQuery, { id: gid });
 
     if (!response.data?.product) {
       console.log('Could not fetch source product for validation');
@@ -260,7 +369,11 @@ async function validateRecommendations(shopifyProductId: string, recommendedProd
  * Get smart recommendations based on product attributes
  * Uses product type, tags, and collection matching
  */
-async function getSmartRecommendations(shopifyProductId: string, limit: number): Promise<any[]> {
+async function getSmartRecommendations(
+  context: RecommendationContext,
+  shopifyProductId: string,
+  limit: number
+): Promise<any[]> {
   try {
     // Get source product details
     const sourceQuery = `
@@ -283,11 +396,11 @@ async function getSmartRecommendations(shopifyProductId: string, limit: number):
     `;
 
     const gid = `gid://shopify/Product/${shopifyProductId}`;
-    const response: any = await shopifyStorefront['query'](sourceQuery, { id: gid });
+    const response: any = await context.storefrontClient.query(sourceQuery, { id: gid });
 
     if (!response.data?.product) {
       console.log('Could not fetch source product for smart recommendations');
-      return await getRandomProducts(limit);
+      return await getRandomProducts(context, limit);
     }
 
     const sourceProduct = response.data.product;
@@ -299,7 +412,7 @@ async function getSmartRecommendations(shopifyProductId: string, limit: number):
 
     // Strategy 1: Match by product type (highest priority when available)
     if (productType) {
-      const typeMatches = await findProductsByType(productType, shopifyProductId, limit);
+      const typeMatches = await findProductsByType(context, productType, shopifyProductId, limit);
       if (typeMatches.length >= Math.min(3, limit)) {
         console.log(`✅ Using type matching: found ${typeMatches.length} products`);
         return typeMatches;
@@ -312,7 +425,7 @@ async function getSmartRecommendations(shopifyProductId: string, limit: number):
       const collectionId = sourceProduct.collections.edges[0].node.id;
       const collectionHandle = sourceProduct.collections.edges[0].node.handle;
       console.log(`Trying collection matching: ${collectionHandle}`);
-      const collectionMatches = await findProductsByCollection(collectionId, shopifyProductId, limit);
+      const collectionMatches = await findProductsByCollection(context, collectionId, shopifyProductId, limit);
       if (collectionMatches.length >= Math.min(3, limit)) {
         console.log(`✅ Using collection matching: found ${collectionMatches.length} products`);
         return collectionMatches;
@@ -322,7 +435,7 @@ async function getSmartRecommendations(shopifyProductId: string, limit: number):
 
     // Strategy 3: Match by tags
     if (tags.length > 0) {
-      const tagMatches = await findProductsByTags(tags, shopifyProductId, limit);
+      const tagMatches = await findProductsByTags(context, tags, shopifyProductId, limit);
       if (tagMatches.length >= Math.min(3, limit)) {
         console.log(`✅ Using tag matching: found ${tagMatches.length} products`);
         return tagMatches;
@@ -338,18 +451,18 @@ async function getSmartRecommendations(shopifyProductId: string, limit: number):
     const allProducts: any[] = [];
 
     if (productType) {
-      const typeMatches = await findProductsByType(productType, shopifyProductId, limit * 2);
+      const typeMatches = await findProductsByType(context, productType, shopifyProductId, limit * 2);
       allProducts.push(...typeMatches);
     }
 
     if (sourceProduct.collections?.edges?.length > 0 && allProducts.length < limit) {
       const collectionId = sourceProduct.collections.edges[0].node.id;
-      const collectionMatches = await findProductsByCollection(collectionId, shopifyProductId, limit);
+      const collectionMatches = await findProductsByCollection(context, collectionId, shopifyProductId, limit);
       allProducts.push(...collectionMatches);
     }
 
     if (tags.length > 0 && allProducts.length < limit) {
-      const tagMatches = await findProductsByTags(tags, shopifyProductId, limit);
+      const tagMatches = await findProductsByTags(context, tags, shopifyProductId, limit);
       allProducts.push(...tagMatches);
     }
 
@@ -363,7 +476,7 @@ async function getSmartRecommendations(shopifyProductId: string, limit: number):
     return finalProducts;
   } catch (error) {
     console.error('Error in smart recommendations:', error);
-    return await getRandomProducts(limit);
+    return await getRandomProducts(context, limit);
   }
 }
 
@@ -371,7 +484,12 @@ async function getSmartRecommendations(shopifyProductId: string, limit: number):
  * Find products by matching product type
  * Adds randomization for variety in recommendations
  */
-async function findProductsByType(productType: string, excludeProductId: string, limit: number): Promise<any[]> {
+async function findProductsByType(
+  context: RecommendationContext,
+  productType: string,
+  excludeProductId: string,
+  limit: number
+): Promise<any[]> {
   try {
     // Fetch more products than needed to allow random selection
     const fetchCount = Math.min(limit * 3, 50);
@@ -390,7 +508,7 @@ async function findProductsByType(productType: string, excludeProductId: string,
     `;
 
     const queryString = `product_type:"${productType}"`;
-    const response: any = await shopifyStorefront['query'](query, { queryString });
+    const response: any = await context.storefrontClient.query(query, { queryString });
 
     if (!response.data?.products?.edges) {
       console.log(`No products found for type: ${productType}`);
@@ -407,7 +525,7 @@ async function findProductsByType(productType: string, excludeProductId: string,
     const handles = shuffled.slice(0, limit);
 
     console.log(`Type matching - Found ${allHandles.length} products, selected ${handles.length} randomly`);
-    const products = await fetchProductsByHandles(handles, limit);
+    const products = await fetchProductsByHandles(context, handles, limit);
     console.log(`Type matching - Fetched ${products.length} products`);
     return products;
   } catch (error) {
@@ -420,7 +538,12 @@ async function findProductsByType(productType: string, excludeProductId: string,
  * Find products by matching vendor
  * Useful when product type and tags are not available
  */
-async function findProductsByVendor(vendor: string, excludeProductId: string, limit: number): Promise<any[]> {
+async function findProductsByVendor(
+  context: RecommendationContext,
+  vendor: string,
+  excludeProductId: string,
+  limit: number
+): Promise<any[]> {
   try {
     // Fetch more products than needed to allow random selection
     const fetchCount = Math.min(limit * 3, 50);
@@ -439,7 +562,7 @@ async function findProductsByVendor(vendor: string, excludeProductId: string, li
     `;
 
     const queryString = `vendor:"${vendor}"`;
-    const response: any = await shopifyStorefront['query'](query, { queryString });
+    const response: any = await context.storefrontClient.query(query, { queryString });
 
     if (!response.data?.products?.edges) {
       console.log(`No products found for vendor: ${vendor}`);
@@ -456,7 +579,7 @@ async function findProductsByVendor(vendor: string, excludeProductId: string, li
     const handles = shuffled.slice(0, limit);
 
     console.log(`Vendor matching - Found ${allHandles.length} products, selected ${handles.length} randomly`);
-    const products = await fetchProductsByHandles(handles, limit);
+    const products = await fetchProductsByHandles(context, handles, limit);
     console.log(`Vendor matching - Fetched ${products.length} products`);
     return products;
   } catch (error) {
@@ -468,7 +591,12 @@ async function findProductsByVendor(vendor: string, excludeProductId: string, li
 /**
  * Find products by matching tags
  */
-async function findProductsByTags(tags: string[], excludeProductId: string, limit: number): Promise<any[]> {
+async function findProductsByTags(
+  context: RecommendationContext,
+  tags: string[],
+  excludeProductId: string,
+  limit: number
+): Promise<any[]> {
   try {
     // Use first 3 tags for matching
     const searchTags = tags.slice(0, 3);
@@ -486,7 +614,7 @@ async function findProductsByTags(tags: string[], excludeProductId: string, limi
     `;
 
     const queryString = searchTags.map(tag => `tag:"${tag}"`).join(' OR ');
-    const response: any = await shopifyStorefront['query'](query, { queryString });
+    const response: any = await context.storefrontClient.query(query, { queryString });
 
     if (!response.data?.products?.edges) {
       return [];
@@ -498,7 +626,7 @@ async function findProductsByTags(tags: string[], excludeProductId: string, limi
       .map((edge: any) => edge.node.handle)
       .slice(0, limit);
 
-    return await fetchProductsByHandles(handles, limit);
+    return await fetchProductsByHandles(context, handles, limit);
   } catch (error) {
     console.error('Error finding products by tags:', error);
     return [];
@@ -508,7 +636,12 @@ async function findProductsByTags(tags: string[], excludeProductId: string, limi
 /**
  * Find products from the same collection
  */
-async function findProductsByCollection(collectionId: string, excludeProductId: string, limit: number): Promise<any[]> {
+async function findProductsByCollection(
+  context: RecommendationContext,
+  collectionId: string,
+  excludeProductId: string,
+  limit: number
+): Promise<any[]> {
   try {
     const query = `
       query getCollection($id: ID!) {
@@ -525,7 +658,7 @@ async function findProductsByCollection(collectionId: string, excludeProductId: 
       }
     `;
 
-    const response: any = await shopifyStorefront['query'](query, { id: collectionId });
+    const response: any = await context.storefrontClient.query(query, { id: collectionId });
 
     if (!response.data?.collection?.products?.edges) {
       return [];
@@ -537,7 +670,7 @@ async function findProductsByCollection(collectionId: string, excludeProductId: 
       .map((edge: any) => edge.node.handle)
       .slice(0, limit);
 
-    return await fetchProductsByHandles(handles, limit);
+    return await fetchProductsByHandles(context, handles, limit);
   } catch (error) {
     console.error('Error finding products by collection:', error);
     return [];
@@ -549,7 +682,11 @@ async function findProductsByCollection(collectionId: string, excludeProductId: 
  * Fetches products from the same collection as the given product
  * @deprecated Use getSmartRecommendations instead
  */
-async function getCollectionBasedRecommendations(shopifyProductId: string, limit: number): Promise<any[]> {
+async function getCollectionBasedRecommendations(
+  context: RecommendationContext,
+  shopifyProductId: string,
+  limit: number
+): Promise<any[]> {
   try {
     // First, get the product to find its collections
     const productQuery = `
@@ -577,14 +714,14 @@ async function getCollectionBasedRecommendations(shopifyProductId: string, limit
     `;
 
     const gid = `gid://shopify/Product/${shopifyProductId}`;
-    const response: any = await shopifyStorefront['query'](productQuery, { id: gid });
+    const response: any = await context.storefrontClient.query(productQuery, { id: gid });
 
     console.log(`Collection fallback for ${shopifyProductId}: product found = ${!!response.data?.product}`);
     console.log(`Collections count: ${response.data?.product?.collections?.edges?.length || 0}`);
 
     if (!response.data?.product?.collections?.edges?.length) {
       console.log(`Product ${shopifyProductId} has no collections, returning random products`);
-      return await getRandomProducts(limit);
+      return await getRandomProducts(context, limit);
     }
 
     // Get products from the first collection, excluding the source product
@@ -600,15 +737,15 @@ async function getCollectionBasedRecommendations(shopifyProductId: string, limit
 
     if (productHandles.length === 0) {
       console.log('No product handles after filtering, returning random products');
-      return await getRandomProducts(limit);
+      return await getRandomProducts(context, limit);
     }
 
     // Fetch full product data
     console.log(`Fetching full product data for handles: ${productHandles.join(', ')}`);
-    return await fetchProductsByHandles(productHandles, limit);
+    return await fetchProductsByHandles(context, productHandles, limit);
   } catch (error) {
     console.error('Error in collection-based recommendations:', error);
-    return await getRandomProducts(limit);
+    return await getRandomProducts(context, limit);
   }
 }
 
@@ -616,7 +753,7 @@ async function getCollectionBasedRecommendations(shopifyProductId: string, limit
  * Get random products as last resort fallback
  * Fetches more products than needed and randomly selects to add variety
  */
-async function getRandomProducts(limit: number): Promise<any[]> {
+async function getRandomProducts(context: RecommendationContext, limit: number): Promise<any[]> {
   try {
     // Fetch more products to allow for random selection
     const fetchCount = Math.min(limit * 3, 50);
@@ -634,7 +771,7 @@ async function getRandomProducts(limit: number): Promise<any[]> {
       }
     `;
 
-    const response: any = await shopifyStorefront['query'](query, {});
+    const response: any = await context.storefrontClient.query(query, {});
 
     if (!response.data?.products?.edges) {
       return [];
@@ -646,7 +783,7 @@ async function getRandomProducts(limit: number): Promise<any[]> {
     const shuffled = allHandles.sort(() => Math.random() - 0.5);
     const selectedHandles = shuffled.slice(0, limit);
 
-    return await fetchProductsByHandles(selectedHandles, limit);
+    return await fetchProductsByHandles(context, selectedHandles, limit);
   } catch (error) {
     console.error('Error fetching random products:', error);
     return [];
@@ -658,7 +795,11 @@ async function getRandomProducts(limit: number): Promise<any[]> {
  * @param handles - Array of product handles
  * @param limit - Maximum number of products to return
  */
-async function fetchProductsByHandles(handles: string[], limit: number): Promise<any[]> {
+async function fetchProductsByHandles(
+  context: RecommendationContext,
+  handles: string[],
+  limit: number
+): Promise<any[]> {
   try {
     if (handles.length === 0) {
       return [];
@@ -723,7 +864,7 @@ async function fetchProductsByHandles(handles: string[], limit: number): Promise
     // Create a query string for handles
     const handleQuery = handles.map(h => `handle:${h}`).join(' OR ');
 
-    const response: any = await shopifyStorefront['query'](query, { queryString: handleQuery });
+    const response: any = await context.storefrontClient.query(query, { queryString: handleQuery });
 
     if (!response.data?.products?.edges) {
       console.warn('No products returned from Shopify Storefront');
