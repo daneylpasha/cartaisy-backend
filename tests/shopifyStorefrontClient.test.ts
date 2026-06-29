@@ -28,11 +28,18 @@ const createStore = (overrides: Record<string, unknown> = {}) => {
 };
 
 describe('ShopifyStorefrontService tenant-scoped client contract', () => {
+  const originalStorefrontToken = process.env.SHOPIFY_STOREFRONT_ACCESS_TOKEN;
+
   beforeEach(() => {
+    process.env.SHOPIFY_STOREFRONT_ACCESS_TOKEN = originalStorefrontToken;
     mockedAxios.create.mockReset();
     postMock.mockReset();
     postMock.mockResolvedValue({ data: { data: { ok: true } } });
     mockedAxios.create.mockReturnValue({ post: postMock } as any);
+  });
+
+  afterAll(() => {
+    process.env.SHOPIFY_STOREFRONT_ACCESS_TOKEN = originalStorefrontToken;
   });
 
   it('returns a tenant-scoped Storefront client for an active store with credentials', async () => {
@@ -162,6 +169,7 @@ describe('ShopifyStorefrontService tenant-scoped client contract', () => {
   });
 
   it('fails clearly when Storefront token is missing', async () => {
+    process.env.SHOPIFY_STOREFRONT_ACCESS_TOKEN = 'global-storefront-token';
     const store = await createStore({
       shopify: {
         shop: 'tenant-shop.myshopify.com',
@@ -183,6 +191,33 @@ describe('ShopifyStorefrontService tenant-scoped client contract', () => {
     await expect(client.query('query Test')).rejects.toThrow(
       'Store missing Storefront API access token. Please configure storefrontAccessToken.'
     );
+    expect(mockedAxios.create).not.toHaveBeenCalled();
+  });
+
+  it('does not use global Storefront credentials when the store token is blank', async () => {
+    process.env.SHOPIFY_STOREFRONT_ACCESS_TOKEN = 'global-storefront-token';
+    const store = await createStore({
+      shopify: {
+        shop: 'tenant-shop.myshopify.com',
+        storefrontAccessToken: '   ',
+        scope: 'read_products',
+        isConnected: true,
+      },
+    });
+
+    const client = await shopifyStorefront.getStorefrontClientForStore(store._id.toString());
+
+    expect(client).toMatchObject({
+      isConfigured: false,
+      shopDomain: '',
+      error: 'Store missing Storefront API access token. Please configure storefrontAccessToken.',
+      statusCode: 400,
+    });
+    expect(client.expose).toBeUndefined();
+    await expect(client.query('query Test')).rejects.toThrow(
+      'Store missing Storefront API access token. Please configure storefrontAccessToken.'
+    );
+    expect(mockedAxios.create).not.toHaveBeenCalled();
   });
 
   it('fetches collection products with the tenant-scoped Storefront client', async () => {

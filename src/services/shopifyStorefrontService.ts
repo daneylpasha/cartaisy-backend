@@ -1839,7 +1839,7 @@ class ShopifyStorefrontService {
       // Store-scoped Storefront requests must use the tenant's own Storefront API token.
       // Admin API tokens and process-wide fallback tokens can query the wrong Shopify shop in
       // multi-tenant mobile flows, so missing per-store credentials are treated as a setup error.
-      const storefrontToken = store.shopify.storefrontAccessToken;
+      const storefrontToken = store.shopify.storefrontAccessToken?.trim();
 
       if (!storefrontToken) {
         console.warn(`Store ${storeId} missing Storefront API access token`);
