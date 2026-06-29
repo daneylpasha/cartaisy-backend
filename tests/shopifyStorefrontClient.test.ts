@@ -29,9 +29,15 @@ const createStore = (overrides: Record<string, unknown> = {}) => {
 
 describe('ShopifyStorefrontService tenant-scoped client contract', () => {
   const originalStorefrontToken = process.env.SHOPIFY_STOREFRONT_ACCESS_TOKEN;
+  const originalNodeEnv = process.env.NODE_ENV;
+  const originalSaasMode = process.env.SAAS_MODE;
+  const originalMultiTenantMode = process.env.MULTI_TENANT_MODE;
 
   beforeEach(() => {
     process.env.SHOPIFY_STOREFRONT_ACCESS_TOKEN = originalStorefrontToken;
+    process.env.NODE_ENV = originalNodeEnv;
+    process.env.SAAS_MODE = originalSaasMode;
+    process.env.MULTI_TENANT_MODE = originalMultiTenantMode;
     mockedAxios.create.mockReset();
     postMock.mockReset();
     postMock.mockResolvedValue({ data: { data: { ok: true } } });
@@ -40,6 +46,9 @@ describe('ShopifyStorefrontService tenant-scoped client contract', () => {
 
   afterAll(() => {
     process.env.SHOPIFY_STOREFRONT_ACCESS_TOKEN = originalStorefrontToken;
+    process.env.NODE_ENV = originalNodeEnv;
+    process.env.SAAS_MODE = originalSaasMode;
+    process.env.MULTI_TENANT_MODE = originalMultiTenantMode;
   });
 
   it('returns a tenant-scoped Storefront client for an active store with credentials', async () => {
@@ -218,6 +227,41 @@ describe('ShopifyStorefrontService tenant-scoped client contract', () => {
       'Store missing Storefront API access token. Please configure storefrontAccessToken.'
     );
     expect(mockedAxios.create).not.toHaveBeenCalled();
+  });
+
+  it('blocks legacy global Storefront reads in production mode', async () => {
+    process.env.NODE_ENV = 'production';
+
+    const blockedReads = [
+      shopifyStorefront.getProducts(),
+      shopifyStorefront.getProductById('123'),
+      shopifyStorefront.getCollections(),
+      shopifyStorefront.getCollectionById('123'),
+      shopifyStorefront.getCollectionProducts('123'),
+      shopifyStorefront.predictiveSearch('shirt'),
+      shopifyStorefront.searchProducts('shirt'),
+    ];
+
+    await Promise.all(blockedReads.map((promise) => expect(promise).rejects.toMatchObject({
+      name: ApiError.name,
+      message: 'Storefront store context is required for this request',
+      statusCode: 400,
+      expose: true,
+    })));
+    expect(postMock).not.toHaveBeenCalled();
+  });
+
+  it('blocks legacy global Storefront reads when SaaS mode is enabled outside production', async () => {
+    process.env.NODE_ENV = 'development';
+    process.env.SAAS_MODE = 'true';
+
+    await expect(shopifyStorefront.getProducts()).rejects.toMatchObject({
+      name: ApiError.name,
+      message: 'Storefront store context is required for this request',
+      statusCode: 400,
+      expose: true,
+    });
+    expect(postMock).not.toHaveBeenCalled();
   });
 
   it('fetches collection products with the tenant-scoped Storefront client', async () => {
