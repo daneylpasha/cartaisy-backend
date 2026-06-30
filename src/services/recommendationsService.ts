@@ -72,18 +72,6 @@ type RecommendationContext = {
   storefrontClient: ShopifyStorefrontClient;
 };
 
-const getLegacyStorefrontClient = (): ShopifyStorefrontClient | null => {
-  if (!shopifyStorefront.isConfigured()) {
-    return null;
-  }
-
-  return {
-    query: (graphqlQuery, variables) => (shopifyStorefront as any).query(graphqlQuery, variables),
-    isConfigured: true,
-    shopDomain: '',
-  };
-};
-
 const getStorefrontClientError = (storefrontClient: ShopifyStorefrontClient): {
   message: string;
   expose: boolean;
@@ -139,16 +127,7 @@ const getRecommendationContext = async (
     };
   }
 
-  const storefrontClient = getLegacyStorefrontClient();
-
-  if (!storefrontClient) {
-    console.warn('Shopify Storefront not configured');
-    return null;
-  }
-
-  return {
-    storefrontClient,
-  };
+  throw new ApiError('Store context is required for recommendations', 400, true, undefined, true);
 };
 
 /**

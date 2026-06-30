@@ -183,6 +183,30 @@ describe('recommendationsService tenant-scoped Storefront client', () => {
     ]);
   });
 
+  it('fails closed without checking global Storefront config when product recommendations have no store context', async () => {
+    await expect(getProductRecommendations('100', 6)).rejects.toMatchObject({
+      name: 'ApiError',
+      message: 'Store context is required for recommendations',
+      statusCode: 400,
+      expose: true,
+    } satisfies Partial<ApiError>);
+
+    expect(storefrontService.getStorefrontClientForStore).not.toHaveBeenCalled();
+    expect(storefrontService.isConfigured).not.toHaveBeenCalled();
+  });
+
+  it('fails closed without checking global Storefront config when cart recommendations have no store context', async () => {
+    await expect(getCartRecommendations(['100'], 6)).rejects.toMatchObject({
+      name: 'ApiError',
+      message: 'Store context is required for recommendations',
+      statusCode: 400,
+      expose: true,
+    } satisfies Partial<ApiError>);
+
+    expect(storefrontService.getStorefrontClientForStore).not.toHaveBeenCalled();
+    expect(storefrontService.isConfigured).not.toHaveBeenCalled();
+  });
+
   it('throws a generic controlled error when tenant Storefront credentials are not exposed', async () => {
     const storeId = '64b7f8e2b7f8e2b7f8e2b7f8';
 
