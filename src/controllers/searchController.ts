@@ -60,12 +60,14 @@ export class SearchController extends Controller {
   @Get('initial-screen')
   @TsoaResponse(500, 'Internal Server Error')
   public async getInitialSearchScreen(
+    @Header('x-store-id') storeId: string,
     @Query() limit?: number,
     @Query() timeframe?: number
   ): Promise<InitialSearchScreenResponse> {
     try {
       const limitNum = limit || 10;
       const timeframeNum = timeframe || 7;
+      const validatedStoreId = this.validateStoreId(storeId);
 
       // Fetch all data in parallel for better performance
       const [trendingProductsData, trendingCollections] = await Promise.all([
@@ -80,7 +82,7 @@ export class SearchController extends Controller {
       // Fallback: Fetch products from Shopify if no trending products
       if (trendingProducts.length === 0) {
         try {
-          const shopifyProductsResponse = await ShopifyStorefrontService.getProducts(limitNum);
+          const shopifyProductsResponse = await ShopifyStorefrontService.getProductsForStore(validatedStoreId, limitNum);
 
           if (shopifyProductsResponse?.data?.products?.edges) {
             // Transform Shopify products to our format
@@ -91,6 +93,10 @@ export class SearchController extends Controller {
             usedProductFallback = true;
           }
         } catch (error) {
+          if (error instanceof ApiError) {
+            throw error;
+          }
+
           console.error('Error fetching Shopify products as fallback:', error);
           // Keep trendingProducts as empty array if Shopify fetch fails
         }
@@ -104,7 +110,7 @@ export class SearchController extends Controller {
 
       if (finalCollections.length === 0) {
         try {
-          const shopifyCollectionsResponse = await ShopifyStorefrontService.getCollections(limitNum);
+          const shopifyCollectionsResponse = await ShopifyStorefrontService.getCollectionsForStore(validatedStoreId, limitNum);
 
           // Fetch full collection data with products (match homescreen format)
           const enrichedCollections = await Promise.all(
@@ -113,7 +119,7 @@ export class SearchController extends Controller {
                 const collectionId = edge.node.id;
 
                 // Fetch full collection with products
-                const fullCollectionResponse = await ShopifyStorefrontService.getCollectionById(collectionId, 20);
+                const fullCollectionResponse = await ShopifyStorefrontService.getCollectionByIdForStore(validatedStoreId, collectionId, 20);
 
                 if (!fullCollectionResponse?.data?.collection) {
                   return null;
@@ -132,6 +138,10 @@ export class SearchController extends Controller {
                   products: enrichedProducts
                 };
               } catch (error) {
+                if (error instanceof ApiError) {
+                  throw error;
+                }
+
                 console.error('Error fetching collection details:', error);
                 return null;
               }
@@ -141,6 +151,10 @@ export class SearchController extends Controller {
           // Filter out failed fetches
           finalCollections = enrichedCollections.filter(c => c !== null);
         } catch (error) {
+          if (error instanceof ApiError) {
+            throw error;
+          }
+
           console.error('Error fetching Shopify collections as fallback:', error);
           // Keep finalCollections as empty array if Shopify fetch fails
         }
@@ -165,7 +179,7 @@ export class SearchController extends Controller {
       };
     } catch (error) {
       console.error('Error getting initial search screen data:', error);
-      this.setStatus(500);
+      this.setErrorStatus(error);
       throw error;
     }
   }
@@ -184,6 +198,7 @@ export class SearchController extends Controller {
   @TsoaResponse(500, 'Internal Server Error')
   public async getSearchContext(
     @Request() request: any,
+    @Header('x-store-id') storeId: string,
     @Query() limit?: number,
     @Query() timeframe?: number
   ): Promise<SearchContextResponse> {
@@ -191,16 +206,17 @@ export class SearchController extends Controller {
       const limitNum = Math.min(limit || 5, 5); // Max 5 for performance
       const timeframeNum = timeframe || 7;
       const userId = request.user?.id;
+      const validatedStoreId = this.validateStoreId(storeId);
 
       // Fetch enriched searches from database (products/collections only)
       const promises: Promise<any>[] = [
-        SearchHistory.getTrendingEnrichedSearches(limitNum, timeframeNum), // Trending searches
+        SearchHistory.getTrendingEnrichedSearches(limitNum, timeframeNum, validatedStoreId), // Trending searches
         ProductView.getTrendingProducts(10, timeframeNum) // Bonus trending products
       ];
 
       // Add recent searches if user is authenticated
       if (userId) {
-        promises.push(SearchHistory.getUserEnrichedSearches(userId, limitNum));
+        promises.push(SearchHistory.getUserEnrichedSearches(userId, limitNum, validatedStoreId));
       } else {
         promises.push(Promise.resolve([])); // Empty for guests
       }
@@ -212,7 +228,10 @@ export class SearchController extends Controller {
         try {
           if (item.searchType === 'product' && item.selectedProductId) {
             // Fetch product from Shopify
-            const productResponse = await ShopifyStorefrontService.getProductById(item.selectedProductId);
+            const productResponse = await ShopifyStorefrontService.getProductByIdForStore(
+              validatedStoreId,
+              item.selectedProductId
+            );
 
             if (productResponse?.data?.product) {
               // Transform and enrich product
@@ -229,7 +248,11 @@ export class SearchController extends Controller {
             }
           } else if (item.searchType === 'collection' && item.selectedCollectionId) {
             // Fetch collection from Shopify
-            const collectionResponse = await ShopifyStorefrontService.getCollectionById(item.selectedCollectionId, 20);
+            const collectionResponse = await ShopifyStorefrontService.getCollectionByIdForStore(
+              validatedStoreId,
+              item.selectedCollectionId,
+              20
+            );
 
             if (collectionResponse?.data?.collection) {
               // Transform and enrich collection
@@ -253,6 +276,10 @@ export class SearchController extends Controller {
 
           return null;
         } catch (error) {
+          if (error instanceof ApiError) {
+            throw error;
+          }
+
           console.error(`Error enriching search item (${item.searchType}):`, error);
           return null;
         }
@@ -294,8 +321,8 @@ export class SearchController extends Controller {
 
           // Fetch trending products (3) and collections (2) from Shopify
           const [shopifyProducts, shopifyCollections] = await Promise.all([
-            ShopifyStorefrontService.getProducts(3),
-            ShopifyStorefrontService.getCollections(2)
+            ShopifyStorefrontService.getProductsForStore(validatedStoreId, 3),
+            ShopifyStorefrontService.getCollectionsForStore(validatedStoreId, 2)
           ]);
 
           const fallbackSearches: any[] = [];
@@ -322,7 +349,11 @@ export class SearchController extends Controller {
             const collectionPromises = shopifyCollections.data.collections.edges.map(async (edge: any) => {
               try {
                 const collectionId = edge.node.id;
-                const fullCollectionResponse = await ShopifyStorefrontService.getCollectionById(collectionId, 20);
+                const fullCollectionResponse = await ShopifyStorefrontService.getCollectionByIdForStore(
+                  validatedStoreId,
+                  collectionId,
+                  20
+                );
 
                 if (!fullCollectionResponse?.data?.collection) {
                   return null;
@@ -338,6 +369,10 @@ export class SearchController extends Controller {
                   products: enrichedProducts
                 };
               } catch (error) {
+                if (error instanceof ApiError) {
+                  throw error;
+                }
+
                 console.error('Error fetching fallback collection:', error);
                 return null;
               }
@@ -361,6 +396,10 @@ export class SearchController extends Controller {
           // Limit to max 5 and shuffle for variety
           trendingSearches = fallbackSearches.slice(0, limitNum);
         } catch (error) {
+          if (error instanceof ApiError) {
+            throw error;
+          }
+
           console.error('Error creating fallback trending searches:', error);
           // Keep trendingSearches as empty if fallback fails
         }
@@ -372,7 +411,7 @@ export class SearchController extends Controller {
 
       if (trendingProducts.length === 0) {
         try {
-          const shopifyProductsResponse = await ShopifyStorefrontService.getProducts(10);
+          const shopifyProductsResponse = await ShopifyStorefrontService.getProductsForStore(validatedStoreId, 10);
 
           if (shopifyProductsResponse?.data?.products?.edges) {
             const transformedProducts = transformShopifyProductEdges(shopifyProductsResponse.data.products.edges);
@@ -380,6 +419,10 @@ export class SearchController extends Controller {
             usedProductFallback = true;
           }
         } catch (error) {
+          if (error instanceof ApiError) {
+            throw error;
+          }
+
           console.error('Error fetching Shopify products as fallback:', error);
         }
       } else {
@@ -408,7 +451,7 @@ export class SearchController extends Controller {
       };
     } catch (error) {
       console.error('Error getting search context data:', error);
-      this.setStatus(500);
+      this.setErrorStatus(error);
       throw error;
     }
   }

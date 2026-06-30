@@ -1626,6 +1626,7 @@ export function RegisterRoutes(app: Router) {
         });
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsSearchController_getInitialSearchScreen: Record<string, TsoaRoute.ParameterSchema> = {
+                storeId: {"in":"header","name":"x-store-id","required":true,"dataType":"string"},
                 limit: {"in":"query","name":"limit","dataType":"double"},
                 timeframe: {"in":"query","name":"timeframe","dataType":"double"},
         };
@@ -1658,6 +1659,7 @@ export function RegisterRoutes(app: Router) {
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsSearchController_getSearchContext: Record<string, TsoaRoute.ParameterSchema> = {
                 request: {"in":"request","name":"request","required":true,"dataType":"object"},
+                storeId: {"in":"header","name":"x-store-id","required":true,"dataType":"string"},
                 limit: {"in":"query","name":"limit","dataType":"double"},
                 timeframe: {"in":"query","name":"timeframe","dataType":"double"},
         };

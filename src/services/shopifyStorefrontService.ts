@@ -432,6 +432,96 @@ class ShopifyStorefrontService {
   }
 
   /**
+   * Get products for a specific store using tenant-scoped Storefront credentials.
+   */
+  async getProductsForStore(
+    storeId: string,
+    limit: number = 20,
+    query?: string,
+    sortKey?: string,
+    countryCode?: string
+  ): Promise<ShopifyProductsQueryResponse> {
+    const storeClient = await this.getStoreClient(storeId);
+
+    if (!storeClient.isConfigured) {
+      throw new ApiError(
+        storeClient.error || 'Shopify not configured for this store',
+        storeClient.statusCode || 400,
+        true,
+        undefined,
+        storeClient.expose ?? false
+      );
+    }
+
+    const graphqlQuery = `
+      query getProducts($limit: Int!, $query: String, $sortKey: ProductSortKeys, $country: CountryCode) @inContext(country: $country) {
+        products(first: $limit, query: $query, sortKey: $sortKey) {
+          edges {
+            node {
+              id
+              title
+              description
+              handle
+              vendor
+              productType
+              tags
+              availableForSale
+              totalInventory
+              priceRange {
+                minVariantPrice {
+                  amount
+                  currencyCode
+                }
+              }
+              compareAtPriceRange {
+                minVariantPrice {
+                  amount
+                  currencyCode
+                }
+              }
+              images(first: 3) {
+                edges {
+                  node {
+                    url
+                    altText
+                  }
+                }
+              }
+              variants(first: 5) {
+                edges {
+                  node {
+                    id
+                    title
+                    price {
+                      amount
+                      currencyCode
+                    }
+                    availableForSale
+                    quantityAvailable
+                  }
+                }
+              }
+              createdAt
+              updatedAt
+            }
+          }
+          pageInfo {
+            hasNextPage
+            hasPreviousPage
+          }
+        }
+      }
+    `;
+
+    return storeClient.query<ShopifyProductsQueryResponse['data']>(graphqlQuery, {
+      limit,
+      query,
+      sortKey,
+      country: countryCode || null,
+    });
+  }
+
+  /**
    * Get all collections
    */
   async getCollections(limit: number = 20): Promise<ShopifyCollectionsQueryResponse> {
@@ -458,6 +548,45 @@ class ShopifyStorefrontService {
     `;
 
     return this.query<ShopifyCollectionsQueryResponse>(query, { limit });
+  }
+
+  /**
+   * Get collections for a specific store using tenant-scoped Storefront credentials.
+   */
+  async getCollectionsForStore(storeId: string, limit: number = 20): Promise<ShopifyCollectionsQueryResponse> {
+    const storeClient = await this.getStoreClient(storeId);
+
+    if (!storeClient.isConfigured) {
+      throw new ApiError(
+        storeClient.error || 'Shopify not configured for this store',
+        storeClient.statusCode || 400,
+        true,
+        undefined,
+        storeClient.expose ?? false
+      );
+    }
+
+    const query = `
+      query getCollections($limit: Int!) {
+        collections(first: $limit) {
+          edges {
+            node {
+              id
+              title
+              description
+              handle
+              image {
+                url
+                altText
+              }
+              updatedAt
+            }
+          }
+        }
+      }
+    `;
+
+    return storeClient.query<ShopifyCollectionsQueryResponse['data']>(query, { limit });
   }
 
   /**

@@ -7,6 +7,14 @@ import { ApiError } from '../src/utils/errors';
 jest.mock('../src/services/shopifyStorefrontService', () => ({
   __esModule: true,
   default: {
+    getProducts: jest.fn(),
+    getCollections: jest.fn(),
+    getProductById: jest.fn(),
+    getCollectionById: jest.fn(),
+    getProductsForStore: jest.fn(),
+    getCollectionsForStore: jest.fn(),
+    getProductByIdForStore: jest.fn(),
+    getCollectionByIdForStore: jest.fn(),
     predictiveSearchForStore: jest.fn(),
     searchProductsForStore: jest.fn(),
   },
@@ -162,6 +170,14 @@ const paginatedSecondPageResponse = {
 
 describe('SearchController tenant-scoped Storefront search', () => {
   beforeEach(() => {
+    storefrontService.getProducts.mockReset();
+    storefrontService.getCollections.mockReset();
+    storefrontService.getProductById.mockReset();
+    storefrontService.getCollectionById.mockReset();
+    storefrontService.getProductsForStore.mockReset();
+    storefrontService.getCollectionsForStore.mockReset();
+    storefrontService.getProductByIdForStore.mockReset();
+    storefrontService.getCollectionByIdForStore.mockReset();
     storefrontService.predictiveSearchForStore.mockReset();
     storefrontService.searchProductsForStore.mockReset();
     storefrontService.predictiveSearchForStore.mockResolvedValue(predictiveResponse as any);
@@ -407,5 +423,195 @@ describe('SearchController tenant-scoped Storefront search', () => {
     const suggestions = await SearchHistory.getSearchSuggestions('sh.*', 10, storeId.toString());
 
     expect(suggestions).toEqual([{ query: 'sh.* literal', popularity: 1 }]);
+  });
+
+  it('uses tenant-scoped Storefront fallbacks for the initial search screen', async () => {
+    const storeId = new mongoose.Types.ObjectId().toString();
+    const controller = new SearchController();
+    storefrontService.getProductsForStore.mockResolvedValueOnce(searchProductsResponse as any);
+    storefrontService.getCollectionsForStore.mockResolvedValueOnce({
+      data: {
+        collections: {
+          edges: [
+            {
+              node: {
+                id: 'gid://shopify/Collection/1',
+                title: 'Shirts',
+                description: 'Shirts collection',
+                handle: 'shirts',
+                image: null,
+              },
+            },
+          ],
+        },
+      },
+    } as any);
+    storefrontService.getCollectionByIdForStore.mockResolvedValueOnce({
+      data: {
+        collection: {
+          id: 'gid://shopify/Collection/1',
+          title: 'Shirts',
+          description: 'Shirts collection',
+          handle: 'shirts',
+          image: null,
+          products: {
+            edges: [],
+          },
+        },
+      },
+    } as any);
+
+    const response = await controller.getInitialSearchScreen(storeId, 5, 7);
+
+    expect(storefrontService.getProductsForStore).toHaveBeenCalledWith(storeId, 5);
+    expect(storefrontService.getCollectionsForStore).toHaveBeenCalledWith(storeId, 5);
+    expect(storefrontService.getCollectionByIdForStore).toHaveBeenCalledWith(
+      storeId,
+      'gid://shopify/Collection/1',
+      20
+    );
+    expect(storefrontService.getProducts).not.toHaveBeenCalled();
+    expect(storefrontService.getCollections).not.toHaveBeenCalled();
+    expect(storefrontService.getCollectionById).not.toHaveBeenCalled();
+    expect(response.data.trendingProducts).toHaveLength(1);
+    expect(response.data.trendingCollections).toHaveLength(1);
+    expect(response.data.metadata.isFallback).toEqual({
+      products: true,
+      collections: true,
+    });
+  });
+
+  it('fails the initial search screen with a controlled error when store credentials are invalid', async () => {
+    const storeId = new mongoose.Types.ObjectId().toString();
+    const controller = new SearchController();
+    storefrontService.getProductsForStore.mockRejectedValueOnce(
+      new ApiError('Shopify not configured for this store', 400, true, undefined, true)
+    );
+
+    await expect(controller.getInitialSearchScreen(storeId, 5, 7)).rejects.toMatchObject({
+      name: ApiError.name,
+      statusCode: 400,
+      message: 'Shopify not configured for this store',
+      expose: true,
+    });
+
+    expect(controller.getStatus()).toBe(400);
+    expect(storefrontService.getProducts).not.toHaveBeenCalled();
+  });
+
+  it('uses tenant-scoped Storefront calls for search context enrichment and fallbacks', async () => {
+    const storeId = new mongoose.Types.ObjectId();
+    await SearchHistory.create([
+      {
+        storeId,
+        query: 'tenant shirt',
+        searchType: 'product',
+        selectedProductId: 'gid://shopify/Product/1',
+        resultsCount: 1,
+        hasResults: true,
+      },
+      {
+        storeId,
+        query: 'tenant shirt',
+        searchType: 'product',
+        selectedProductId: 'gid://shopify/Product/1',
+        resultsCount: 1,
+        hasResults: true,
+      },
+      {
+        storeId,
+        query: 'tenant collection',
+        searchType: 'collection',
+        selectedCollectionId: 'gid://shopify/Collection/1',
+        resultsCount: 1,
+        hasResults: true,
+      },
+      {
+        storeId,
+        query: 'tenant collection',
+        searchType: 'collection',
+        selectedCollectionId: 'gid://shopify/Collection/1',
+        resultsCount: 1,
+        hasResults: true,
+      },
+    ]);
+    const controller = new SearchController();
+    storefrontService.getProductByIdForStore.mockResolvedValue({
+      data: {
+        product: searchProductsResponse.data.products.edges[0].node,
+      },
+    } as any);
+    storefrontService.getCollectionByIdForStore.mockResolvedValue({
+      data: {
+        collection: {
+          id: 'gid://shopify/Collection/1',
+          title: 'Shirts',
+          description: 'Shirts collection',
+          handle: 'shirts',
+          image: null,
+          products: {
+            edges: [],
+          },
+        },
+      },
+    } as any);
+
+    const response = await controller.getSearchContext(
+      { user: { id: new mongoose.Types.ObjectId().toString() } },
+      storeId.toString(),
+      5,
+      7
+    );
+
+    expect(storefrontService.getProductByIdForStore).toHaveBeenCalledWith(
+      storeId.toString(),
+      'gid://shopify/Product/1'
+    );
+    expect(storefrontService.getCollectionByIdForStore).toHaveBeenCalledWith(
+      storeId.toString(),
+      'gid://shopify/Collection/1',
+      20
+    );
+    expect(storefrontService.getProductById).not.toHaveBeenCalled();
+    expect(storefrontService.getCollectionById).not.toHaveBeenCalled();
+    expect(response.data.trendingSearches).toHaveLength(2);
+  });
+
+  it('fails search context with a controlled error when tenant Storefront credentials are invalid', async () => {
+    const storeId = new mongoose.Types.ObjectId();
+    await SearchHistory.create([
+      {
+        storeId,
+        query: 'tenant shirt',
+        searchType: 'product',
+        selectedProductId: 'gid://shopify/Product/1',
+        resultsCount: 1,
+        hasResults: true,
+      },
+      {
+        storeId,
+        query: 'tenant shirt',
+        searchType: 'product',
+        selectedProductId: 'gid://shopify/Product/1',
+        resultsCount: 1,
+        hasResults: true,
+      },
+    ]);
+    const controller = new SearchController();
+    storefrontService.getProductByIdForStore.mockRejectedValueOnce(
+      new ApiError('Shopify not configured for this store', 400, true, undefined, true)
+    );
+
+    await expect(
+      controller.getSearchContext({ user: undefined }, storeId.toString(), 5, 7)
+    ).rejects.toMatchObject({
+      name: ApiError.name,
+      statusCode: 400,
+      message: 'Shopify not configured for this store',
+      expose: true,
+    });
+
+    expect(controller.getStatus()).toBe(400);
+    expect(storefrontService.getProductById).not.toHaveBeenCalled();
   });
 });

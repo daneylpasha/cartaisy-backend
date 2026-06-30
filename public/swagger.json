@@ -5159,6 +5159,14 @@
 				"security": [],
 				"parameters": [
 					{
+						"in": "header",
+						"name": "x-store-id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
 						"description": "- Number of items to return (default: 10)",
 						"in": "query",
 						"name": "limit",
@@ -5206,6 +5214,14 @@
 					}
 				],
 				"parameters": [
+					{
+						"in": "header",
+						"name": "x-store-id",
+						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					},
 					{
 						"description": "- Number of items to return per category (default: 5, max 5)",
 						"in": "query",
