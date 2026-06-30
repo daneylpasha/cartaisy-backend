@@ -58,6 +58,7 @@ export class SearchController extends Controller {
    * @param timeframe - Timeframe in days for trending calculation (default: 7)
    */
   @Get('initial-screen')
+  @TsoaResponse(400, 'Bad Request')
   @TsoaResponse(500, 'Internal Server Error')
   public async getInitialSearchScreen(
     @Header('x-store-id') storeId: string,
@@ -195,6 +196,7 @@ export class SearchController extends Controller {
    */
   @Get('context')
   @Security('jwt-optional')
+  @TsoaResponse(400, 'Bad Request')
   @TsoaResponse(500, 'Internal Server Error')
   public async getSearchContext(
     @Request() request: any,
