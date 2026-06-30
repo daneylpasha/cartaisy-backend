@@ -17,6 +17,7 @@ Unified cart currently supports both guest and customer flows. Guest cart reques
 ## Risks
 
 - The global `strictStoreValidation` comment promises token-store binding, but current JWT payloads do not carry store ownership. The actual binding happens later only on routes that use customer or store admin middleware.
+- `strictStoreValidation` silently falls back to the caller-supplied `X-Store-ID` header when the bearer token is malformed or expired. Its `catch` block sets `req.storeId = headerStoreId` and intentionally calls `next()` so that downstream auth middleware can reject the bad token. The consequence is that `req.storeId`, as set by the global layer alone, can originate from an untrusted header even when an (invalid) `Authorization` token is present. Future route-level ownership middleware must therefore not treat the global `req.storeId` as authoritative for authenticated contexts; it must re-derive and validate the effective store ID from the authenticated user/customer record.
 - Admin routes that use `authenticate` plus role authorization without `storeAuth` can accept a caller-supplied `:storeId` and operate on that store if the controller does not compare it to `req.user.storeId`.
 - Routes with `:storeId` parameters are easy to misread as tenant-scoped because queries include `storeId`, but query scoping is not the same as proving the authenticated user owns that store.
 - Public endpoints must continue to accept store IDs, so future enforcement needs route-level policy rather than a blanket rejection of supplied store IDs.
@@ -29,7 +30,7 @@ Use the following store context rules:
 1. Public storefront read access may accept `X-Store-ID` or `storeId` when the endpoint returns public, read-only store data.
 2. Customer-authenticated routes must ignore caller-supplied store IDs for authorization and use `Customer.storeId` loaded from the authenticated customer record.
 3. Admin/staff routes must use a shared ownership middleware that compares the effective store ID to the authenticated `User.storeId`.
-4. Super admin access should be the only exception that can operate across stores, and that exception should be explicit in the middleware or route metadata.
+4. Super admin access should be the only exception that can operate across stores, and that exception should be explicit in the middleware or route metadata. A super admin bypass must do two things, not one: skip the ownership comparison **and** set the effective `req.storeId` from the declared route source (for example `req.params.storeId`). It must not retain the super admin's own `User.storeId`. Note that the existing `storeAuth` middleware always sets `req.storeId` from the authenticated user's own record, so any super admin cross-store path that runs through `storeAuth` (for example `requireSuperAdmin = [authenticate, storeAuth, superAdmin]`) will silently scope to the admin's own store unless the new middleware deliberately overwrites `req.storeId` with the requested store ID.
 5. Controllers should not perform ownership decisions from raw `req.params.storeId`, `req.query.storeId`, `req.body.storeId`, or `X-Store-ID` after authentication. They should use a validated effective store ID set by middleware.
 6. JWTs should not become the source of truth for ownership unless token issuance and refresh behavior are intentionally redesigned. Database-backed user/customer records should remain authoritative for the next implementation step.
 
@@ -66,7 +67,7 @@ Routes already using `requireStoreAdmin` are closer to the target policy because
 
 ## Proposed Implementation Plan
 
-1. Add a shared middleware such as `requireOwnedStoreParam` for admin/staff routes. It should run after `authenticate`, load or use the authenticated user's store ID, compare it to `req.params.storeId` or another declared source, allow explicit `super_admin` bypass when intended, and set a normalized `req.storeId`.
+1. Add a shared middleware such as `requireOwnedStoreParam` for admin/staff routes. It should run after `authenticate`, load the authenticated user's store ID, compare it to `req.params.storeId` (or another declared source), and on a match set a normalized `req.storeId` from that requested store ID. For non-super-admins a mismatch returns 403. When an explicit `super_admin` bypass is intended, the middleware must skip the comparison **and** set `req.storeId` from the requested route source rather than from `req.user.storeId`; otherwise cross-store access silently scopes back to the admin's own store. Because the current `storeAuth` already overwrites `req.storeId` with the user's own store, this new middleware should either replace `storeAuth` on these routes or run after it and deliberately re-set `req.storeId`.
 2. Add a public store context middleware for public storefront routes. It should extract a store ID, validate ObjectId format, optionally require active stores for mobile-facing data, and avoid implying authenticated ownership.
 3. Update admin route groups that currently use only `authenticate` and role authorization to use the shared ownership middleware before controllers read `:storeId`.
 4. Standardize controller expectations so authenticated controllers use `req.storeId` and public controllers use a clearly named public context helper.
@@ -79,7 +80,8 @@ Routes already using `requireStoreAdmin` are closer to the target policy because
 - Customer token cannot access another customer's store-scoped data by supplying a different `storeId` in query, body, or header.
 - Admin user with store A receives 403 when calling a store B `:storeId` admin route.
 - Admin user with store A succeeds on the same route when `:storeId` is store A.
-- Explicit super admin behavior is tested for whichever cross-store routes are allowed.
+- Explicit super admin behavior is tested for whichever cross-store routes are allowed. Specifically, a super admin calling a store B `:storeId` route receives store B's data (asserting the response is scoped to the requested store, not the admin's own store), confirming `req.storeId` is set from the route source and not from `User.storeId`.
+- A request carrying an invalid or expired bearer token together with an `X-Store-ID` header is not treated as authenticated by route-level ownership middleware; the request is rejected by auth rather than served using the header-derived `req.storeId`.
 - Public catalog/config routes continue to work for valid active store IDs without authentication.
 - Public routes reject missing or malformed store IDs without changing existing response shape expectations.
 - Guest cart remains scoped to the supplied store ID, while authenticated cart operations use the customer's stored store ID.
