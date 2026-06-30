@@ -338,7 +338,8 @@ SearchHistorySchema.statics.getUserRecentSearches = async function (
  */
 SearchHistorySchema.statics.getUserEnrichedSearches = async function (
   userId: string,
-  limit: number = 5
+  limit: number = 5,
+  storeId?: string
 ): Promise<
   Array<{
     query: string;
@@ -348,12 +349,18 @@ SearchHistorySchema.statics.getUserEnrichedSearches = async function (
     selectedCollectionId?: string;
   }>
 > {
+  const matchStage: Record<string, unknown> = {
+    userId: new mongoose.Types.ObjectId(userId),
+    searchType: { $in: ['product', 'collection'] }, // Only product/collection searches
+  };
+
+  if (storeId) {
+    matchStage.storeId = new mongoose.Types.ObjectId(storeId);
+  }
+
   const results = await this.aggregate([
     {
-      $match: {
-        userId: new mongoose.Types.ObjectId(userId),
-        searchType: { $in: ['product', 'collection'] }, // Only product/collection searches
-      },
+      $match: matchStage,
     },
     {
       $sort: { createdAt: -1 },
@@ -408,7 +415,8 @@ SearchHistorySchema.statics.getUserEnrichedSearches = async function (
  */
 SearchHistorySchema.statics.getTrendingEnrichedSearches = async function (
   limit: number = 5,
-  days: number = 7
+  days: number = 7,
+  storeId?: string
 ): Promise<
   Array<{
     query: string;
@@ -421,13 +429,19 @@ SearchHistorySchema.statics.getTrendingEnrichedSearches = async function (
 > {
   const recentCutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
   const previousCutoff = new Date(Date.now() - 2 * days * 24 * 60 * 60 * 1000);
+  const storeObjectId = storeId ? new mongoose.Types.ObjectId(storeId) : undefined;
+  const matchStage: Record<string, unknown> = {
+    createdAt: { $gte: recentCutoff },
+    searchType: { $in: ['product', 'collection'] }, // Only product/collection searches
+  };
+
+  if (storeObjectId) {
+    matchStage.storeId = storeObjectId;
+  }
 
   const results = await this.aggregate([
     {
-      $match: {
-        createdAt: { $gte: recentCutoff },
-        searchType: { $in: ['product', 'collection'] }, // Only product/collection searches
-      },
+      $match: matchStage,
     },
     {
       $group: {
@@ -463,6 +477,7 @@ SearchHistorySchema.statics.getTrendingEnrichedSearches = async function (
                   { $eq: ['$searchType', '$$searchType'] },
                   { $gte: ['$createdAt', previousCutoff] },
                   { $lt: ['$createdAt', recentCutoff] },
+                  ...(storeObjectId ? [{ $eq: ['$storeId', storeObjectId] }] : []),
                   {
                     $eq: [
                       {
@@ -598,7 +613,8 @@ export interface ISearchHistoryModel extends mongoose.Model<ISearchHistoryDocume
   ): Promise<Array<{ query: string; resultsCount: number; searchedAt: Date }>>;
   getUserEnrichedSearches(
     userId: string,
-    limit?: number
+    limit?: number,
+    storeId?: string
   ): Promise<Array<{
     query: string;
     searchedAt: Date;
@@ -608,7 +624,8 @@ export interface ISearchHistoryModel extends mongoose.Model<ISearchHistoryDocume
   }>>;
   getTrendingEnrichedSearches(
     limit?: number,
-    days?: number
+    days?: number,
+    storeId?: string
   ): Promise<Array<{
     query: string;
     searchType: 'text' | 'product' | 'collection';

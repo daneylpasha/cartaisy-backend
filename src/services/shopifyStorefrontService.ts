@@ -348,22 +348,8 @@ class ShopifyStorefrontService {
     });
   }
 
-  /**
-   * Get products with optional filtering
-   * @param limit - Number of products to fetch
-   * @param query - Filter query string
-   * @param sortKey - Sort key for ordering
-   * @param countryCode - ISO country code for multi-currency pricing (e.g., 'US', 'GB', 'CA')
-   */
-  async getProducts(
-    limit: number = 20,
-    query?: string,
-    sortKey?: string,
-    countryCode?: string
-  ): Promise<ShopifyProductsQueryResponse> {
-    this.assertGlobalStorefrontReadsAllowed();
-
-    const graphqlQuery = `
+  private getProductsQuery(): string {
+    return `
       query getProducts($limit: Int!, $query: String, $sortKey: ProductSortKeys, $country: CountryCode) @inContext(country: $country) {
         products(first: $limit, query: $query, sortKey: $sortKey) {
           edges {
@@ -422,22 +408,10 @@ class ShopifyStorefrontService {
         }
       }
     `;
-
-    return this.query<ShopifyProductsQueryResponse>(graphqlQuery, {
-      limit,
-      query,
-      sortKey,
-      country: countryCode || null,
-    });
   }
 
-  /**
-   * Get all collections
-   */
-  async getCollections(limit: number = 20): Promise<ShopifyCollectionsQueryResponse> {
-    this.assertGlobalStorefrontReadsAllowed();
-
-    const query = `
+  private getCollectionsQuery(): string {
+    return `
       query getCollections($limit: Int!) {
         collections(first: $limit) {
           edges {
@@ -456,8 +430,95 @@ class ShopifyStorefrontService {
         }
       }
     `;
+  }
+
+  /**
+   * Get products with optional filtering
+   * @param limit - Number of products to fetch
+   * @param query - Filter query string
+   * @param sortKey - Sort key for ordering
+   * @param countryCode - ISO country code for multi-currency pricing (e.g., 'US', 'GB', 'CA')
+   */
+  async getProducts(
+    limit: number = 20,
+    query?: string,
+    sortKey?: string,
+    countryCode?: string
+  ): Promise<ShopifyProductsQueryResponse> {
+    this.assertGlobalStorefrontReadsAllowed();
+
+    const graphqlQuery = this.getProductsQuery();
+
+    return this.query<ShopifyProductsQueryResponse>(graphqlQuery, {
+      limit,
+      query,
+      sortKey,
+      country: countryCode || null,
+    });
+  }
+
+  /**
+   * Get products for a specific store using tenant-scoped Storefront credentials.
+   */
+  async getProductsForStore(
+    storeId: string,
+    limit: number = 20,
+    query?: string,
+    sortKey?: string,
+    countryCode?: string
+  ): Promise<ShopifyProductsQueryResponse> {
+    const storeClient = await this.getStoreClient(storeId);
+
+    if (!storeClient.isConfigured) {
+      throw new ApiError(
+        storeClient.error || 'Shopify not configured for this store',
+        storeClient.statusCode || 400,
+        true,
+        undefined,
+        storeClient.expose ?? false
+      );
+    }
+
+    const graphqlQuery = this.getProductsQuery();
+
+    return storeClient.query<ShopifyProductsQueryResponse['data']>(graphqlQuery, {
+      limit,
+      query,
+      sortKey,
+      country: countryCode || null,
+    });
+  }
+
+  /**
+   * Get all collections
+   */
+  async getCollections(limit: number = 20): Promise<ShopifyCollectionsQueryResponse> {
+    this.assertGlobalStorefrontReadsAllowed();
+
+    const query = this.getCollectionsQuery();
 
     return this.query<ShopifyCollectionsQueryResponse>(query, { limit });
+  }
+
+  /**
+   * Get collections for a specific store using tenant-scoped Storefront credentials.
+   */
+  async getCollectionsForStore(storeId: string, limit: number = 20): Promise<ShopifyCollectionsQueryResponse> {
+    const storeClient = await this.getStoreClient(storeId);
+
+    if (!storeClient.isConfigured) {
+      throw new ApiError(
+        storeClient.error || 'Shopify not configured for this store',
+        storeClient.statusCode || 400,
+        true,
+        undefined,
+        storeClient.expose ?? false
+      );
+    }
+
+    const query = this.getCollectionsQuery();
+
+    return storeClient.query<ShopifyCollectionsQueryResponse['data']>(query, { limit });
   }
 
   /**
