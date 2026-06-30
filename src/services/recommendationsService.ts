@@ -88,7 +88,7 @@ const getStorefrontClientError = (storefrontClient: ShopifyStorefrontClient): {
 
 const getRecommendationContext = async (
   options: RecommendationOptions = {}
-): Promise<RecommendationContext | null> => {
+): Promise<RecommendationContext> => {
   if (options.storefrontClient) {
     if (!options.storefrontClient.isConfigured) {
       const { message, expose } = getStorefrontClientError(options.storefrontClient);
@@ -150,9 +150,6 @@ export const getProductRecommendations = async (
     }
 
     const context = await getRecommendationContext(options);
-    if (!context) {
-      return [];
-    }
 
     const { storefrontClient } = context;
 
@@ -235,9 +232,6 @@ export const getCartRecommendations = async (
     }
 
     const context = await getRecommendationContext(options);
-    if (!context) {
-      return [];
-    }
 
     // Fetch recommendations for each cart item
     const allRecommendations: any[] = [];
