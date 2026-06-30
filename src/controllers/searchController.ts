@@ -305,6 +305,10 @@ export class SearchController extends Controller {
 
           return null;
         } catch (error) {
+          if (error instanceof ApiError) {
+            throw error;
+          }
+
           console.error('Error enriching trending search:', error);
           return null;
         }
