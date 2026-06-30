@@ -348,22 +348,8 @@ class ShopifyStorefrontService {
     });
   }
 
-  /**
-   * Get products with optional filtering
-   * @param limit - Number of products to fetch
-   * @param query - Filter query string
-   * @param sortKey - Sort key for ordering
-   * @param countryCode - ISO country code for multi-currency pricing (e.g., 'US', 'GB', 'CA')
-   */
-  async getProducts(
-    limit: number = 20,
-    query?: string,
-    sortKey?: string,
-    countryCode?: string
-  ): Promise<ShopifyProductsQueryResponse> {
-    this.assertGlobalStorefrontReadsAllowed();
-
-    const graphqlQuery = `
+  private getProductsQuery(): string {
+    return `
       query getProducts($limit: Int!, $query: String, $sortKey: ProductSortKeys, $country: CountryCode) @inContext(country: $country) {
         products(first: $limit, query: $query, sortKey: $sortKey) {
           edges {
@@ -422,6 +408,46 @@ class ShopifyStorefrontService {
         }
       }
     `;
+  }
+
+  private getCollectionsQuery(): string {
+    return `
+      query getCollections($limit: Int!) {
+        collections(first: $limit) {
+          edges {
+            node {
+              id
+              title
+              description
+              handle
+              image {
+                url
+                altText
+              }
+              updatedAt
+            }
+          }
+        }
+      }
+    `;
+  }
+
+  /**
+   * Get products with optional filtering
+   * @param limit - Number of products to fetch
+   * @param query - Filter query string
+   * @param sortKey - Sort key for ordering
+   * @param countryCode - ISO country code for multi-currency pricing (e.g., 'US', 'GB', 'CA')
+   */
+  async getProducts(
+    limit: number = 20,
+    query?: string,
+    sortKey?: string,
+    countryCode?: string
+  ): Promise<ShopifyProductsQueryResponse> {
+    this.assertGlobalStorefrontReadsAllowed();
+
+    const graphqlQuery = this.getProductsQuery();
 
     return this.query<ShopifyProductsQueryResponse>(graphqlQuery, {
       limit,
@@ -453,65 +479,7 @@ class ShopifyStorefrontService {
       );
     }
 
-    const graphqlQuery = `
-      query getProducts($limit: Int!, $query: String, $sortKey: ProductSortKeys, $country: CountryCode) @inContext(country: $country) {
-        products(first: $limit, query: $query, sortKey: $sortKey) {
-          edges {
-            node {
-              id
-              title
-              description
-              handle
-              vendor
-              productType
-              tags
-              availableForSale
-              totalInventory
-              priceRange {
-                minVariantPrice {
-                  amount
-                  currencyCode
-                }
-              }
-              compareAtPriceRange {
-                minVariantPrice {
-                  amount
-                  currencyCode
-                }
-              }
-              images(first: 3) {
-                edges {
-                  node {
-                    url
-                    altText
-                  }
-                }
-              }
-              variants(first: 5) {
-                edges {
-                  node {
-                    id
-                    title
-                    price {
-                      amount
-                      currencyCode
-                    }
-                    availableForSale
-                    quantityAvailable
-                  }
-                }
-              }
-              createdAt
-              updatedAt
-            }
-          }
-          pageInfo {
-            hasNextPage
-            hasPreviousPage
-          }
-        }
-      }
-    `;
+    const graphqlQuery = this.getProductsQuery();
 
     return storeClient.query<ShopifyProductsQueryResponse['data']>(graphqlQuery, {
       limit,
@@ -527,25 +495,7 @@ class ShopifyStorefrontService {
   async getCollections(limit: number = 20): Promise<ShopifyCollectionsQueryResponse> {
     this.assertGlobalStorefrontReadsAllowed();
 
-    const query = `
-      query getCollections($limit: Int!) {
-        collections(first: $limit) {
-          edges {
-            node {
-              id
-              title
-              description
-              handle
-              image {
-                url
-                altText
-              }
-              updatedAt
-            }
-          }
-        }
-      }
-    `;
+    const query = this.getCollectionsQuery();
 
     return this.query<ShopifyCollectionsQueryResponse>(query, { limit });
   }
@@ -566,25 +516,7 @@ class ShopifyStorefrontService {
       );
     }
 
-    const query = `
-      query getCollections($limit: Int!) {
-        collections(first: $limit) {
-          edges {
-            node {
-              id
-              title
-              description
-              handle
-              image {
-                url
-                altText
-              }
-              updatedAt
-            }
-          }
-        }
-      }
-    `;
+    const query = this.getCollectionsQuery();
 
     return storeClient.query<ShopifyCollectionsQueryResponse['data']>(query, { limit });
   }
