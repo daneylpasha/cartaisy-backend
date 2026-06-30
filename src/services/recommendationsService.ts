@@ -72,18 +72,6 @@ type RecommendationContext = {
   storefrontClient: ShopifyStorefrontClient;
 };
 
-const getLegacyStorefrontClient = (): ShopifyStorefrontClient | null => {
-  if (!shopifyStorefront.isConfigured()) {
-    return null;
-  }
-
-  return {
-    query: (graphqlQuery, variables) => (shopifyStorefront as any).query(graphqlQuery, variables),
-    isConfigured: true,
-    shopDomain: '',
-  };
-};
-
 const getStorefrontClientError = (storefrontClient: ShopifyStorefrontClient): {
   message: string;
   expose: boolean;
@@ -100,7 +88,7 @@ const getStorefrontClientError = (storefrontClient: ShopifyStorefrontClient): {
 
 const getRecommendationContext = async (
   options: RecommendationOptions = {}
-): Promise<RecommendationContext | null> => {
+): Promise<RecommendationContext> => {
   if (options.storefrontClient) {
     if (!options.storefrontClient.isConfigured) {
       const { message, expose } = getStorefrontClientError(options.storefrontClient);
@@ -139,16 +127,7 @@ const getRecommendationContext = async (
     };
   }
 
-  const storefrontClient = getLegacyStorefrontClient();
-
-  if (!storefrontClient) {
-    console.warn('Shopify Storefront not configured');
-    return null;
-  }
-
-  return {
-    storefrontClient,
-  };
+  throw new ApiError('Store context is required for recommendations', 400, true, undefined, true);
 };
 
 /**
@@ -171,9 +150,6 @@ export const getProductRecommendations = async (
     }
 
     const context = await getRecommendationContext(options);
-    if (!context) {
-      return [];
-    }
 
     const { storefrontClient } = context;
 
@@ -256,9 +232,6 @@ export const getCartRecommendations = async (
     }
 
     const context = await getRecommendationContext(options);
-    if (!context) {
-      return [];
-    }
 
     // Fetch recommendations for each cart item
     const allRecommendations: any[] = [];
