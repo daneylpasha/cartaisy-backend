@@ -1,0 +1,94 @@
+name: Audit or investigation
+description: Audit-first backend investigation before implementation.
+title: "[Audit]: "
+labels: ["docs"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this when the safe next step is to inspect and document current behavior before implementation. Clearly state whether code changes are allowed.
+  - type: textarea
+    id: audit-question
+    attributes:
+      label: Audit question
+      placeholder: What should the audit answer?
+    validations:
+      required: true
+  - type: textarea
+    id: areas-files
+    attributes:
+      label: Areas/files to inspect
+      placeholder: "- src/...\n- docs/..."
+    validations:
+      required: true
+  - type: textarea
+    id: known-concerns
+    attributes:
+      label: Known concerns
+      description: Mention suspected tenant, Shopify, checkout, auth, migration, or API contract risks.
+    validations:
+      required: true
+  - type: textarea
+    id: output-expected
+    attributes:
+      label: Output expected
+      placeholder: "Example: docs-only audit with findings, risks, and follow-up implementation recommendations."
+    validations:
+      required: true
+  - type: dropdown
+    id: implementation-allowed
+    attributes:
+      label: Is follow-up implementation allowed in this issue?
+      options:
+        - "No, audit/docs only"
+        - "Yes, but only after audit findings are documented"
+        - "Unsure, human approval required"
+    validations:
+      required: true
+  - type: dropdown
+    id: risk-level
+    attributes:
+      label: Risk level
+      options:
+        - Low
+        - Medium
+        - High
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance criteria
+      placeholder: "- ..."
+    validations:
+      required: true
+  - type: textarea
+    id: docs-to-read
+    attributes:
+      label: Docs to read before work
+      value: |
+        - AGENTS.md
+        - CARTAISY_CONTEXT.md
+        - docs/cartaisy/README.md
+        - docs/ARCHITECTURE.md
+        - docs/STATUS.md
+        - docs/DECISIONS.md
+        - docs/TESTING.md
+    validations:
+      required: true
+  - type: textarea
+    id: docs-to-update
+    attributes:
+      label: Docs to update
+      placeholder: Which docs should receive the audit findings?
+    validations:
+      required: true
+  - type: textarea
+    id: validation-commands
+    attributes:
+      label: Validation commands
+      description: Add source-inspection commands or targeted checks if implementation is allowed.
+      value: |
+        - git diff --check
+    validations:
+      required: true

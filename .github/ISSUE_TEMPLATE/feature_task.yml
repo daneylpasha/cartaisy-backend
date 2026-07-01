@@ -1,0 +1,144 @@
+name: Backend feature task
+description: Scoped backend implementation work.
+title: "[Feature]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for backend implementation work. Keep scope focused and verify current behavior in code before describing a feature as implemented.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What should change?
+      placeholder: Add a concise task summary.
+    validations:
+      required: true
+  - type: textarea
+    id: cartaisy-context
+    attributes:
+      label: Cartaisy context
+      description: Product or backend context the implementer must understand.
+      placeholder: Link related product/backend context. State assumptions to verify.
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user, merchant, agent, or backend problem does this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: required-changes
+    attributes:
+      label: Required changes
+      description: What files, APIs, services, models, or docs are expected to change?
+      placeholder: Use bullets. Keep unrelated refactors out.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance criteria
+      description: What must be true when this issue is complete?
+      placeholder: "- ..."
+    validations:
+      required: true
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: Out of scope
+      description: What must not change?
+      placeholder: "Examples: checkout logic, Shopify credentials, migrations, mobile UI, dashboard UI."
+    validations:
+      required: true
+  - type: dropdown
+    id: risk-level
+    attributes:
+      label: Risk level
+      description: High-risk examples include tenant isolation, store ownership, Shopify credentials/tokens, checkout/cart/order behavior, auth/session changes, database migrations, and mobile/dashboard API contract changes.
+      options:
+        - Low
+        - Medium
+        - High
+    validations:
+      required: true
+  - type: textarea
+    id: tenant-security-impact
+    attributes:
+      label: Tenant/security impact
+      description: Does this touch store ownership, auth, authorization, secrets, customer data, or tenant-owned queries?
+      placeholder: "State none, or describe the impact and safeguards."
+    validations:
+      required: true
+  - type: textarea
+    id: shopify-api-impact
+    attributes:
+      label: Shopify API impact
+      description: Does this touch Storefront/Admin API, OAuth, webhooks, tokens, checkout, orders, or sync?
+      placeholder: "State none, or describe API assumptions and credential scope."
+    validations:
+      required: true
+  - type: textarea
+    id: api-contract-impact
+    attributes:
+      label: Mobile/dashboard API contract impact
+      description: Does this change request/response shape, route behavior, generated API docs, or client expectations?
+      placeholder: "State none, or describe coordination required."
+    validations:
+      required: true
+  - type: textarea
+    id: database-migration-impact
+    attributes:
+      label: Database/migration impact
+      description: Does this require schema, index, migration, or data backfill work?
+      placeholder: "State none, or describe migration and rollback expectations."
+    validations:
+      required: true
+  - type: textarea
+    id: tests-required
+    attributes:
+      label: Tests required
+      description: What tests should be added or updated?
+      placeholder: "List targeted tests. Include tenant-safety tests for tenant/auth/Shopify changes."
+    validations:
+      required: true
+  - type: textarea
+    id: validation-commands
+    attributes:
+      label: Validation commands
+      description: Commands expected before PR. Adjust to the scope; explain any skipped commands in the PR.
+      value: |
+        - npm run type-check
+        - npm test -- --runInBand --watchman=false
+        - npm run build
+    validations:
+      required: true
+  - type: textarea
+    id: docs-to-read
+    attributes:
+      label: Docs to read before work
+      value: |
+        - AGENTS.md
+        - CARTAISY_CONTEXT.md
+        - docs/cartaisy/README.md
+        - docs/ARCHITECTURE.md
+        - docs/STATUS.md
+        - docs/DECISIONS.md
+        - docs/TESTING.md
+    validations:
+      required: true
+  - type: textarea
+    id: docs-to-update
+    attributes:
+      label: Docs to update
+      description: Which docs should change if assumptions, APIs, architecture, testing, or release behavior change?
+      placeholder: "State none, or list docs."
+    validations:
+      required: true
+  - type: textarea
+    id: additional-notes
+    attributes:
+      label: Additional notes
+      description: Anything else the implementer or reviewer should know?

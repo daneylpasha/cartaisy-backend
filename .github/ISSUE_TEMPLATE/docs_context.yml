@@ -1,0 +1,85 @@
+name: Docs/context update
+description: Documentation-only backend or shared context work.
+title: "[Docs]: "
+labels: ["docs"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for documentation/context-only updates. Runtime code, tests, CI behavior, secrets, Shopify implementation, checkout logic, migrations, package files, and app behavior are out of scope unless a human explicitly changes the issue scope.
+  - type: textarea
+    id: documentation-goal
+    attributes:
+      label: Documentation goal
+      placeholder: What should the docs make clearer?
+    validations:
+      required: true
+  - type: textarea
+    id: files-to-change
+    attributes:
+      label: Files to create/update
+      placeholder: "- docs/..."
+    validations:
+      required: true
+  - type: textarea
+    id: current-problem
+    attributes:
+      label: Current confusion/problem
+      description: What is unclear, missing, outdated, or risky today?
+    validations:
+      required: true
+  - type: textarea
+    id: required-content
+    attributes:
+      label: Required content
+      placeholder: "- ..."
+    validations:
+      required: true
+  - type: checkboxes
+    id: current-target-gaps
+    attributes:
+      label: Current state vs target state requirement
+      options:
+        - label: Docs must clearly separate current state, target state, and known gaps.
+          required: true
+        - label: Planned features must not be described as implemented unless verified in code.
+          required: true
+  - type: textarea
+    id: related-docs
+    attributes:
+      label: Links to related docs
+      value: |
+        - AGENTS.md
+        - CARTAISY_CONTEXT.md
+        - docs/cartaisy/README.md
+        - docs/ARCHITECTURE.md
+        - docs/STATUS.md
+        - docs/DECISIONS.md
+        - docs/TESTING.md
+    validations:
+      required: true
+  - type: checkboxes
+    id: out-of-scope
+    attributes:
+      label: Out of scope
+      options:
+        - label: No application/runtime code changes.
+          required: true
+        - label: No tests, CI behavior, secrets, Shopify implementation, checkout logic, migrations, package files, or app behavior changes.
+          required: true
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance criteria
+      placeholder: "- ..."
+    validations:
+      required: true
+  - type: textarea
+    id: validation-commands
+    attributes:
+      label: Validation commands
+      description: Add docs-specific checks if needed.
+      value: |
+        - git diff --check
+    validations:
+      required: true
