@@ -59,11 +59,13 @@ Important observed mismatch: `checkoutController.ts` comments describe creating 
 
 Storefront calls used directly by checkout:
 
+Important service-level distinction: several legacy catalog Storefront reads in `shopifyStorefrontService.ts` already call `assertGlobalStorefrontReadsAllowed()` and fail in production or SaaS mode without store context. The checkout cart methods below do not use that guard today. `getCart` already has a `storeClient` parameter that can be used by existing store-scoped callers; `updateCartBuyerIdentity` and `applyDiscountCodes` do not yet expose a store-scoped wrapper or `storeClient` parameter.
+
 | Call | Purpose | Store-scoped variant available today? | Used by checkout today? |
 | --- | --- | --- | --- |
-| `shopifyStorefront.getCart(cartId)` | Validate cart, fetch pricing, fetch line items for summary and completion. | `getCartForStore(storeId, cartId, countryCode)` exists. | No. Checkout uses the global call. |
-| `shopifyStorefront.updateCartBuyerIdentity(cartId, address)` | Apply shipping address/country to get delivery options, shipping rates, and tax estimate. | No direct `updateCartBuyerIdentityForStore` was found. | No. Checkout uses the global call. |
-| `shopifyStorefront.applyDiscountCodes(cartId, codes, countryCode)` | Apply or remove promo codes. | No direct `applyDiscountCodesForStore` was found. | No. Checkout uses the global call. |
+| `shopifyStorefront.getCart(cartId)` | Validate cart, fetch pricing, fetch line items for summary and completion. | `getCartForStore(storeId, cartId, countryCode)` exists, and the underlying `getCart(cartId, countryCode?, storeClient?)` can accept a pre-resolved `ShopifyStorefrontClient`. | No. Checkout uses the global call. |
+| `shopifyStorefront.updateCartBuyerIdentity(cartId, address)` | Apply shipping address/country to get delivery options, shipping rates, and tax estimate. | No direct `updateCartBuyerIdentityForStore` or `storeClient` parameter was found. | No. Checkout uses the global call. |
+| `shopifyStorefront.applyDiscountCodes(cartId, codes, countryCode)` | Apply or remove promo codes. | No direct `applyDiscountCodesForStore` or `storeClient` parameter was found. | No. Checkout uses the global call. |
 
 Admin calls related to checkout/order behavior:
 
@@ -80,6 +82,7 @@ Checkout-adjacent process-wide credentials observed:
 
 - `shopifyStorefrontService.ts` constructs a global Storefront client from `SHOPIFY_SHOP_DOMAIN` and `SHOPIFY_STOREFRONT_ACCESS_TOKEN`.
 - `shopifyStorefrontService.ts` constructs a global Admin GraphQL client from `SHOPIFY_STORE_URL` and `SHOPIFY_ADMIN_ACCESS_TOKEN`.
+- `shopifyStorefrontService.ts` has `assertGlobalStorefrontReadsAllowed()` for some legacy catalog Storefront reads in production or SaaS mode, but the checkout cart calls audited above are not currently guarded.
 - `checkoutController.ts` uses `STORE_CURRENCY` as fallback currency.
 - `stripeService.ts` initializes a singleton Stripe client from `tenantConfig.payments.stripe.secretKey`, ultimately `STRIPE_SECRET_KEY`.
 - `shopifyService.ts` exposes legacy Admin helpers through `getShopifyClient()`, which selects the first connected `Store`.
@@ -91,7 +94,9 @@ Global OAuth app credentials such as `SHOPIFY_CLIENT_ID`, `SHOPIFY_CLIENT_SECRET
 | Risk | Current evidence | Impact |
 | --- | --- | --- |
 | Checkout Storefront operations can hit the wrong Shopify shop. | Checkout calls global `getCart`, `updateCartBuyerIdentity`, and `applyDiscountCodes`. | Wrong merchant cart, shipping, tax, discount, or line items can influence payment and order creation. |
+| Checkout global Storefront calls bypass an existing production/SaaS guard. | `assertGlobalStorefrontReadsAllowed()` protects some legacy catalog methods, but not checkout `getCart`, `updateCartBuyerIdentity`, or `applyDiscountCodes` calls. | Catalog reads fail fast without store context in production/SaaS, while checkout can still silently proceed with global Storefront credentials. |
 | Checkout sessions do not persist `storeId`. | `CheckoutSession` stores `userId`/`customerId` and `shopifyCartId`, but no tenant boundary field. The controller creates sessions with `userId` even for customers. | Later checkout steps cannot prove the session, cart, and customer still belong to the same store without re-deriving context. |
+| Customer-backed checkout sessions would fail ownership checks if stored in `customerId`. | `CheckoutSession.belongsToUser()` compares only `this.userId` to the caller ID. The schema allows `customerId`, but the current controller masks this by writing mobile customer IDs into `userId`. | A future session saved with `customerId` would fail later checkout steps with authorization errors unless ownership checks are updated with verified store context. |
 | Product mapping during checkout completion is not store-scoped. | Checkout maps Shopify line items to MongoDB products with `Product.findOne({ shopifyProductId })` variants and no `storeId` filter. | Duplicate Shopify IDs or synced products across tenants can attach the wrong local product to an order/inventory update. |
 | Orders can be created without a required store. | Checkout sets `storeId` only when `findUserOrCustomer` returns a customer store ID. Admin/web `User` checkout has no store ID. The `Order` schema makes `storeId` optional. | Orders, inventory, dashboard visibility, and later Shopify sync can become unscoped. |
 | Native Stripe flow has no explicit tenant payment strategy. | Stripe uses a singleton platform secret key and stores `stripeCustomerId` on `User` or `Customer`. | SaaS ownership of payment accounts, merchant payouts, refunds, disputes, and compliance is undefined. |
@@ -143,12 +148,14 @@ For Shopify-hosted checkout:
 For any future native Stripe checkout:
 
 1. Add required `storeId` and `customerId` fields to `CheckoutSession` and scope active-session lookups by store.
-2. Replace every checkout Storefront call with store-scoped equivalents, including buyer identity and discount mutations.
-3. Scope product lookup by `storeId` when mapping Shopify cart lines to local products.
-4. Require `storeId` on checkout-created orders.
-5. Decide whether Stripe is Cartaisy-platform, merchant-owned Stripe Connect, or another approved payment model.
-6. Add idempotency around payment intent creation, confirmation, order creation, inventory sync, and retry/recovery.
-7. Define refund, cancellation, webhook, dispute, receipt, and payout behavior before production use.
+2. Add an interim fail-fast guard by applying `assertGlobalStorefrontReadsAllowed()` to unscoped checkout Storefront helpers until all checkout callers use store-scoped clients.
+3. Replace every checkout Storefront call with store-scoped equivalents: route `getCart` through the existing `storeClient` path or `getCartForStore`, and add store-scoped support for buyer identity and discount mutations.
+4. Update `belongsToUser()` and session ownership checks to support `customerId` and `userId` only within verified store context.
+5. Scope product lookup by `storeId` when mapping Shopify cart lines to local products.
+6. Require `storeId` on checkout-created orders.
+7. Decide whether Stripe is Cartaisy-platform, merchant-owned Stripe Connect, or another approved payment model.
+8. Add idempotency around payment intent creation, confirmation, order creation, inventory sync, and retry/recovery.
+9. Define refund, cancellation, webhook, dispute, receipt, and payout behavior before production use.
 
 ## Required Mobile Changes
 
@@ -175,6 +182,7 @@ For Shopify-hosted checkout:
 1. Create tenant-scoped Shopify-hosted checkout handoff.
    - Add a backend endpoint that resolves store context, validates the cart through store-scoped Storefront credentials, and returns Shopify `checkoutUrl`.
    - Add tests that fail if checkout handoff calls global Storefront helpers.
+   - Reuse the existing `getCart` store-client path or `getCartForStore` for cart reads instead of adding another global call.
 
 2. Add Shopify order webhook reconciliation for mobile checkout.
    - Map Shopify orders back to `Store`, customer or guest session, cart ID, and local order records.
@@ -186,6 +194,7 @@ For Shopify-hosted checkout:
 
 4. Plan native Stripe checkout tenant-safety if it remains required.
    - Scope `CheckoutSession`, Storefront calls, product mapping, order creation, Stripe customer/payment ownership, idempotency, refunds, and inventory sync by `storeId`.
+   - Include the `assertGlobalStorefrontReadsAllowed()` checkout gap, buyer identity/discount store-scoped wrappers, and `customerId` ownership checks in the native Stripe plan.
    - Add targeted tests before enabling it for multi-tenant stores.
 
 5. Harden store-scoped Shopify Admin order sync.
