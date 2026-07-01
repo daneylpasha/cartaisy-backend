@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Backend context entrypoint
+    url: https://github.com/daneylpasha/cartaisy-backend/blob/main/CARTAISY_CONTEXT.md
+    about: Read this before creating backend issues or assigning agents.
+  - name: Shared Cartaisy context
+    url: https://github.com/daneylpasha/cartaisy-backend/blob/main/docs/cartaisy/README.md
+    about: Shared SaaS product and architecture context.
+  - name: Backend testing guide
+    url: https://github.com/daneylpasha/cartaisy-backend/blob/main/docs/TESTING.md
+    about: Validation commands and testing expectations.
