@@ -16,7 +16,16 @@ regex = '''(?i)\bFIREBASE_SERVICE_ACCOUNT\s*=\s*\{.*("type"\s*:\s*"service_accou
 keywords = ["FIREBASE_SERVICE_ACCOUNT", "service_account", "BEGIN PRIVATE KEY"]
 
 [allowlist]
-description = "Documented placeholder values are allowed in templates"
+description = "Documented placeholders and known pre-cleanup secret-removal history"
+commits = [
+  "abb073aa06dd27d75f1ac002286f75e23a8b144b",
+  "103e6bb25d7b5cf26c944d415df6e112b2c2058c",
+  "bd69355667b194c36b07ec4eddf3f6b92200cd69",
+  "b04bdf703f67d8da1b4e2c1e2d4b2a7e205dc499",
+  "8c7155665381fbab78bc2b6ca714bbd753c248f7",
+  "aecff7e23419b90083321ac472baaa7d8af51fc0",
+  "04054499204503f6c82eb53e0c6801dc77d40d5f",
+]
 regexes = [
   '''(?i)<[a-z0-9_-]+>''',
   '''(?i)\byour[_-][a-z0-9_-]+''',
