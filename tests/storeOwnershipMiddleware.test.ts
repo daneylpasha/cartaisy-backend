@@ -1,29 +1,16 @@
 import { NextFunction, Response } from 'express';
 import { Types } from 'mongoose';
 import { requireOwnedStoreParam } from '../src/middleware/storeOwnership';
-import User from '../src/models/User';
 import { AuthenticatedRequest } from '../src/types';
-
-jest.mock('../src/models/User', () => ({
-  __esModule: true,
-  default: {
-    findById: jest.fn(),
-  },
-}));
-
-const mockedUser = User as jest.Mocked<typeof User>;
 
 const ownedStoreId = new Types.ObjectId();
 const otherStoreId = new Types.ObjectId();
 const userId = new Types.ObjectId();
 
-const mockUserLookup = (user: { storeId?: Types.ObjectId; role: string; isActive: boolean }) => {
-  mockedUser.findById.mockReturnValue({
-    select: jest.fn().mockResolvedValue(user),
-  } as any);
-};
-
-const createRequest = (storeId: string): AuthenticatedRequest => ({
+const createRequest = (
+  storeId: string,
+  userOverrides: Partial<AuthenticatedRequest['user']> = {}
+): AuthenticatedRequest => ({
   params: { storeId },
   user: {
     _id: userId,
@@ -35,6 +22,7 @@ const createRequest = (storeId: string): AuthenticatedRequest => ({
     isActive: true,
     isVerified: true,
     createdAt: new Date(),
+    ...userOverrides,
   },
 } as unknown as AuthenticatedRequest);
 
@@ -51,12 +39,7 @@ const createResponse = () => {
 };
 
 describe('requireOwnedStoreParam', () => {
-  beforeEach(() => {
-    mockedUser.findById.mockReset();
-  });
-
   it('allows admins to access their owned store and sets req.storeId from the route param', async () => {
-    mockUserLookup({ storeId: ownedStoreId, role: 'admin', isActive: true });
     const req = createRequest(ownedStoreId.toString());
     const res = createResponse();
     const next = jest.fn() as NextFunction;
@@ -70,7 +53,6 @@ describe('requireOwnedStoreParam', () => {
   });
 
   it('rejects admins who request a different store with 403', async () => {
-    mockUserLookup({ storeId: ownedStoreId, role: 'admin', isActive: true });
     const req = createRequest(otherStoreId.toString());
     const res = createResponse();
     const next = jest.fn() as NextFunction;
@@ -86,8 +68,10 @@ describe('requireOwnedStoreParam', () => {
   });
 
   it('allows super admins to target the requested store and uses that store as req.storeId', async () => {
-    mockUserLookup({ role: 'super_admin', isActive: true });
-    const req = createRequest(otherStoreId.toString());
+    const req = createRequest(otherStoreId.toString(), {
+      role: 'super_admin',
+      storeId: undefined,
+    });
     const res = createResponse();
     const next = jest.fn() as NextFunction;
 

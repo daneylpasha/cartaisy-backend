@@ -1,6 +1,6 @@
 import express from 'express';
 import { authenticateCustomer, optionalCustomerAuth } from '../middleware/customerAuth';
-import { authenticate, authorize, requireStoreAdmin } from '../middleware/auth';
+import { authenticate, authorize } from '../middleware/auth';
 import { requireOwnedStoreParam } from '../middleware/storeOwnership';
 import {
   registerDeviceToken,
@@ -64,7 +64,7 @@ router.post('/track-click', authenticateCustomer, trackNotificationClick);
 router.post('/stores/:storeId/broadcast', storeAdminParamAuth as any, broadcastStoreNotification);
 
 // Send test notification to specific customer
-router.post('/test', requireStoreAdmin as any, sendTestNotificationAdmin);
+router.post('/stores/:storeId/test', storeAdminParamAuth as any, sendTestNotificationAdmin);
 
 // Get notification statistics
 router.get('/stores/:storeId/stats', storeAdminParamAuth as any, getNotificationStats);

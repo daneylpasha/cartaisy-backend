@@ -1,6 +1,5 @@
 import { Response, NextFunction } from 'express';
 import { Types } from 'mongoose';
-import User from '../models/User';
 import { AuthenticatedRequest } from '../types';
 
 interface StoreOwnershipOptions {
@@ -51,16 +50,7 @@ export const requireOwnedStoreParam = (options: StoreOwnershipOptions = {}) => {
         return;
       }
 
-      const user = await User.findById(req.user._id).select('storeId role isActive');
-      if (!user) {
-        res.status(401).json({
-          success: false,
-          error: 'User not found',
-        });
-        return;
-      }
-
-      if (!user.isActive) {
+      if (!req.user.isActive) {
         res.status(403).json({
           success: false,
           error: 'User account is inactive',
@@ -68,15 +58,15 @@ export const requireOwnedStoreParam = (options: StoreOwnershipOptions = {}) => {
         return;
       }
 
-      req.userRole = user.role;
+      req.userRole = req.user.role;
 
-      if (allowSuperAdmin && user.role === 'super_admin') {
+      if (allowSuperAdmin && req.user.role === 'super_admin') {
         req.storeId = requestedStoreId;
         next();
         return;
       }
 
-      const ownedStoreId = normalizeObjectId(user.storeId);
+      const ownedStoreId = normalizeObjectId(req.user.storeId);
       if (!ownedStoreId || ownedStoreId !== requestedStoreId) {
         res.status(403).json({
           success: false,
