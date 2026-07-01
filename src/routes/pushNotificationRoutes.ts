@@ -1,6 +1,7 @@
 import express from 'express';
 import { authenticateCustomer, optionalCustomerAuth } from '../middleware/customerAuth';
-import { requireStoreAdmin } from '../middleware/auth';
+import { authenticate, authorize } from '../middleware/auth';
+import { requireOwnedStoreParam } from '../middleware/storeOwnership';
 import {
   registerDeviceToken,
   unregisterDeviceToken,
@@ -42,6 +43,7 @@ import {
 } from '../controllers/imageController';
 
 const router = express.Router();
+const storeAdminParamAuth = [authenticate, authorize('admin', 'super_admin'), requireOwnedStoreParam()];
 
 // Customer endpoints
 router.post('/register-token', authenticateCustomer, registerDeviceToken);
@@ -59,91 +61,91 @@ router.post('/track-click', authenticateCustomer, trackNotificationClick);
 
 // Admin endpoints
 // Broadcast notification to all store customers
-router.post('/stores/:storeId/broadcast', requireStoreAdmin as any, broadcastStoreNotification);
+router.post('/stores/:storeId/broadcast', storeAdminParamAuth as any, broadcastStoreNotification);
 
 // Send test notification to specific customer
-router.post('/test', requireStoreAdmin as any, sendTestNotificationAdmin);
+router.post('/stores/:storeId/test', storeAdminParamAuth as any, sendTestNotificationAdmin);
 
 // Get notification statistics
-router.get('/stores/:storeId/stats', requireStoreAdmin as any, getNotificationStats);
+router.get('/stores/:storeId/stats', storeAdminParamAuth as any, getNotificationStats);
 
 // Get list of customers who can receive notifications
-router.get('/stores/:storeId/recipients', requireStoreAdmin as any, getNotificationRecipients);
+router.get('/stores/:storeId/recipients', storeAdminParamAuth as any, getNotificationRecipients);
 
 // Get available customer segments for targeted notifications
-router.get('/stores/:storeId/segments', requireStoreAdmin as any, getAvailableSegments);
+router.get('/stores/:storeId/segments', storeAdminParamAuth as any, getAvailableSegments);
 
 // Notification history endpoints
 // Get paginated notification history for a store
-router.get('/stores/:storeId/history', requireStoreAdmin as any, getNotificationHistory);
+router.get('/stores/:storeId/history', storeAdminParamAuth as any, getNotificationHistory);
 
 // Get single notification detail
-router.get('/stores/:storeId/history/:notificationId', requireStoreAdmin as any, getNotificationDetail);
+router.get('/stores/:storeId/history/:notificationId', storeAdminParamAuth as any, getNotificationDetail);
 
 // Get engagement details for a notification
-router.get('/stores/:storeId/history/:notificationId/engagement', requireStoreAdmin as any, getNotificationEngagement);
+router.get('/stores/:storeId/history/:notificationId/engagement', storeAdminParamAuth as any, getNotificationEngagement);
 
 // Diagnostic endpoint for debugging push notification system
-router.get('/stores/:storeId/diagnostic', requireStoreAdmin as any, getNotificationDiagnostic);
+router.get('/stores/:storeId/diagnostic', storeAdminParamAuth as any, getNotificationDiagnostic);
 
 // Scheduled notifications endpoints
 // Get all scheduled notifications for a store
-router.get('/stores/:storeId/scheduled', requireStoreAdmin as any, getScheduledNotifications);
+router.get('/stores/:storeId/scheduled', storeAdminParamAuth as any, getScheduledNotifications);
 
 // Cancel a scheduled notification
-router.post('/stores/:storeId/scheduled/:notificationId/cancel', requireStoreAdmin as any, cancelScheduledNotification);
+router.post('/stores/:storeId/scheduled/:notificationId/cancel', storeAdminParamAuth as any, cancelScheduledNotification);
 
 // Send a scheduled notification immediately
-router.post('/stores/:storeId/scheduled/:notificationId/send-now', requireStoreAdmin as any, sendScheduledNow);
+router.post('/stores/:storeId/scheduled/:notificationId/send-now', storeAdminParamAuth as any, sendScheduledNow);
 
 // Update a scheduled notification
-router.patch('/stores/:storeId/scheduled/:notificationId', requireStoreAdmin as any, updateScheduledNotification);
+router.patch('/stores/:storeId/scheduled/:notificationId', storeAdminParamAuth as any, updateScheduledNotification);
 
 // =============================================================================
 // NOTIFICATION TEMPLATES
 // =============================================================================
 
 // Get all templates for a store
-router.get('/stores/:storeId/templates', requireStoreAdmin as any, getTemplates);
+router.get('/stores/:storeId/templates', storeAdminParamAuth as any, getTemplates);
 
 // Get a single template by ID
-router.get('/stores/:storeId/templates/:templateId', requireStoreAdmin as any, getTemplate);
+router.get('/stores/:storeId/templates/:templateId', storeAdminParamAuth as any, getTemplate);
 
 // Create a new template
-router.post('/stores/:storeId/templates', requireStoreAdmin as any, createTemplate);
+router.post('/stores/:storeId/templates', storeAdminParamAuth as any, createTemplate);
 
 // Update a template
-router.patch('/stores/:storeId/templates/:templateId', requireStoreAdmin as any, updateTemplate);
+router.patch('/stores/:storeId/templates/:templateId', storeAdminParamAuth as any, updateTemplate);
 
 // Delete a template (soft delete)
-router.delete('/stores/:storeId/templates/:templateId', requireStoreAdmin as any, deleteTemplate);
+router.delete('/stores/:storeId/templates/:templateId', storeAdminParamAuth as any, deleteTemplate);
 
 // Record template usage
-router.post('/stores/:storeId/templates/:templateId/use', requireStoreAdmin as any, recordTemplateUsage);
+router.post('/stores/:storeId/templates/:templateId/use', storeAdminParamAuth as any, recordTemplateUsage);
 
 // Duplicate a template
-router.post('/stores/:storeId/templates/:templateId/duplicate', requireStoreAdmin as any, duplicateTemplate);
+router.post('/stores/:storeId/templates/:templateId/duplicate', storeAdminParamAuth as any, duplicateTemplate);
 
 // =============================================================================
 // IMAGE MANAGEMENT
 // =============================================================================
 
 // Get image usage for a store
-router.get('/stores/:storeId/images/usage', requireStoreAdmin as any, getImageUsage);
+router.get('/stores/:storeId/images/usage', storeAdminParamAuth as any, getImageUsage);
 
 // Get upload signature for client-side Cloudinary upload
-router.get('/stores/:storeId/images/signature', requireStoreAdmin as any, getUploadSignature);
+router.get('/stores/:storeId/images/signature', storeAdminParamAuth as any, getUploadSignature);
 
 // Register an uploaded image (after client-side upload)
-router.post('/stores/:storeId/images/register', requireStoreAdmin as any, registerImage);
+router.post('/stores/:storeId/images/register', storeAdminParamAuth as any, registerImage);
 
 // Mark image as used in template or notification
-router.post('/stores/:storeId/images/:imageId/use', requireStoreAdmin as any, markImageUsed);
+router.post('/stores/:storeId/images/:imageId/use', storeAdminParamAuth as any, markImageUsed);
 
 // Delete an image
-router.delete('/stores/:storeId/images/:imageId', requireStoreAdmin as any, deleteImage);
+router.delete('/stores/:storeId/images/:imageId', storeAdminParamAuth as any, deleteImage);
 
 // Get all images for a store (for image picker)
-router.get('/stores/:storeId/images', requireStoreAdmin as any, getImages);
+router.get('/stores/:storeId/images', storeAdminParamAuth as any, getImages);
 
 export default router;
