@@ -78,8 +78,8 @@ body:
     id: validation-commands
     attributes:
       label: Validation commands
+      description: Add docs-specific checks if needed.
       value: |
         - git diff --check
-      placeholder: Add docs-specific checks if needed.
     validations:
       required: true

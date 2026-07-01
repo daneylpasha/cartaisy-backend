@@ -108,12 +108,11 @@ body:
     id: validation-commands
     attributes:
       label: Validation commands
-      description: Commands expected before PR.
+      description: Commands expected before PR. Adjust to the scope; explain any skipped commands in the PR.
       value: |
         - npm run type-check
         - npm test -- --runInBand --watchman=false
         - npm run build
-      placeholder: "Adjust to the scope. Explain skipped commands in the PR."
     validations:
       required: true
   - type: textarea

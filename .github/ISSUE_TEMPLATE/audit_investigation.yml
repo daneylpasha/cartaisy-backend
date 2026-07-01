@@ -87,8 +87,8 @@ body:
     id: validation-commands
     attributes:
       label: Validation commands
+      description: Add source-inspection commands or targeted checks if implementation is allowed.
       value: |
         - git diff --check
-      placeholder: Add source-inspection commands or targeted checks if implementation is allowed.
     validations:
       required: true
