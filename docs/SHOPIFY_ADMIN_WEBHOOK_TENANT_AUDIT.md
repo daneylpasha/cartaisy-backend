@@ -13,6 +13,7 @@ This audit covers Shopify Admin API helper functions, sync jobs, inventory/order
 - A safer Admin helper already exists: `getShopifyClientForStore(storeId)` resolves the requested `Store`, decrypts encrypted Admin tokens when needed, and builds an Admin API client for that store.
 - Most high-impact sync, inventory, and legacy order helpers still call the first-connected-store helper instead of the store-scoped helper.
 - Webhook tenant mapping is not implemented. Webhook routes do not use signature verification, do not read `X-Shopify-Shop-Domain`, and do not resolve the incoming shop domain to `Store`.
+- The inventory webhook has a current correctness bug separate from the tenant roadmap: it matches Shopify `inventory_item_id` against `variants.id`, so inventory-level updates likely match zero products and are silently dropped.
 - The current Product model is globally keyed by `shopifyProductId`, `handle`, and SEO slug and has no `storeId`, which blocks correct multi-tenant Shopify product sync/webhook behavior without a focused follow-up migration.
 - `ShopifyOrderSyncService` is closer to the target shape because it reads `storeId` from the order and skips Shopify calls when missing, but it sends the stored access token directly and does not use the existing decrypt fallback.
 
@@ -115,12 +116,18 @@ Current behavior:
 - JSON parsing runs globally before route handlers at `src/app.ts` line 100. Shopify HMAC verification needs the exact raw request body, not a reserialized object.
 - `verifyWebhookMiddleware` reads `X-Shopify-Hmac-Sha256`, computes the body with `JSON.stringify(req.body)`, and verifies against the single process-wide `tenantConfig.shopify.webhookSecret` at `src/controllers/webhookController.ts` lines 12-25.
 - `verifyWebhookMiddleware` is not wired into routes. `src/routes/webhookRoutes.ts` line 15 says verification is disabled, and the routes call handlers directly at lines 19-32.
+- `src/routes/webhookRoutes.ts` also exposes unauthenticated `GET /api/webhooks/health` at lines 35-41. The endpoint is low risk by itself, but it publicly confirms the webhook infrastructure and path prefix, so it should be treated as part of the webhook attack surface when deciding which routes remain public and which routes need HMAC gating.
 - No webhook handler reads `X-Shopify-Shop-Domain`.
 - No webhook handler calls the existing `Store.findByShopifyShop(shop)` static helper, even though `Store` stores indexed `shopify.shop` at `src/models/Store.ts` lines 97-102 and exposes `findByShopifyShop()` at lines 511-514.
 - Product webhooks update or create products by global `shopifyProductId` only at `src/controllers/webhookController.ts` lines 53-71, 93-103, and 124-130.
 - Order webhooks update or create orders by global `shopifyOrderId` only at lines 154-155, 197-255, 283-285, and 334-335. Created orders do not include `storeId`.
 - Customer webhooks match users by global email or global `shopifyCustomerId` at lines 378-395 and 417-430.
-- Inventory webhooks query `Product.find({ 'variants.id': inventoryLevel.inventory_item_id.toString() })` at lines 453-456. This appears to compare Shopify inventory item IDs to variant IDs instead of `variants.inventoryItemId`, and it is not store-scoped.
+- Inventory webhooks query `Product.find({ 'variants.id': inventoryLevel.inventory_item_id.toString() })` at lines 453-456. This compares Shopify inventory item IDs to Shopify variant IDs instead of `variants.inventoryItemId`. Because those are different Shopify identifiers, the handler likely matches zero products for every inventory-level webhook and silently drops all inventory updates today. Treat this as an immediate correctness hotfix candidate separate from the larger multi-tenant refactor; after Product tenancy exists, the lookup should also include `storeId`.
+
+Current hotfix candidates before the full tenant refactor:
+
+1. Fix `handleInventoryUpdate` to match `inventoryLevel.inventory_item_id` against `variants.inventoryItemId`, with a regression test proving a Shopify inventory-level webhook updates the intended product variant instead of matching zero products.
+2. Decide whether `/api/webhooks/health` should remain intentionally public. If it remains public, keep its response minimal and document/rate-limit it as public infrastructure exposure; do not accidentally place it behind Shopify HMAC verification meant only for Shopify POST payloads.
 
 Required target behavior:
 
@@ -141,71 +148,83 @@ Required target behavior:
 | Customer sync | `syncCustomers()` uses first connected store and global email matching. | Customer profile data can merge across stores. | Match users/customers by `{ storeId, email }` and Shopify customer ID per store. |
 | Order sync | `syncOrders()` uses first connected store and creates orders without `storeId`. | Shopify orders can be imported into the wrong tenant or remain orphaned from any tenant. | Implement `syncOrdersForStore(storeId)` and persist `storeId`. |
 | Inventory sync | Inventory reads/writes call first-connected-store Admin helpers. | Stock levels and Shopify inventory adjustments can affect the wrong merchant. | Require storeId on inventory service APIs and use store-specific location IDs. |
+| Inventory webhook lookup | `handleInventoryUpdate()` matches `inventory_item_id` against `variants.id`. | Current inventory-level webhook updates likely match zero products and are silently dropped. | Hotfix the lookup to `variants.inventoryItemId`, then add storeId filtering after Product tenancy. |
 | Scheduled jobs | Background full/incremental/inventory jobs are global. | One scheduled job can use one store's credentials and update all stores' sync metadata. | Iterate connected stores explicitly with per-store status and locking. |
 | Webhooks | No active HMAC verification or shop-domain mapping. | Spoofed or valid cross-shop webhooks can mutate global data. | Add verified webhook tenant resolver before handlers. |
+| Webhook health endpoint | `GET /api/webhooks/health` is public and unauthenticated. | Low direct risk, but it confirms webhook infrastructure and path prefix. | Explicitly document, rate-limit, or move it if public exposure is not intended. |
 | Product model | No Product `storeId`; global unique Shopify IDs/handles/slugs. | Tenant-scoped product writes cannot be implemented safely without schema/index work. | Add Product tenancy migration before product webhook/sync fixes. |
 | `ShopifyOrderSyncService` | Reads order `storeId`, but does not decrypt encrypted tokens. | Safer tenant selection, but token handling can fail for encrypted tokens. | Reuse the store-scoped Admin client or shared token resolver. |
 
 ## Recommended implementation sequence
 
-1. Add a Shopify webhook tenant resolver.
+1. Hotfix current inventory webhook lookup.
+   - Match Shopify `inventory_item_id` against `variants.inventoryItemId`.
+   - Add a regression test proving inventory-level webhooks update the intended variant.
+   - Keep this fix narrow and separate from Product tenancy/index migrations.
+
+2. Add a Shopify webhook tenant resolver.
    - Configure raw-body parsing for `/api/webhooks/shopify/*`.
    - Verify `X-Shopify-Hmac-Sha256`.
    - Resolve `X-Shopify-Shop-Domain` through `Store.findByShopifyShop()`.
    - Attach trusted `storeId` to the request context and reject unknown shops.
 
-2. Add Product tenancy before product sync/webhook rewrites.
+3. Add Product tenancy before product sync/webhook rewrites.
    - Add `storeId` to Product.
    - Replace global unique Shopify/product handle/slug constraints with store-scoped compound indexes.
    - Backfill or migration-plan existing Product records before enabling multi-store writes.
 
-3. Replace legacy Admin helpers with store-scoped APIs.
+4. Replace legacy Admin helpers with store-scoped APIs.
    - Add `syncProductsForStore(storeId)`, `syncProductForStore(storeId, ...)`, `syncCustomersForStore(storeId)`, `syncOrdersForStore(storeId)`, `getInventoryLevelsForStore(storeId, ...)`, `updateInventoryForStore(storeId, ...)`, and `createOrderForStore(storeId, ...)`.
    - Route new runtime code through `getShopifyClientForStore(storeId)`.
    - Leave `getShopifyClient()` only as an explicit single-tenant/development compatibility helper, or remove it after call sites are migrated.
 
-4. Store-scope manual and scheduled sync.
+5. Store-scope manual and scheduled sync.
    - Make authenticated sync routes use the user's validated store context.
    - Make background jobs iterate connected stores one at a time.
    - Track sync status and `lastSyncAt` per store instead of one global in-memory status.
 
-5. Store-scope webhook handlers.
+6. Store-scope webhook handlers.
    - Product create/update/delete should query and write by `{ storeId, shopifyProductId }`.
    - Order create/update/paid should query and write by `{ storeId, shopifyOrderId }`.
    - Customer create/update should query and write by `{ storeId, email }` or `{ storeId, shopifyCustomerId }`.
    - Inventory updates should match `{ storeId, 'variants.inventoryItemId': inventory_item_id }`.
 
-6. Harden order sync after checkout/payment-sensitive paths have their own ticket.
+7. Harden order sync after checkout/payment-sensitive paths have their own ticket.
    - Reuse `getShopifyClientForStore()` or shared decrypted token resolution in `ShopifyOrderSyncService`.
    - Confirm every order creation path persists `storeId` before Shopify draft-order or inventory sync runs.
 
 ## Follow-up implementation issues recommended
 
-1. Implement verified Shopify webhook tenant mapping.
+1. Hotfix Shopify inventory webhook lookup.
+   - Acceptance criteria: `handleInventoryUpdate` matches `inventory_item_id` against `variants.inventoryItemId`, a valid inventory-level webhook updates the intended variant, and the handler no longer silently drops every update because of an identifier mismatch.
+
+2. Implement verified Shopify webhook tenant mapping.
    - Acceptance criteria: missing/invalid HMAC rejected, unknown shop rejected, valid webhook resolves one Store, handlers receive trusted `storeId`, and no handler writes before mapping succeeds.
 
-2. Add Product `storeId` and store-scoped Shopify product identifiers.
+3. Add Product `storeId` and store-scoped Shopify product identifiers.
    - Acceptance criteria: Product has `storeId`, duplicate Shopify product IDs/handles/slugs are allowed across different stores but not within one store, and existing product reads still work after migration.
 
-3. Refactor Shopify Admin sync helpers to require storeId.
+4. Refactor Shopify Admin sync helpers to require storeId.
    - Acceptance criteria: sync product/customer/order helpers accept `storeId`, use `getShopifyClientForStore(storeId)`, and no production sync path calls first-connected-store `getShopifyClient()`.
 
-4. Store-scope inventory sync and manual inventory endpoints.
+5. Store-scope inventory sync and manual inventory endpoints.
    - Acceptance criteria: inventory sync/update APIs require trusted store context, use the correct store's Admin token and location ID, and update only products owned by that store.
 
-5. Store-scope Shopify order/customer import and webhook writes.
+6. Store-scope Shopify order/customer import and webhook writes.
    - Acceptance criteria: order/customer sync and webhook handlers use `{ storeId, shopify...Id }` or `{ storeId, email }`, persist `storeId`, and cannot merge records across merchants.
 
-6. Harden `ShopifyOrderSyncService` token handling.
+7. Harden `ShopifyOrderSyncService` token handling.
    - Acceptance criteria: draft order, inventory, complete, delete, and update operations use decrypted store-specific Admin credentials and have tests for encrypted-token stores.
 
-7. Replace global sync status with per-store sync status.
+8. Replace global sync status with per-store sync status.
    - Acceptance criteria: scheduled and manual sync update only the target store's `lastSyncAt`, expose per-store in-progress/error status, and do not mark all connected stores after one store sync.
 
 ## Tests needed
 
 - Webhook verification tests for missing HMAC, invalid HMAC, valid raw-body HMAC, missing shop domain, unknown shop domain, and known shop domain.
+- Webhook route tests covering the intended public/private behavior of `GET /api/webhooks/health`, including whether it remains public, rate-limited, and minimal.
 - Webhook handler tests proving Product/User/Order writes include the resolved storeId and reject cross-store duplicate Shopify identifiers.
+- Inventory webhook regression tests proving `inventory_item_id` matches `variants.inventoryItemId` and updates the intended variant instead of silently matching zero products.
 - Product model/index migration tests proving duplicate Shopify IDs and handles can exist in different stores but not in the same store.
 - Admin helper unit tests proving store-scoped helpers use the requested store's shop and token, and production sync helpers do not call first-connected-store `getShopifyClient()`.
 - Sync service tests proving full and incremental sync operate per store, update only that store's sync timestamp, and do not mutate global Product/User/Order records.
