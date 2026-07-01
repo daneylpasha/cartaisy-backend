@@ -3,6 +3,7 @@ import { Controller } from '@tsoa/runtime';
 import shopifyStorefront from '../services/shopifyStorefrontService';
 import Customer from '../models/Customer';
 import CartActivity from '../models/CartActivity';
+import { ApiError } from '../utils/errors';
 import {
   CartResponse,
   CartCreateRequest,
@@ -25,6 +26,31 @@ interface SaveCartResponse {
 @Route('cart')
 @Tags('Cart')
 export class CartController extends Controller {
+  private resolveStoreId(headerStoreId?: string, request?: any): string {
+    const rawStoreId =
+      request?.user?.storeId ||
+      request?.customer?.storeId ||
+      request?.storeId ||
+      headerStoreId;
+    const storeId = rawStoreId ? String(rawStoreId).trim() : '';
+
+    if (!storeId) {
+      throw new ApiError(
+        'Store context is required (provide x-store-id header or re-authenticate)',
+        400,
+        true,
+        undefined,
+        true
+      );
+    }
+
+    if (!/^[0-9a-fA-F]{24}$/.test(storeId)) {
+      throw new ApiError('Invalid Store ID format', 400, true, undefined, true);
+    }
+
+    return storeId;
+  }
+
   /**
    * Create a new shopping cart
    * @param requestBody - Optional initial items to add to cart
@@ -32,19 +58,19 @@ export class CartController extends Controller {
    */
   @Post('create')
   @Response(400, 'Bad Request')
+  @Response(403, 'Store is not active')
+  @Response(404, 'Store not found')
   @Response(500, 'Internal Server Error')
   public async createCart(
     @Body() requestBody?: CartCreateRequest,
-    @Query() country?: string
+    @Query() country?: string,
+    @Header('x-store-id') headerStoreId?: string,
+    @Request() request?: any
   ): Promise<CartResponse> {
     try {
-      if (!shopifyStorefront.isConfigured()) {
-        this.setStatus(500);
-        throw new Error('Shopify not configured');
-      }
-
+      const storeId = this.resolveStoreId(headerStoreId, request);
       const items = requestBody?.items;
-      const shopifyResponse = await shopifyStorefront.createCart(items, country);
+      const shopifyResponse = await shopifyStorefront.createCartForStore(storeId, items, country);
 
       if (shopifyResponse?.data?.cartCreate?.userErrors?.length > 0) {
         this.setStatus(400);
@@ -70,7 +96,9 @@ export class CartController extends Controller {
         error instanceof Error ? error.message : 'Unknown error'
       );
 
-      if (error instanceof Error && error.message.includes('not configured')) {
+      if (error instanceof ApiError) {
+        this.setStatus(error.statusCode);
+      } else if (error instanceof Error && error.message.includes('not configured')) {
         this.setStatus(500);
       } else if (!this.getStatus || this.getStatus() === 200) {
         this.setStatus(500);
@@ -86,19 +114,19 @@ export class CartController extends Controller {
    * @param country - ISO 3166-1 alpha-2 country code for multi-currency pricing (e.g., 'US', 'GB', 'CA')
    */
   @Get('{cartId}')
+  @Response(400, 'Bad Request')
+  @Response(403, 'Store is not active')
   @Response(404, 'Cart not found')
   @Response(500, 'Internal Server Error')
   public async getCart(
     @Path() cartId: string,
-    @Query() country?: string
+    @Query() country?: string,
+    @Header('x-store-id') headerStoreId?: string,
+    @Request() request?: any
   ): Promise<CartResponse> {
     try {
-      if (!shopifyStorefront.isConfigured()) {
-        this.setStatus(500);
-        throw new Error('Shopify not configured');
-      }
-
-      const shopifyResponse = await shopifyStorefront.getCart(cartId, country);
+      const storeId = this.resolveStoreId(headerStoreId, request);
+      const shopifyResponse = await shopifyStorefront.getCartForStore(storeId, cartId, country);
 
       if (!shopifyResponse?.data?.cart) {
         this.setStatus(404);
@@ -118,7 +146,9 @@ export class CartController extends Controller {
         error instanceof Error ? error.message : 'Unknown error'
       );
 
-      if (error instanceof Error && error.message === 'Cart not found') {
+      if (error instanceof ApiError) {
+        this.setStatus(error.statusCode);
+      } else if (error instanceof Error && error.message === 'Cart not found') {
         this.setStatus(404);
       } else if (!this.getStatus || this.getStatus() === 200) {
         this.setStatus(500);
@@ -135,19 +165,24 @@ export class CartController extends Controller {
    */
   @Post('{cartId}/items')
   @Response(400, 'Bad Request')
+  @Response(403, 'Store is not active')
   @Response(404, 'Cart not found')
   @Response(500, 'Internal Server Error')
   public async addItems(
     @Path() cartId: string,
-    @Body() requestBody: AddItemsRequest
+    @Body() requestBody: AddItemsRequest,
+    @Query() country?: string,
+    @Header('x-store-id') headerStoreId?: string,
+    @Request() request?: any
   ): Promise<CartResponse> {
     try {
-      if (!shopifyStorefront.isConfigured()) {
-        this.setStatus(500);
-        throw new Error('Shopify not configured');
-      }
-
-      const shopifyResponse = await shopifyStorefront.addCartLines(cartId, requestBody.items);
+      const storeId = this.resolveStoreId(headerStoreId, request);
+      const shopifyResponse = await shopifyStorefront.addCartLinesForStore(
+        storeId,
+        cartId,
+        requestBody.items,
+        country
+      );
 
       if (shopifyResponse?.data?.cartLinesAdd?.userErrors?.length > 0) {
         const error = shopifyResponse.data.cartLinesAdd.userErrors[0];
@@ -177,7 +212,9 @@ export class CartController extends Controller {
         error instanceof Error ? error.message : 'Unknown error'
       );
 
-      if (!this.getStatus || this.getStatus() === 200) {
+      if (error instanceof ApiError) {
+        this.setStatus(error.statusCode);
+      } else if (!this.getStatus || this.getStatus() === 200) {
         this.setStatus(500);
       }
 
@@ -193,25 +230,30 @@ export class CartController extends Controller {
    */
   @Put('{cartId}/items/{lineItemId}')
   @Response(400, 'Bad Request')
+  @Response(403, 'Store is not active')
   @Response(404, 'Cart or item not found')
   @Response(500, 'Internal Server Error')
   public async updateItemQuantity(
     @Path() cartId: string,
     @Path() lineItemId: string,
-    @Body() requestBody: UpdateItemQuantityRequest
+    @Body() requestBody: UpdateItemQuantityRequest,
+    @Query() country?: string,
+    @Header('x-store-id') headerStoreId?: string,
+    @Request() request?: any
   ): Promise<CartResponse> {
     try {
-      if (!shopifyStorefront.isConfigured()) {
-        this.setStatus(500);
-        throw new Error('Shopify not configured');
-      }
-
-      const shopifyResponse = await shopifyStorefront.updateCartLines(cartId, [
-        {
-          id: lineItemId,
-          quantity: requestBody.quantity,
-        },
-      ]);
+      const storeId = this.resolveStoreId(headerStoreId, request);
+      const shopifyResponse = await shopifyStorefront.updateCartLinesForStore(
+        storeId,
+        cartId,
+        [
+          {
+            id: lineItemId,
+            quantity: requestBody.quantity,
+          },
+        ],
+        country
+      );
 
       if (shopifyResponse?.data?.cartLinesUpdate?.userErrors?.length > 0) {
         const error = shopifyResponse.data.cartLinesUpdate.userErrors[0];
@@ -241,7 +283,9 @@ export class CartController extends Controller {
         error instanceof Error ? error.message : 'Unknown error'
       );
 
-      if (!this.getStatus || this.getStatus() === 200) {
+      if (error instanceof ApiError) {
+        this.setStatus(error.statusCode);
+      } else if (!this.getStatus || this.getStatus() === 200) {
         this.setStatus(500);
       }
 
@@ -255,19 +299,25 @@ export class CartController extends Controller {
    * @param lineItemId - Shopify line item ID
    */
   @Delete('{cartId}/items/{lineItemId}')
+  @Response(400, 'Bad Request')
+  @Response(403, 'Store is not active')
   @Response(404, 'Cart or item not found')
   @Response(500, 'Internal Server Error')
   public async removeItem(
     @Path() cartId: string,
-    @Path() lineItemId: string
+    @Path() lineItemId: string,
+    @Query() country?: string,
+    @Header('x-store-id') headerStoreId?: string,
+    @Request() request?: any
   ): Promise<CartResponse> {
     try {
-      if (!shopifyStorefront.isConfigured()) {
-        this.setStatus(500);
-        throw new Error('Shopify not configured');
-      }
-
-      const shopifyResponse = await shopifyStorefront.removeCartLines(cartId, [lineItemId]);
+      const storeId = this.resolveStoreId(headerStoreId, request);
+      const shopifyResponse = await shopifyStorefront.removeCartLinesForStore(
+        storeId,
+        cartId,
+        [lineItemId],
+        country
+      );
 
       if (shopifyResponse?.data?.cartLinesRemove?.userErrors?.length > 0) {
         const error = shopifyResponse.data.cartLinesRemove.userErrors[0];
@@ -297,7 +347,9 @@ export class CartController extends Controller {
         error instanceof Error ? error.message : 'Unknown error'
       );
 
-      if (!this.getStatus || this.getStatus() === 200) {
+      if (error instanceof ApiError) {
+        this.setStatus(error.statusCode);
+      } else if (!this.getStatus || this.getStatus() === 200) {
         this.setStatus(500);
       }
 
@@ -364,18 +416,20 @@ export class CartController extends Controller {
    * @param cartId - Shopify cart ID
    */
   @Delete('{cartId}')
+  @Response(400, 'Bad Request')
+  @Response(403, 'Store is not active')
   @Response(404, 'Cart not found')
   @Response(500, 'Internal Server Error')
-  public async clearCart(@Path() cartId: string): Promise<ClearCartResponse> {
+  public async clearCart(
+    @Path() cartId: string,
+    @Header('x-store-id') headerStoreId?: string,
+    @Request() request?: any
+  ): Promise<ClearCartResponse> {
     try {
-      if (!shopifyStorefront.isConfigured()) {
-        this.setStatus(500);
-        throw new Error('Shopify not configured');
-      }
-
+      const storeId = this.resolveStoreId(headerStoreId, request);
       // First, get the cart to retrieve all line item
       //  IDs
-      const cartResponse = await shopifyStorefront.getCart(cartId);
+      const cartResponse = await shopifyStorefront.getCartForStore(storeId, cartId);
 
       if (!cartResponse?.data?.cart) {
         this.setStatus(404);
@@ -393,7 +447,7 @@ export class CartController extends Controller {
       }
 
       // Remove all line items
-      const shopifyResponse = await shopifyStorefront.removeCartLines(cartId, lineIds);
+      const shopifyResponse = await shopifyStorefront.removeCartLinesForStore(storeId, cartId, lineIds);
 
       if (shopifyResponse?.data?.cartLinesRemove?.userErrors?.length > 0) {
         const error = shopifyResponse.data.cartLinesRemove.userErrors[0];
@@ -411,7 +465,9 @@ export class CartController extends Controller {
         error instanceof Error ? error.message : 'Unknown error'
       );
 
-      if (error instanceof Error && error.message === 'Cart not found') {
+      if (error instanceof ApiError) {
+        this.setStatus(error.statusCode);
+      } else if (error instanceof Error && error.message === 'Cart not found') {
         this.setStatus(404);
       } else if (!this.getStatus || this.getStatus() === 200) {
         this.setStatus(500);
@@ -430,18 +486,17 @@ export class CartController extends Controller {
   @Post('{cartId}/associate')
   @Security('jwt')
   @Response(400, 'Bad Request')
+  @Response(403, 'Store is not active')
   @Response(404, 'Cart not found')
   @Response(500, 'Internal Server Error')
   public async associateWithCustomer(
     @Path() cartId: string,
-    @Request() request: any
+    @Request() request: any,
+    @Query() country?: string,
+    @Header('x-store-id') headerStoreId?: string
   ): Promise<CartResponse> {
     try {
-      if (!shopifyStorefront.isConfigured()) {
-        this.setStatus(500);
-        throw new Error('Shopify not configured');
-      }
-
+      const storeId = this.resolveStoreId(headerStoreId, request);
       // Get customer access token from request user
       // Note: You'll need to store Shopify customer access token when user logs in
       const customerAccessToken = request.user?.shopifyAccessToken;
@@ -453,9 +508,11 @@ export class CartController extends Controller {
         );
       }
 
-      const shopifyResponse = await shopifyStorefront.associateCartWithCustomer(
+      const shopifyResponse = await shopifyStorefront.associateCartWithCustomerForStore(
+        storeId,
         cartId,
-        customerAccessToken
+        customerAccessToken,
+        country
       );
 
       if (shopifyResponse?.data?.cartBuyerIdentityUpdate?.userErrors?.length > 0) {
@@ -486,7 +543,9 @@ export class CartController extends Controller {
         error instanceof Error ? error.message : 'Unknown error'
       );
 
-      if (!this.getStatus || this.getStatus() === 200) {
+      if (error instanceof ApiError) {
+        this.setStatus(error.statusCode);
+      } else if (!this.getStatus || this.getStatus() === 200) {
         this.setStatus(500);
       }
 
@@ -551,10 +610,10 @@ export class CartController extends Controller {
       console.log(`[CartController] Saved cartId for customer ${customerId}: ${decodedCartId}`);
 
       // Track cart activity for abandoned cart notifications (only for customers with storeId)
-      console.log(`[CartController] CartActivity check - storeId: ${storeId}, shopifyConfigured: ${shopifyStorefront.isConfigured()}`);
-      if (storeId && shopifyStorefront.isConfigured()) {
+      console.log(`[CartController] CartActivity check - storeId: ${storeId}`);
+      if (storeId) {
         try {
-          const cartResponse = await shopifyStorefront.getCart(decodedCartId);
+          const cartResponse = await shopifyStorefront.getCartForStore(storeId, decodedCartId);
           const cart = cartResponse?.data?.cart;
 
           if (cart) {

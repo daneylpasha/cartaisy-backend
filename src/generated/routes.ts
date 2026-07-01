@@ -3316,6 +3316,8 @@ export function RegisterRoutes(app: Router) {
         const argsCartController_createCart: Record<string, TsoaRoute.ParameterSchema> = {
                 requestBody: {"in":"body","name":"requestBody","ref":"CartCreateRequest"},
                 country: {"in":"query","name":"country","dataType":"string"},
+                headerStoreId: {"in":"header","name":"x-store-id","dataType":"string"},
+                request: {"in":"request","name":"request","dataType":"object"},
         };
         app.post('/api/v1/cart/create',
             ...(fetchMiddlewares<RequestHandler>(CartController)),
@@ -3347,6 +3349,8 @@ export function RegisterRoutes(app: Router) {
         const argsCartController_getCart: Record<string, TsoaRoute.ParameterSchema> = {
                 cartId: {"in":"path","name":"cartId","required":true,"dataType":"string"},
                 country: {"in":"query","name":"country","dataType":"string"},
+                headerStoreId: {"in":"header","name":"x-store-id","dataType":"string"},
+                request: {"in":"request","name":"request","dataType":"object"},
         };
         app.get('/api/v1/cart/:cartId',
             ...(fetchMiddlewares<RequestHandler>(CartController)),
@@ -3378,6 +3382,9 @@ export function RegisterRoutes(app: Router) {
         const argsCartController_addItems: Record<string, TsoaRoute.ParameterSchema> = {
                 cartId: {"in":"path","name":"cartId","required":true,"dataType":"string"},
                 requestBody: {"in":"body","name":"requestBody","required":true,"ref":"AddItemsRequest"},
+                country: {"in":"query","name":"country","dataType":"string"},
+                headerStoreId: {"in":"header","name":"x-store-id","dataType":"string"},
+                request: {"in":"request","name":"request","dataType":"object"},
         };
         app.post('/api/v1/cart/:cartId/items',
             ...(fetchMiddlewares<RequestHandler>(CartController)),
@@ -3410,6 +3417,9 @@ export function RegisterRoutes(app: Router) {
                 cartId: {"in":"path","name":"cartId","required":true,"dataType":"string"},
                 lineItemId: {"in":"path","name":"lineItemId","required":true,"dataType":"string"},
                 requestBody: {"in":"body","name":"requestBody","required":true,"ref":"UpdateItemQuantityRequest"},
+                country: {"in":"query","name":"country","dataType":"string"},
+                headerStoreId: {"in":"header","name":"x-store-id","dataType":"string"},
+                request: {"in":"request","name":"request","dataType":"object"},
         };
         app.put('/api/v1/cart/:cartId/items/:lineItemId',
             ...(fetchMiddlewares<RequestHandler>(CartController)),
@@ -3441,6 +3451,9 @@ export function RegisterRoutes(app: Router) {
         const argsCartController_removeItem: Record<string, TsoaRoute.ParameterSchema> = {
                 cartId: {"in":"path","name":"cartId","required":true,"dataType":"string"},
                 lineItemId: {"in":"path","name":"lineItemId","required":true,"dataType":"string"},
+                country: {"in":"query","name":"country","dataType":"string"},
+                headerStoreId: {"in":"header","name":"x-store-id","dataType":"string"},
+                request: {"in":"request","name":"request","dataType":"object"},
         };
         app.delete('/api/v1/cart/:cartId/items/:lineItemId',
             ...(fetchMiddlewares<RequestHandler>(CartController)),
@@ -3502,6 +3515,8 @@ export function RegisterRoutes(app: Router) {
         // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
         const argsCartController_clearCart: Record<string, TsoaRoute.ParameterSchema> = {
                 cartId: {"in":"path","name":"cartId","required":true,"dataType":"string"},
+                headerStoreId: {"in":"header","name":"x-store-id","dataType":"string"},
+                request: {"in":"request","name":"request","dataType":"object"},
         };
         app.delete('/api/v1/cart/:cartId',
             ...(fetchMiddlewares<RequestHandler>(CartController)),
@@ -3533,6 +3548,8 @@ export function RegisterRoutes(app: Router) {
         const argsCartController_associateWithCustomer: Record<string, TsoaRoute.ParameterSchema> = {
                 cartId: {"in":"path","name":"cartId","required":true,"dataType":"string"},
                 request: {"in":"request","name":"request","required":true,"dataType":"object"},
+                country: {"in":"query","name":"country","dataType":"string"},
+                headerStoreId: {"in":"header","name":"x-store-id","dataType":"string"},
         };
         app.post('/api/v1/cart/:cartId/associate',
             authenticateMiddleware([{"jwt":[]}]),

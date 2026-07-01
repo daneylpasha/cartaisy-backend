@@ -8401,6 +8401,12 @@
 					"400": {
 						"description": "Bad Request"
 					},
+					"403": {
+						"description": "Store is not active"
+					},
+					"404": {
+						"description": "Store not found"
+					},
 					"500": {
 						"description": "Internal Server Error"
 					}
@@ -8415,6 +8421,14 @@
 						"description": "- ISO 3166-1 alpha-2 country code for multi-currency pricing (e.g., 'US', 'GB', 'CA')",
 						"in": "query",
 						"name": "country",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"in": "header",
+						"name": "x-store-id",
 						"required": false,
 						"schema": {
 							"type": "string"
@@ -8449,6 +8463,12 @@
 							}
 						}
 					},
+					"400": {
+						"description": "Bad Request"
+					},
+					"403": {
+						"description": "Store is not active"
+					},
 					"404": {
 						"description": "Cart not found"
 					},
@@ -8479,6 +8499,14 @@
 						"schema": {
 							"type": "string"
 						}
+					},
+					{
+						"in": "header",
+						"name": "x-store-id",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
 					}
 				]
 			},
@@ -8494,6 +8522,12 @@
 								}
 							}
 						}
+					},
+					"400": {
+						"description": "Bad Request"
+					},
+					"403": {
+						"description": "Store is not active"
 					},
 					"404": {
 						"description": "Cart not found"
@@ -8513,6 +8547,14 @@
 						"in": "path",
 						"name": "cartId",
 						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"in": "header",
+						"name": "x-store-id",
+						"required": false,
 						"schema": {
 							"type": "string"
 						}
@@ -8537,6 +8579,9 @@
 					"400": {
 						"description": "Bad Request"
 					},
+					"403": {
+						"description": "Store is not active"
+					},
 					"404": {
 						"description": "Cart not found"
 					},
@@ -8555,6 +8600,22 @@
 						"in": "path",
 						"name": "cartId",
 						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"in": "query",
+						"name": "country",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"in": "header",
+						"name": "x-store-id",
+						"required": false,
 						"schema": {
 							"type": "string"
 						}
@@ -8591,6 +8652,9 @@
 					"400": {
 						"description": "Bad Request"
 					},
+					"403": {
+						"description": "Store is not active"
+					},
 					"404": {
 						"description": "Cart or item not found"
 					},
@@ -8618,6 +8682,22 @@
 						"in": "path",
 						"name": "lineItemId",
 						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"in": "query",
+						"name": "country",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"in": "header",
+						"name": "x-store-id",
+						"required": false,
 						"schema": {
 							"type": "string"
 						}
@@ -8649,6 +8729,12 @@
 							}
 						}
 					},
+					"400": {
+						"description": "Bad Request"
+					},
+					"403": {
+						"description": "Store is not active"
+					},
 					"404": {
 						"description": "Cart or item not found"
 					},
@@ -8676,6 +8762,22 @@
 						"in": "path",
 						"name": "lineItemId",
 						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"in": "query",
+						"name": "country",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"in": "header",
+						"name": "x-store-id",
+						"required": false,
 						"schema": {
 							"type": "string"
 						}
@@ -8814,6 +8916,9 @@
 					"400": {
 						"description": "Bad Request"
 					},
+					"403": {
+						"description": "Store is not active"
+					},
 					"404": {
 						"description": "Cart not found"
 					},
@@ -8836,6 +8941,22 @@
 						"in": "path",
 						"name": "cartId",
 						"required": true,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"in": "query",
+						"name": "country",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
+					},
+					{
+						"in": "header",
+						"name": "x-store-id",
+						"required": false,
 						"schema": {
 							"type": "string"
 						}
