@@ -1,5 +1,6 @@
 import express, { Request, Response } from 'express';
 import { authenticate, authorize } from '../middleware/auth';
+import { requireOwnedStoreParam } from '../middleware/storeOwnership';
 import { getSyncStatus } from '../services/syncService';
 import Product from '../models/Product';
 import Customer from '../models/Customer';
@@ -30,6 +31,7 @@ router.get(
   '/stores/:storeId/admin/sync/status',
   authenticate,
   authorize('admin', 'super_admin'),
+  requireOwnedStoreParam(),
   async (req: Request, res: Response) => {
     try {
       const { storeId } = req.params;

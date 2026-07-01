@@ -1,5 +1,6 @@
 import { Router, RequestHandler } from 'express';
 import { authenticate, authorize } from '../middleware/auth';
+import { requireOwnedStoreParam } from '../middleware/storeOwnership';
 import {
   getEmailConfig,
   updateEmailConfig,
@@ -18,6 +19,7 @@ const router = Router();
 // All routes require authentication and admin role
 router.use(authenticate as unknown as RequestHandler);
 router.use(authorize('admin', 'super_admin') as unknown as RequestHandler);
+router.use('/stores/:storeId', requireOwnedStoreParam() as unknown as RequestHandler);
 
 /**
  * GET /stores/:storeId/email/config

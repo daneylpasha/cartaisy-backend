@@ -1,5 +1,6 @@
 import express from 'express';
 import { authenticate, authorize } from '../middleware/auth';
+import { requireOwnedStoreParam } from '../middleware/storeOwnership';
 import {
   getStoreSettings,
   updateStoreSettings,
@@ -40,6 +41,7 @@ router.get(
   '/stores/:storeId/settings',
   authenticate,
   authorize('admin', 'super_admin'),
+  requireOwnedStoreParam(),
   getStoreSettings
 );
 
@@ -51,6 +53,7 @@ router.patch(
   '/stores/:storeId/settings',
   authenticate,
   authorize('admin', 'super_admin'),
+  requireOwnedStoreParam(),
   updateStoreSettings
 );
 
@@ -62,6 +65,7 @@ router.post(
   '/stores/:storeId/settings/sync-from-shopify',
   authenticate,
   authorize('admin', 'super_admin'),
+  requireOwnedStoreParam(),
   syncFromShopify
 );
 

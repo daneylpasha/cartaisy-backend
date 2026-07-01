@@ -1,6 +1,7 @@
 import express from 'express';
 import multer from 'multer';
 import { authenticate, authorize } from '../middleware/auth';
+import { requireOwnedStoreParam } from '../middleware/storeOwnership';
 import {
   getStoreBranding,
   updateStoreBranding,
@@ -45,6 +46,7 @@ router.get(
   '/stores/:storeId/branding',
   authenticate,
   authorize('admin', 'super_admin'),
+  requireOwnedStoreParam(),
   getStoreBranding
 );
 
@@ -56,6 +58,7 @@ router.patch(
   '/stores/:storeId/branding',
   authenticate,
   authorize('admin', 'super_admin'),
+  requireOwnedStoreParam(),
   updateStoreBranding
 );
 
@@ -70,6 +73,7 @@ router.post(
   '/stores/:storeId/branding/logo',
   authenticate,
   authorize('admin', 'super_admin'),
+  requireOwnedStoreParam(),
   logoUpload.single('logo'),
   uploadStoreLogo
 );
@@ -82,6 +86,7 @@ router.delete(
   '/stores/:storeId/branding/logo',
   authenticate,
   authorize('admin', 'super_admin'),
+  requireOwnedStoreParam(),
   deleteStoreLogo
 );
 

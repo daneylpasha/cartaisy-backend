@@ -1,5 +1,6 @@
 import express from 'express';
 import { authenticate, authorize } from '../middleware/auth';
+import { requireOwnedStoreParam } from '../middleware/storeOwnership';
 import {
   exportCustomerData,
   exportAllCustomersData,
@@ -28,7 +29,7 @@ const router = express.Router();
  */
 
 // Middleware array for admin authentication
-const adminAuth = [authenticate, authorize('admin', 'super_admin')];
+const adminAuth = [authenticate, authorize('admin', 'super_admin'), requireOwnedStoreParam()];
 
 // =============================================================================
 // DATA EXPORT ENDPOINTS

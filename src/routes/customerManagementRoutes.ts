@@ -1,5 +1,6 @@
 import express from 'express';
 import { authenticate, authorize } from '../middleware/auth';
+import { requireOwnedStoreParam } from '../middleware/storeOwnership';
 import {
   listCustomers,
   searchCustomers,
@@ -35,6 +36,7 @@ const router = express.Router();
 // Apply authentication and admin authorization to all routes
 router.use(authenticate);
 router.use(authorize('admin', 'super_admin'));
+router.use('/stores/:storeId', requireOwnedStoreParam());
 
 // =============================================================================
 // CUSTOMER LIST & SEARCH
