@@ -510,4 +510,75 @@ describe('ShopifyStorefrontService tenant-scoped client contract', () => {
     });
     expect(mockedAxios.create).not.toHaveBeenCalled();
   });
+
+  it('runs Storefront cart operations with the tenant-scoped client', async () => {
+    const store = await createStore();
+    const shopifyResponse = {
+      data: {
+        cartCreate: {
+          cart: {
+            id: 'gid://shopify/Cart/abc',
+          },
+          userErrors: [],
+        },
+      },
+    };
+    postMock.mockResolvedValueOnce({ data: shopifyResponse });
+
+    const response = await shopifyStorefront.createCartForStore(
+      store._id.toString(),
+      [{ merchandiseId: 'gid://shopify/ProductVariant/456', quantity: 2 }],
+      'US'
+    );
+
+    expect(response).toEqual(shopifyResponse);
+    expect(mockedAxios.create).toHaveBeenCalledWith(expect.objectContaining({
+      baseURL: 'https://tenant-shop.myshopify.com/api/2025-01/graphql.json',
+      headers: expect.objectContaining({
+        'X-Shopify-Storefront-Access-Token': 'tenant-storefront-token',
+      }),
+    }));
+    expect(postMock).toHaveBeenCalledWith('', expect.objectContaining({
+      variables: {
+        input: {
+          lines: [{ merchandiseId: 'gid://shopify/ProductVariant/456', quantity: 2 }],
+          buyerIdentity: {
+            countryCode: 'US',
+          },
+        },
+        country: 'US',
+      },
+    }));
+  });
+
+  it('fails Storefront cart operations without falling back to global credentials', async () => {
+    process.env.SHOPIFY_STOREFRONT_ACCESS_TOKEN = 'global-storefront-token';
+    const store = await createStore({
+      shopify: {
+        shop: 'tenant-shop.myshopify.com',
+        storefrontAccessToken: '',
+        scope: 'read_products',
+        isConnected: true,
+      },
+    });
+
+    const storeId = store._id.toString();
+    const cartOperations = [
+      shopifyStorefront.createCartForStore(storeId),
+      shopifyStorefront.getCartForStore(storeId, 'gid://shopify/Cart/abc'),
+      shopifyStorefront.addCartLinesForStore(storeId, 'gid://shopify/Cart/abc', []),
+      shopifyStorefront.updateCartLinesForStore(storeId, 'gid://shopify/Cart/abc', []),
+      shopifyStorefront.removeCartLinesForStore(storeId, 'gid://shopify/Cart/abc', []),
+      shopifyStorefront.associateCartWithCustomerForStore(storeId, 'gid://shopify/Cart/abc', 'customer-token'),
+    ];
+
+    await Promise.all(cartOperations.map((promise) => expect(promise).rejects.toMatchObject({
+      name: ApiError.name,
+      message: 'Shopify not configured for this store',
+      statusCode: 400,
+      expose: false,
+    })));
+    expect(mockedAxios.create).not.toHaveBeenCalled();
+    expect(postMock).not.toHaveBeenCalled();
+  });
 });

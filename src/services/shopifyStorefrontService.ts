@@ -133,6 +133,21 @@ class ShopifyStorefrontService {
     }
   }
 
+  private assertTenantStorefrontClientConfigured(storeClient: ShopifyStorefrontClient): void {
+    if (!storeClient.isConfigured) {
+      const expose = storeClient.expose ?? false;
+      throw new ApiError(
+        expose
+          ? storeClient.error || 'Shopify not configured for this store'
+          : 'Shopify not configured for this store',
+        storeClient.statusCode || 400,
+        true,
+        undefined,
+        expose
+      );
+    }
+  }
+
   /**
    * Get a collection by its ID with products
    * @param collectionId - Shopify collection ID
@@ -805,7 +820,8 @@ class ShopifyStorefrontService {
    */
   async createCart(
     items?: Array<{ merchandiseId: string; quantity: number }>,
-    countryCode?: string
+    countryCode?: string,
+    storeClient?: ShopifyStorefrontClient
   ): Promise<any> {
     const query = `
       mutation cartCreate($input: CartInput!, $country: CountryCode) @inContext(country: $country) {
@@ -876,7 +892,20 @@ class ShopifyStorefrontService {
       };
     }
 
-    return this.query<any>(query, { input, country: countryCode || null });
+    const variables = { input, country: countryCode || null };
+    return storeClient
+      ? storeClient.query<any>(query, variables)
+      : this.query<any>(query, variables);
+  }
+
+  async createCartForStore(
+    storeId: string,
+    items?: Array<{ merchandiseId: string; quantity: number }>,
+    countryCode?: string
+  ): Promise<any> {
+    const storeClient = await this.getStorefrontClientForStore(storeId);
+    this.assertTenantStorefrontClientConfigured(storeClient);
+    return this.createCart(items, countryCode, storeClient);
   }
 
   /**
@@ -884,7 +913,7 @@ class ShopifyStorefrontService {
    * @param cartId - Shopify cart ID
    * @param countryCode - ISO country code for multi-currency pricing (e.g., 'US', 'GB', 'CA')
    */
-  async getCart(cartId: string, countryCode?: string): Promise<any> {
+  async getCart(cartId: string, countryCode?: string, storeClient?: ShopifyStorefrontClient): Promise<any> {
     const query = `
       query getCart($cartId: ID!, $country: CountryCode) @inContext(country: $country) {
         cart(id: $cartId) {
@@ -933,7 +962,16 @@ class ShopifyStorefrontService {
       }
     `;
 
-    return this.query<any>(query, { cartId, country: countryCode || null });
+    const variables = { cartId, country: countryCode || null };
+    return storeClient
+      ? storeClient.query<any>(query, variables)
+      : this.query<any>(query, variables);
+  }
+
+  async getCartForStore(storeId: string, cartId: string, countryCode?: string): Promise<any> {
+    const storeClient = await this.getStorefrontClientForStore(storeId);
+    this.assertTenantStorefrontClientConfigured(storeClient);
+    return this.getCart(cartId, countryCode, storeClient);
   }
 
   /**
@@ -945,7 +983,8 @@ class ShopifyStorefrontService {
   async addCartLines(
     cartId: string,
     lines: Array<{ merchandiseId: string; quantity: number }>,
-    countryCode?: string
+    countryCode?: string,
+    storeClient?: ShopifyStorefrontClient
   ): Promise<any> {
     const query = `
       mutation cartLinesAdd($cartId: ID!, $lines: [CartLineInput!]!, $country: CountryCode) @inContext(country: $country) {
@@ -1001,7 +1040,21 @@ class ShopifyStorefrontService {
       }
     `;
 
-    return this.query<any>(query, { cartId, lines, country: countryCode || null });
+    const variables = { cartId, lines, country: countryCode || null };
+    return storeClient
+      ? storeClient.query<any>(query, variables)
+      : this.query<any>(query, variables);
+  }
+
+  async addCartLinesForStore(
+    storeId: string,
+    cartId: string,
+    lines: Array<{ merchandiseId: string; quantity: number }>,
+    countryCode?: string
+  ): Promise<any> {
+    const storeClient = await this.getStorefrontClientForStore(storeId);
+    this.assertTenantStorefrontClientConfigured(storeClient);
+    return this.addCartLines(cartId, lines, countryCode, storeClient);
   }
 
   /**
@@ -1013,7 +1066,8 @@ class ShopifyStorefrontService {
   async updateCartLines(
     cartId: string,
     lines: Array<{ id: string; quantity: number }>,
-    countryCode?: string
+    countryCode?: string,
+    storeClient?: ShopifyStorefrontClient
   ): Promise<any> {
     const query = `
       mutation cartLinesUpdate($cartId: ID!, $lines: [CartLineUpdateInput!]!, $country: CountryCode) @inContext(country: $country) {
@@ -1069,7 +1123,21 @@ class ShopifyStorefrontService {
       }
     `;
 
-    return this.query<any>(query, { cartId, lines, country: countryCode || null });
+    const variables = { cartId, lines, country: countryCode || null };
+    return storeClient
+      ? storeClient.query<any>(query, variables)
+      : this.query<any>(query, variables);
+  }
+
+  async updateCartLinesForStore(
+    storeId: string,
+    cartId: string,
+    lines: Array<{ id: string; quantity: number }>,
+    countryCode?: string
+  ): Promise<any> {
+    const storeClient = await this.getStorefrontClientForStore(storeId);
+    this.assertTenantStorefrontClientConfigured(storeClient);
+    return this.updateCartLines(cartId, lines, countryCode, storeClient);
   }
 
   /**
@@ -1078,7 +1146,12 @@ class ShopifyStorefrontService {
    * @param lineIds - Array of line IDs to remove
    * @param countryCode - ISO country code for multi-currency pricing (e.g., 'US', 'GB', 'CA')
    */
-  async removeCartLines(cartId: string, lineIds: string[], countryCode?: string): Promise<any> {
+  async removeCartLines(
+    cartId: string,
+    lineIds: string[],
+    countryCode?: string,
+    storeClient?: ShopifyStorefrontClient
+  ): Promise<any> {
     const query = `
       mutation cartLinesRemove($cartId: ID!, $lineIds: [ID!]!, $country: CountryCode) @inContext(country: $country) {
         cartLinesRemove(cartId: $cartId, lineIds: $lineIds) {
@@ -1133,7 +1206,21 @@ class ShopifyStorefrontService {
       }
     `;
 
-    return this.query<any>(query, { cartId, lineIds, country: countryCode || null });
+    const variables = { cartId, lineIds, country: countryCode || null };
+    return storeClient
+      ? storeClient.query<any>(query, variables)
+      : this.query<any>(query, variables);
+  }
+
+  async removeCartLinesForStore(
+    storeId: string,
+    cartId: string,
+    lineIds: string[],
+    countryCode?: string
+  ): Promise<any> {
+    const storeClient = await this.getStorefrontClientForStore(storeId);
+    this.assertTenantStorefrontClientConfigured(storeClient);
+    return this.removeCartLines(cartId, lineIds, countryCode, storeClient);
   }
 
   /**
@@ -1145,7 +1232,8 @@ class ShopifyStorefrontService {
   async associateCartWithCustomer(
     cartId: string,
     customerAccessToken: string,
-    countryCode?: string
+    countryCode?: string,
+    storeClient?: ShopifyStorefrontClient
   ): Promise<any> {
     const query = `
       mutation cartBuyerIdentityUpdate($cartId: ID!, $buyerIdentity: CartBuyerIdentityInput!, $country: CountryCode) @inContext(country: $country) {
@@ -1211,13 +1299,28 @@ class ShopifyStorefrontService {
       }
     `;
 
-    return this.query<any>(query, {
+    const variables = {
       cartId,
       buyerIdentity: {
         customerAccessToken,
       },
       country: countryCode || null,
-    });
+    };
+
+    return storeClient
+      ? storeClient.query<any>(query, variables)
+      : this.query<any>(query, variables);
+  }
+
+  async associateCartWithCustomerForStore(
+    storeId: string,
+    cartId: string,
+    customerAccessToken: string,
+    countryCode?: string
+  ): Promise<any> {
+    const storeClient = await this.getStorefrontClientForStore(storeId);
+    this.assertTenantStorefrontClientConfigured(storeClient);
+    return this.associateCartWithCustomer(cartId, customerAccessToken, countryCode, storeClient);
   }
 
   /**
