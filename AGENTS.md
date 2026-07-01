@@ -3,6 +3,7 @@
 Repository rules for AI agents and human developers working on Cartaisy Backend.
 
 See also: `CLAUDE.md` for project architecture, coding standards, API patterns, authentication middleware names, and database conventions.
+See also: `docs/cartaisy/README.md` for shared Cartaisy product and SaaS architecture context.
 
 ## Pull request descriptions
 
