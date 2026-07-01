@@ -4,6 +4,12 @@
 
 Cartaisy Backend implements comprehensive security measures following industry best practices and compliance standards. This document outlines the security architecture, threat mitigation strategies, and operational procedures to ensure maximum protection of data and systems.
 
+## Secret Handling
+
+Never commit real credentials, API keys, private keys, tokens, service-account JSON, or deployed environment values. Tracked `.env.example`, `.env.template.*`, and example configuration files must contain placeholders only.
+
+Treat any committed secret as compromised. Rotate the credential in the provider account, remove it from tracked files, and verify the Gitleaks secret scan before opening a pull request.
+
 ### 🔒 Security Principles
 
 1. **Defense in Depth** - Multiple layers of security controls
