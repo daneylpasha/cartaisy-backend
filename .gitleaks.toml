@@ -1,0 +1,27 @@
+title = "Cartaisy secret scanning"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "env-resend-api-key"
+description = "Resend API key in environment-style files"
+regex = '''(?i)\bRESEND_API_KEY\s*=\s*re_[A-Za-z0-9_-]{20,}'''
+keywords = ["RESEND_API_KEY", "re_"]
+
+[[rules]]
+id = "env-firebase-service-account-json"
+description = "Firebase service-account JSON or private key in environment-style files"
+regex = '''(?i)\bFIREBASE_SERVICE_ACCOUNT\s*=\s*\{.*("type"\s*:\s*"service_account"|"private_key"\s*:\s*"-----BEGIN PRIVATE KEY-----)'''
+keywords = ["FIREBASE_SERVICE_ACCOUNT", "service_account", "BEGIN PRIVATE KEY"]
+
+[allowlist]
+description = "Documented placeholder values are allowed in templates"
+regexes = [
+  '''(?i)<[a-z0-9_-]+>''',
+  '''(?i)\byour[_-][a-z0-9_-]+''',
+  '''(?i)\bGENERATE_[A-Z0-9_]+''',
+  '''(?i)\bSECURE_[A-Z0-9_]+''',
+  '''(?i)\bULTRA_SECURE_[A-Z0-9_]+''',
+  '''(?i)\btest[-_][a-z0-9_-]+''',
+]
