@@ -43,7 +43,7 @@ Known gap: this file is human/agent-maintained and can drift from code.
 
 - GitHub issue: #52.
 - Shared SaaS context: `docs/cartaisy/README.md`
-- Repo rules: `AGENTS.md`
+- Repo rules: `AGENTS.md`, `CLAUDE.md`
 - PR template: `.github/pull_request_template.md`
 - Backend architecture: `docs/ARCHITECTURE.md`
 - Backend status: `docs/STATUS.md`
