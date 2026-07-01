@@ -100,7 +100,7 @@ describe('CartController tenant-scoped Storefront cart operations', () => {
 
     await expect(controller.createCart()).rejects.toMatchObject({
       name: ApiError.name,
-      message: 'x-store-id header is required',
+      message: 'Store context is required (provide x-store-id header or re-authenticate)',
       statusCode: 400,
     });
 

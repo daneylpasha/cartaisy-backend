@@ -35,12 +35,16 @@ export class CartController extends Controller {
     const storeId = rawStoreId ? String(rawStoreId).trim() : '';
 
     if (!storeId) {
-      this.setStatus(400);
-      throw new ApiError('x-store-id header is required', 400, true, undefined, true);
+      throw new ApiError(
+        'Store context is required (provide x-store-id header or re-authenticate)',
+        400,
+        true,
+        undefined,
+        true
+      );
     }
 
     if (!/^[0-9a-fA-F]{24}$/.test(storeId)) {
-      this.setStatus(400);
       throw new ApiError('Invalid Store ID format', 400, true, undefined, true);
     }
 
@@ -54,6 +58,8 @@ export class CartController extends Controller {
    */
   @Post('create')
   @Response(400, 'Bad Request')
+  @Response(403, 'Store is not active')
+  @Response(404, 'Store not found')
   @Response(500, 'Internal Server Error')
   public async createCart(
     @Body() requestBody?: CartCreateRequest,
@@ -108,6 +114,8 @@ export class CartController extends Controller {
    * @param country - ISO 3166-1 alpha-2 country code for multi-currency pricing (e.g., 'US', 'GB', 'CA')
    */
   @Get('{cartId}')
+  @Response(400, 'Bad Request')
+  @Response(403, 'Store is not active')
   @Response(404, 'Cart not found')
   @Response(500, 'Internal Server Error')
   public async getCart(
@@ -157,6 +165,7 @@ export class CartController extends Controller {
    */
   @Post('{cartId}/items')
   @Response(400, 'Bad Request')
+  @Response(403, 'Store is not active')
   @Response(404, 'Cart not found')
   @Response(500, 'Internal Server Error')
   public async addItems(
@@ -221,6 +230,7 @@ export class CartController extends Controller {
    */
   @Put('{cartId}/items/{lineItemId}')
   @Response(400, 'Bad Request')
+  @Response(403, 'Store is not active')
   @Response(404, 'Cart or item not found')
   @Response(500, 'Internal Server Error')
   public async updateItemQuantity(
@@ -289,6 +299,8 @@ export class CartController extends Controller {
    * @param lineItemId - Shopify line item ID
    */
   @Delete('{cartId}/items/{lineItemId}')
+  @Response(400, 'Bad Request')
+  @Response(403, 'Store is not active')
   @Response(404, 'Cart or item not found')
   @Response(500, 'Internal Server Error')
   public async removeItem(
@@ -404,6 +416,8 @@ export class CartController extends Controller {
    * @param cartId - Shopify cart ID
    */
   @Delete('{cartId}')
+  @Response(400, 'Bad Request')
+  @Response(403, 'Store is not active')
   @Response(404, 'Cart not found')
   @Response(500, 'Internal Server Error')
   public async clearCart(
@@ -472,6 +486,7 @@ export class CartController extends Controller {
   @Post('{cartId}/associate')
   @Security('jwt')
   @Response(400, 'Bad Request')
+  @Response(403, 'Store is not active')
   @Response(404, 'Cart not found')
   @Response(500, 'Internal Server Error')
   public async associateWithCustomer(
