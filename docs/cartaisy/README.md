@@ -34,13 +34,13 @@ Planned features must not be treated as implemented unless verified in code. Do 
 
 - GitHub issue: #50.
 - Backend docs: `AGENTS.md`, `CLAUDE.md`, `docs/STORE_OWNERSHIP_VALIDATION_POLICY.md`, `docs/SHOPIFY_TENANT_CLIENT_AUDIT.md`, `docs/HOME_MODULE_CONFIG_AUDIT.md`.
-- Context files in this folder:
-  - `PRODUCT_NORTH_STAR.md`
-  - `SAAS_SCOPE.md`
-  - `TENANCY_MODEL.md`
-  - `SHOPIFY_API_POLICY.md`
-  - `CROSS_REPO_MAP.md`
-  - `MVP_RELEASE_PLAN.md`
-  - `ISSUE_PRIORITY_RULES.md`
-  - `AGENT_WORKFLOW.md`
-  - `DEFINITION_OF_DONE.md`
+- Context files in this folder, suggested reading order:
+  1. `PRODUCT_NORTH_STAR.md`
+  2. `SAAS_SCOPE.md`
+  3. `TENANCY_MODEL.md`
+  4. `SHOPIFY_API_POLICY.md`
+  5. `CROSS_REPO_MAP.md`
+  6. `MVP_RELEASE_PLAN.md`
+  7. `ISSUE_PRIORITY_RULES.md`
+  8. `AGENT_WORKFLOW.md`
+  9. `DEFINITION_OF_DONE.md`

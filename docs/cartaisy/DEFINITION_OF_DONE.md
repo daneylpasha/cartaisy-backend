@@ -5,7 +5,6 @@ Definition of Done depends on risk. Docs-only work should not change runtime beh
 ## Current state
 
 - `AGENTS.md` requires tests for backend logic changes, focused PRs, secrets protection, tenant-safety care, and PR summaries.
-- This issue is docs-only. No runtime code, tests, CI, secrets, Shopify implementation, checkout logic, or app behavior should change for issue #50.
 - Do not assume this exists unless verified in code: tests covering a changed behavior, generated files being up to date, or tenant isolation being complete.
 
 ## Target state
