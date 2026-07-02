@@ -963,6 +963,11 @@ class ShopifyStorefrontService {
     `;
 
     const variables = { cartId, country: countryCode || null };
+    if (!storeClient) {
+      // Interim fail-fast guard (checkout tenant-safety audit): unscoped cart
+      // reads are only allowed outside production/SaaS mode
+      this.assertGlobalStorefrontReadsAllowed();
+    }
     return storeClient
       ? storeClient.query<any>(query, variables)
       : this.query<any>(query, variables);
@@ -972,6 +977,38 @@ class ShopifyStorefrontService {
     const storeClient = await this.getStorefrontClientForStore(storeId);
     this.assertTenantStorefrontClientConfigured(storeClient);
     return this.getCart(cartId, countryCode, storeClient);
+  }
+
+  /**
+   * Fetch the Shopify-hosted checkout URL for a store-scoped cart.
+   *
+   * Narrow query on purpose: the existing cart responses keep their shape,
+   * and the handoff endpoint gets exactly the tenant-scoped checkoutUrl it
+   * needs. Only resolvable through the store's own Storefront credentials -
+   * there is no global-client variant of this method.
+   */
+  async getCheckoutUrlForStore(storeId: string, cartId: string, countryCode?: string): Promise<any> {
+    const storeClient = await this.getStorefrontClientForStore(storeId);
+    this.assertTenantStorefrontClientConfigured(storeClient);
+
+    const query = `
+      query getCartCheckoutUrl($cartId: ID!, $country: CountryCode) @inContext(country: $country) {
+        cart(id: $cartId) {
+          id
+          checkoutUrl
+          totalQuantity
+          estimatedCost {
+            totalAmount {
+              amount
+              currencyCode
+            }
+          }
+        }
+      }
+    `;
+
+    const variables = { cartId, country: countryCode || null };
+    return storeClient.query<any>(query, variables);
   }
 
   /**
@@ -1510,6 +1547,11 @@ class ShopifyStorefrontService {
       phone?: string;
     }
   ): Promise<any> {
+    // Interim fail-fast guard (checkout tenant-safety audit): this mutation
+    // has no store-scoped variant yet, so it must not run with global
+    // Storefront credentials in production/SaaS mode
+    this.assertGlobalStorefrontReadsAllowed();
+
     // Use cartBuyerIdentityUpdate with full delivery address
     // Shopify needs complete address (city, province, zip, country) to calculate accurate shipping rates
     // The country from the address is used for @inContext to get localized prices
@@ -1613,6 +1655,11 @@ class ShopifyStorefrontService {
    * @returns Cart with applied discounts
    */
   async applyDiscountCodes(cartId: string, discountCodes: string[], countryCode?: string): Promise<any> {
+    // Interim fail-fast guard (checkout tenant-safety audit): this mutation
+    // has no store-scoped variant yet, so it must not run with global
+    // Storefront credentials in production/SaaS mode
+    this.assertGlobalStorefrontReadsAllowed();
+
     const query = `
       mutation cartDiscountCodesUpdate($cartId: ID!, $discountCodes: [String!]!, $country: CountryCode) @inContext(country: $country) {
         cartDiscountCodesUpdate(cartId: $cartId, discountCodes: $discountCodes) {

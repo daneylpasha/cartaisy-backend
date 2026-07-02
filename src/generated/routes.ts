@@ -899,6 +899,38 @@ const models: TsoaRoute.Models = {
         "type": {"dataType":"union","subSchemas":[{"dataType":"enum","enums":["BEST_SELLING"]},{"dataType":"enum","enums":["COLLECTION_DEFAULT"]},{"dataType":"enum","enums":["CREATED"]},{"dataType":"enum","enums":["ID"]},{"dataType":"enum","enums":["MANUAL"]},{"dataType":"enum","enums":["PRICE"]},{"dataType":"enum","enums":["RELEVANCE"]},{"dataType":"enum","enums":["TITLE"]},{"dataType":"enum","enums":["DISCOUNT"]}],"validators":{}},
     },
     // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "CheckoutHandoffData": {
+        "dataType": "refObject",
+        "properties": {
+            "checkoutUrl": {"dataType":"string","required":true},
+            "cartId": {"dataType":"string","required":true},
+            "storeId": {"dataType":"string","required":true},
+            "totalQuantity": {"dataType":"double"},
+            "total": {"dataType":"double"},
+            "currency": {"dataType":"string"},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "CheckoutHandoffResponse": {
+        "dataType": "refObject",
+        "properties": {
+            "success": {"dataType":"boolean","required":true},
+            "data": {"ref":"CheckoutHandoffData","required":true},
+            "message": {"dataType":"string"},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+    "CheckoutHandoffRequest": {
+        "dataType": "refObject",
+        "properties": {
+            "cartId": {"dataType":"string","required":true},
+            "country": {"dataType":"string","validators":{"pattern":{"errorMsg":"country must be a 2-letter uppercase ISO 3166-1 alpha-2 code","value":"^[A-Z]{2}$"}}},
+        },
+        "additionalProperties": false,
+    },
+    // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
     "InitCheckoutResponse": {
         "dataType": "refObject",
         "properties": {
@@ -3045,6 +3077,38 @@ export function RegisterRoutes(app: Router) {
 
               await templateService.apiHandler({
                 methodName: 'getCollectionProducts',
+                controller,
+                response,
+                next,
+                validatedArgs,
+                successStatus: undefined,
+              });
+            } catch (err) {
+                return next(err);
+            }
+        });
+        // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+        const argsCheckoutController_checkoutHandoff: Record<string, TsoaRoute.ParameterSchema> = {
+                requestBody: {"in":"body","name":"requestBody","required":true,"ref":"CheckoutHandoffRequest"},
+                headerStoreId: {"in":"header","name":"x-store-id","dataType":"string"},
+                request: {"in":"request","name":"request","dataType":"object"},
+        };
+        app.post('/api/v1/checkout/handoff',
+            ...(fetchMiddlewares<RequestHandler>(CheckoutController)),
+            ...(fetchMiddlewares<RequestHandler>(CheckoutController.prototype.checkoutHandoff)),
+
+            async function CheckoutController_checkoutHandoff(request: ExRequest, response: ExResponse, next: any) {
+
+            // WARNING: This file was auto-generated with tsoa. Please do not modify it. Re-run tsoa to re-generate this file: https://github.com/lukeautry/tsoa
+
+            let validatedArgs: any[] = [];
+            try {
+                validatedArgs = templateService.getValidatedArgs({ args: argsCheckoutController_checkoutHandoff, request, response });
+
+                const controller = new CheckoutController();
+
+              await templateService.apiHandler({
+                methodName: 'checkoutHandoff',
                 controller,
                 response,
                 next,

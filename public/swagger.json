@@ -2951,6 +2951,75 @@
 				],
 				"description": "Sort options for collection products"
 			},
+			"CheckoutHandoffData": {
+				"properties": {
+					"checkoutUrl": {
+						"type": "string",
+						"description": "Shopify-hosted checkout URL for the tenant store's cart"
+					},
+					"cartId": {
+						"type": "string"
+					},
+					"storeId": {
+						"type": "string"
+					},
+					"totalQuantity": {
+						"type": "number",
+						"format": "double"
+					},
+					"total": {
+						"type": "number",
+						"format": "double"
+					},
+					"currency": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"checkoutUrl",
+					"cartId",
+					"storeId"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"CheckoutHandoffResponse": {
+				"properties": {
+					"success": {
+						"type": "boolean"
+					},
+					"data": {
+						"$ref": "#/components/schemas/CheckoutHandoffData"
+					},
+					"message": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"success",
+					"data"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
+			"CheckoutHandoffRequest": {
+				"properties": {
+					"cartId": {
+						"type": "string",
+						"description": "Shopify Storefront cart ID"
+					},
+					"country": {
+						"type": "string",
+						"description": "ISO 3166-1 alpha-2 country code for localized checkout (e.g. 'US').\nValidated here so an invalid value fails fast as a 4xx instead of\nsurfacing as a misleading Shopify-side cart lookup failure.",
+						"pattern": "^[A-Z]{2}$"
+					}
+				},
+				"required": [
+					"cartId"
+				],
+				"type": "object",
+				"additionalProperties": false
+			},
 			"InitCheckoutResponse": {
 				"description": "Response for checkout session initialization",
 				"properties": {
@@ -7967,6 +8036,62 @@
 						}
 					}
 				]
+			}
+		},
+		"/checkout/handoff": {
+			"post": {
+				"operationId": "CheckoutHandoff",
+				"responses": {
+					"200": {
+						"description": "Ok",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/CheckoutHandoffResponse"
+								}
+							}
+						}
+					},
+					"400": {
+						"description": "Bad Request - Missing/invalid store context or cart ID"
+					},
+					"403": {
+						"description": "Store is not active"
+					},
+					"404": {
+						"description": "Store or cart not found"
+					},
+					"500": {
+						"description": "Internal Server Error"
+					}
+				},
+				"description": "Shopify-hosted checkout handoff (SaaS checkout v1)\n\nReturns the Shopify-hosted checkout URL for a tenant store's cart.\nStore context comes from the authenticated customer record (loaded from\nthe database by optionalCustomerAuth when a Bearer token is present) or,\nfor guest carts, the validated public x-store-id header - the cart is\nonly ever read through that store's own Storefront credentials, so a\ncart ID can never resolve against another store's shop.",
+				"tags": [
+					"Checkout"
+				],
+				"security": [],
+				"parameters": [
+					{
+						"in": "header",
+						"name": "x-store-id",
+						"required": false,
+						"schema": {
+							"type": "string"
+						}
+					}
+				],
+				"requestBody": {
+					"description": "- Shopify cart ID and optional country code",
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/CheckoutHandoffRequest",
+								"description": "- Shopify cart ID and optional country code"
+							}
+						}
+					}
+				}
 			}
 		},
 		"/checkout/init": {

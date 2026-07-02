@@ -106,6 +106,14 @@ Known gap: exact original decision dates are not known for most entries. Use "Da
 - Impact: New Admin-touching code must accept/derive a trusted `storeId`. Scheduled sync iterates connected stores explicitly and updates only the synced store's `lastSyncAt`. Routes without a store context reject with a controlled error instead of guessing.
 - Related docs: `docs/SHOPIFY_ADMIN_WEBHOOK_TENANT_AUDIT.md`, `docs/cartaisy/SHOPIFY_API_POLICY.md`, `docs/cartaisy/TENANCY_MODEL.md`. GitHub issue: #66.
 
+### Shopify-hosted checkout is the SaaS checkout v1
+
+- Date: 2026-07-02.
+- Decision: The SaaS checkout path is Shopify-hosted checkout handoff: the backend resolves trusted store context (authenticated customer record, or validated public store context for guest carts), reads the cart through that store's own Storefront credentials, and returns the Shopify `checkoutUrl` (`POST /api/v1/checkout/handoff`). Shopify owns payment capture, tax, shipping, discounts, and order creation. The legacy native (Stripe) checkout endpoints fail closed with 403 in production or SaaS mode (`NODE_ENV=production`, `SAAS_MODE`, or `MULTI_TENANT_MODE`), and the unscoped Storefront cart helpers they use (`getCart` without a store client, `updateCartBuyerIdentity`, `applyDiscountCodes`) carry the same interim fail-fast guard.
+- Reason: The checkout audit found the native flow uses global Storefront credentials and undefined tenant payment ownership; Shopify-hosted checkout avoids custom payment/tax/shipping risk and keeps merchant credentials server-side.
+- Impact: Mobile opens the returned `checkoutUrl` instead of the native multi-step flow for SaaS stores. Non-sensitive handoff metadata (`CheckoutHandoff`: storeId, cart ID, customer/guest correlation) is recorded for future order webhook reconciliation. Native Stripe checkout remains available only in dev/single-store mode until a separate tenant-safety issue redesigns it.
+- Related docs: `docs/CHECKOUT_TENANT_SAFETY_AUDIT.md`, `docs/cartaisy/SHOPIFY_API_POLICY.md`. GitHub issue: #68.
+
 ### Keep backend docs linked to shared Cartaisy context
 
 - Date: 2026-07-01.

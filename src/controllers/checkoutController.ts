@@ -1,10 +1,13 @@
-import { Body, Controller, Delete, Get, Path, Post, Query, Request, Route, Security, Tags, Response } from 'tsoa';
+import { Body, Controller, Delete, Get, Header, Middlewares, Path, Post, Query, Request, Route, Security, Tags, Response } from 'tsoa';
+import { optionalCustomerAuth } from '../middleware/customerAuth';
 import CheckoutSession, { ICheckoutSessionDocument } from '../models/CheckoutSession';
 import User from '../models/User';
 import Customer from '../models/Customer';
 import Order from '../models/Order';
 import Product from '../models/Product';
 import CartActivity from '../models/CartActivity';
+import CheckoutHandoff from '../models/CheckoutHandoff';
+import { ApiError } from '../utils/errors';
 import shopifyStorefront from '../services/shopifyStorefrontService';
 import stripeService from '../services/stripeService';
 import { normalizeAddressForShopify } from '../utils/addressHelper';
@@ -69,6 +72,8 @@ import {
   CompleteCheckoutRequest,
   CompleteCheckoutResponse,
   CheckoutRequiresActionResponse,
+  CheckoutHandoffRequest,
+  CheckoutHandoffResponse,
 } from '../types/api/checkout';
 
 /**
@@ -86,6 +91,161 @@ import {
 @Route('checkout')
 @Tags('Checkout')
 export class CheckoutController extends Controller {
+  /**
+   * Trusted store context for checkout: the authenticated user/customer
+   * record wins over any caller-supplied header (same pattern as
+   * CartController.resolveStoreId).
+   */
+  private resolveStoreId(headerStoreId?: string, request?: any): string {
+    const rawStoreId =
+      request?.user?.storeId ||
+      request?.customer?.storeId ||
+      request?.storeId ||
+      headerStoreId;
+    const storeId = rawStoreId ? String(rawStoreId).trim() : '';
+
+    if (!storeId) {
+      throw new ApiError(
+        'Store context is required (provide x-store-id header or re-authenticate)',
+        400,
+        true,
+        undefined,
+        true
+      );
+    }
+
+    if (!/^[0-9a-fA-F]{24}$/.test(storeId)) {
+      throw new ApiError('Invalid Store ID format', 400, true, undefined, true);
+    }
+
+    return storeId;
+  }
+
+  /**
+   * The legacy native (Stripe) checkout flow still uses global Storefront
+   * credentials and process-wide Stripe configuration, so it must fail
+   * closed in production/SaaS mode. Shopify-hosted checkout handoff
+   * (POST /checkout/handoff) is the SaaS checkout v1 path.
+   * See docs/CHECKOUT_TENANT_SAFETY_AUDIT.md and issue #68.
+   */
+  private assertNativeCheckoutAllowed(): void {
+    const isProduction = process.env.NODE_ENV === 'production';
+    const isSaasMode =
+      ['1', 'true', 'yes', 'on'].includes((process.env.SAAS_MODE || '').toLowerCase()) ||
+      ['1', 'true', 'yes', 'on'].includes((process.env.MULTI_TENANT_MODE || '').toLowerCase());
+
+    if (isProduction || isSaasMode) {
+      throw new ApiError(
+        'Native checkout is disabled; use the Shopify-hosted checkout handoff',
+        403,
+        true,
+        undefined,
+        true
+      );
+    }
+  }
+
+  /**
+   * Shopify-hosted checkout handoff (SaaS checkout v1)
+   *
+   * Returns the Shopify-hosted checkout URL for a tenant store's cart.
+   * Store context comes from the authenticated customer record (loaded from
+   * the database by optionalCustomerAuth when a Bearer token is present) or,
+   * for guest carts, the validated public x-store-id header - the cart is
+   * only ever read through that store's own Storefront credentials, so a
+   * cart ID can never resolve against another store's shop.
+   *
+   * @param requestBody - Shopify cart ID and optional country code
+   */
+  @Post('handoff')
+  @Middlewares(optionalCustomerAuth)
+  @Response(400, 'Bad Request - Missing/invalid store context or cart ID')
+  @Response(403, 'Store is not active')
+  @Response(404, 'Store or cart not found')
+  @Response(500, 'Internal Server Error')
+  public async checkoutHandoff(
+    @Body() requestBody: CheckoutHandoffRequest,
+    @Header('x-store-id') headerStoreId?: string,
+    @Request() request?: any
+  ): Promise<CheckoutHandoffResponse> {
+    try {
+      const storeId = this.resolveStoreId(headerStoreId, request);
+      const cartId = requestBody?.cartId?.trim();
+
+      if (!cartId) {
+        throw new ApiError('Cart ID is required', 400, true, undefined, true);
+      }
+
+      const cartResponse = await shopifyStorefront.getCheckoutUrlForStore(
+        storeId,
+        cartId,
+        requestBody.country
+      );
+
+      const cart = cartResponse?.data?.cart;
+      if (!cart) {
+        throw new ApiError('Cart not found', 404, true, undefined, true);
+      }
+
+      if (!cart.checkoutUrl) {
+        throw new ApiError('Checkout URL unavailable for this cart', 500, true);
+      }
+
+      // Best-effort non-sensitive handoff metadata for later webhook/order
+      // reconciliation; never blocks the shopper from reaching checkout
+      const customerId = request?.customer?.id || request?.customer?._id;
+      try {
+        await CheckoutHandoff.create({
+          storeId,
+          shopifyCartId: cart.id || cartId,
+          customerId: customerId || undefined,
+          guestSessionId: request?.guestSession?.sessionId || undefined,
+          source: customerId ? 'customer' : 'public',
+          checkoutUrl: cart.checkoutUrl,
+        });
+      } catch (metadataError) {
+        console.warn('Failed to record checkout handoff metadata:', metadataError);
+      }
+
+      return {
+        success: true,
+        data: {
+          checkoutUrl: cart.checkoutUrl,
+          cartId: cart.id || cartId,
+          storeId,
+          totalQuantity: cart.totalQuantity,
+          total: cart.estimatedCost?.totalAmount?.amount
+            ? parseFloat(cart.estimatedCost.totalAmount.amount)
+            : undefined,
+          currency: cart.estimatedCost?.totalAmount?.currencyCode,
+        },
+      };
+    } catch (error) {
+      // Expected client errors (4xx) are normal traffic, not server faults -
+      // keep error-level logging for genuine failures only
+      const isClientError = error instanceof ApiError && error.statusCode < 500;
+      if (isClientError) {
+        console.warn(
+          'Checkout handoff rejected:',
+          error instanceof Error ? error.message : 'Unknown error'
+        );
+      } else {
+        console.error(
+          'Error creating checkout handoff:',
+          error instanceof Error ? error.message : 'Unknown error'
+        );
+      }
+
+      if (error instanceof ApiError) {
+        this.setStatus(error.statusCode);
+      } else if (!this.getStatus || this.getStatus() === 200) {
+        this.setStatus(500);
+      }
+
+      throw error;
+    }
+  }
+
   /**
    * Initialize checkout session from cart
    *
@@ -105,6 +265,8 @@ export class CheckoutController extends Controller {
     @Body() requestBody: InitCheckoutRequest,
     @Request() request: any
   ): Promise<InitCheckoutResponse> {
+    this.assertNativeCheckoutAllowed();
+
     try {
       const userId = request.user._id;
       const { cartId } = requestBody;
@@ -230,6 +392,8 @@ export class CheckoutController extends Controller {
     @Query() addressId: number,
     @Request() request: any
   ): Promise<GetShippingRatesResponse> {
+    this.assertNativeCheckoutAllowed();
+
     try {
       const userId = request.user._id;
 
@@ -408,6 +572,8 @@ export class CheckoutController extends Controller {
     @Body() requestBody: SaveShippingRequest,
     @Request() request: any
   ): Promise<SaveShippingResponse> {
+    this.assertNativeCheckoutAllowed();
+
     try {
       const userId = request.user._id;
       const { sessionId, shippingAddressId, deliveryInstructions, contactNumber, shippingRateHandle } = requestBody;
@@ -542,6 +708,8 @@ export class CheckoutController extends Controller {
     @Body() requestBody: SaveStep2Request,
     @Request() request: any
   ): Promise<SaveStep2Response> {
+    this.assertNativeCheckoutAllowed();
+
     try {
       const userId = request.user._id;
       const { sessionId, paymentMethodId } = requestBody;
@@ -673,6 +841,8 @@ export class CheckoutController extends Controller {
     @Body() requestBody: ApplyPromoRequest,
     @Request() request: any
   ): Promise<ApplyPromoResponse> {
+    this.assertNativeCheckoutAllowed();
+
     try {
       const userId = request.user._id;
       const { sessionId, promoCode } = requestBody;
@@ -893,6 +1063,8 @@ export class CheckoutController extends Controller {
     @Body() requestBody: RemovePromoRequest,
     @Request() request: any
   ): Promise<RemovePromoResponse> {
+    this.assertNativeCheckoutAllowed();
+
     try {
       const userId = request.user._id;
       const { sessionId } = requestBody;
@@ -999,6 +1171,8 @@ export class CheckoutController extends Controller {
     @Path() sessionId: string,
     @Request() request: any
   ): Promise<CheckoutSummaryResponse> {
+    this.assertNativeCheckoutAllowed();
+
     try {
       const userId = request.user._id;
 
@@ -1187,6 +1361,8 @@ export class CheckoutController extends Controller {
     @Body() requestBody: CompleteCheckoutRequest,
     @Request() request: any
   ): Promise<CompleteCheckoutResponse | CheckoutRequiresActionResponse> {
+    this.assertNativeCheckoutAllowed();
+
     try {
       const userId = request.user._id;
       const { sessionId, paymentMethodId: platformPayMethodId } = requestBody;

@@ -4,6 +4,8 @@ GitHub issue: #48 - Audit checkout strategy and tenant-safety before implementat
 
 Last audited: 2026-07-01.
 
+> Update (2026-07-02, issue #68): follow-up tickets 1 and 3 are implemented. `POST /api/v1/checkout/handoff` returns the tenant-scoped Shopify `checkoutUrl` via the new store-scoped `getCheckoutUrlForStore()` helper, records non-sensitive handoff metadata (`CheckoutHandoff` model, with `storeId`) for future webhook reconciliation, and fails closed on missing/invalid store context. The legacy native checkout endpoints fail closed (403) in production/SaaS mode, and the unscoped checkout Storefront helpers (`getCart` without a store client, `updateCartBuyerIdentity`, `applyDiscountCodes`) now carry the interim `assertGlobalStorefrontReadsAllowed()` guard recommended below. Order webhook reconciliation (ticket 2) and native Stripe tenant-safety (ticket 4) remain open. The remainder of this document describes the state found during the audit.
+
 ## Scope and method
 
 This audit documents the current checkout flow and recommends a SaaS-safe checkout direction. It is intentionally documentation-only and does not change checkout, payment capture, Stripe behavior, order creation, tax, shipping, mobile app behavior, production credentials, or runtime Shopify client behavior.
