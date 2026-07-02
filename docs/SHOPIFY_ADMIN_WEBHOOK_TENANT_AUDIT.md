@@ -181,6 +181,7 @@ Required target behavior:
    - Add `syncProductsForStore(storeId)`, `syncProductForStore(storeId, ...)`, `syncCustomersForStore(storeId)`, `syncOrdersForStore(storeId)`, `getInventoryLevelsForStore(storeId, ...)`, `updateInventoryForStore(storeId, ...)`, and `createOrderForStore(storeId, ...)`.
    - Route new runtime code through `getShopifyClientForStore(storeId)`.
    - Leave `getShopifyClient()` only as an explicit single-tenant/development compatibility helper, or remove it after call sites are migrated.
+   > Update (2026-07-02, issue #66): done. `getShopifyClient()` and `getConnectedStoreInfo()` are removed; the existing helpers now require a `storeId` parameter (fail closed when missing) and resolve credentials via `getShopifyClientForStore()`. Scheduled/manual sync iterates connected stores explicitly, `lastSyncAt` updates only the synced store, and `ShopifyOrderSyncService` reuses the decrypting store-scoped client (sequence item 7 token handling). Global customer/order record matching inside sync (item 6) and per-store sync status (follow-up issue 8) remain open.
 
 5. Store-scope manual and scheduled sync.
    - Make authenticated sync routes use the user's validated store context.

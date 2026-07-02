@@ -117,9 +117,11 @@ export const createMobileOrder = async (
         }
       }
 
-      // 6. Create order in our database
+      // 6. Create order in our database, stamped with the customer's store
+      // so downstream Shopify sync paths have a trusted tenant context
       const orderData = {
         user: userId,
+        storeId: (user as any).storeId,
         email: user.email,
         lineItems: processedItems.map(item => ({
           productId: item.product._id,
@@ -174,9 +176,15 @@ export const createMobileOrder = async (
       const order = new Order(orderData);
       await order.save({ session });
 
-      // 7. Create order in Shopify (if configured)
+      // 7. Create order in Shopify using the order's own store context.
+      // Fail closed: without a trusted storeId the Shopify order is skipped
+      // (the local order still completes) instead of writing to an
+      // arbitrary first-connected merchant.
       let shopifyOrder;
-      if (tenantConfig.shopify.storeUrl && tenantConfig.shopify.accessToken) {
+      const shopifyStoreId = ((order as any).storeId ?? (user as any)?.storeId)?.toString();
+      if (!shopifyStoreId) {
+        console.warn('Order has no store context - skipping Shopify order creation');
+      } else {
         try {
           shopifyOrder = await createShopifyOrder({
             email: user.email,
@@ -187,7 +195,7 @@ export const createMobileOrder = async (
             billingAddress: cartData.billingAddress,
             shippingAddress: cartData.shippingAddress,
             specialInstructions: cartData.specialInstructions
-          });
+          }, shopifyStoreId);
 
           // Update order with Shopify ID
           order.shopifyOrderId = shopifyOrder.id.toString();
@@ -699,8 +707,10 @@ async function reserveInventoryForOrder(items: ProcessedCartItem[]): Promise<Res
 }
 
 async function commitInventoryReservations(reservations: ReservationInfo[]): Promise<void> {
-  // Collect items for Shopify inventory update
-  const shopifyItems: Array<{ inventoryItemId: string; quantity: number }> = [];
+  // Group Shopify inventory updates by each product's own store so every
+  // adjustment runs against that merchant's credentials - a mixed-store
+  // batch must never fire items at another store's Admin API
+  const shopifyItemsByStore = new Map<string, Array<{ inventoryItemId: string; quantity: number }>>();
 
   // Update local database inventory
   for (const reservation of reservations) {
@@ -711,12 +721,19 @@ async function commitInventoryReservations(reservations: ReservationInfo[]): Pro
         if (variant) {
           variant.inventory.quantity -= reservation.quantity;
 
-          // Collect inventoryItemId for Shopify update
+          // Collect inventoryItemId for Shopify update under the owning store
           if (variant.inventoryItemId) {
-            shopifyItems.push({
-              inventoryItemId: variant.inventoryItemId,
-              quantity: reservation.quantity
-            });
+            const itemStoreId = product.storeId?.toString();
+            if (itemStoreId) {
+              const storeItems = shopifyItemsByStore.get(itemStoreId) || [];
+              storeItems.push({
+                inventoryItemId: variant.inventoryItemId,
+                quantity: reservation.quantity
+              });
+              shopifyItemsByStore.set(itemStoreId, storeItems);
+            } else {
+              console.warn(`Product ${product._id} has no storeId - skipping Shopify inventory update for this item`);
+            }
           }
         }
       }
@@ -736,18 +753,19 @@ async function commitInventoryReservations(reservations: ReservationInfo[]): Pro
     }
   }
 
-  // Update Shopify inventory (async, don't block order completion)
-  if (shopifyItems.length > 0) {
-    reduceShopifyInventoryForOrder(shopifyItems)
+  // Update Shopify inventory per owning store (async, don't block order
+  // completion). Items without a store context were already skipped above.
+  for (const [storeId, storeItems] of shopifyItemsByStore) {
+    reduceShopifyInventoryForOrder(storeItems, storeId)
       .then(result => {
         if (result.errors.length > 0) {
-          console.warn('Shopify inventory sync errors:', result.errors);
+          console.warn(`Shopify inventory sync errors for store ${storeId}:`, result.errors);
         } else {
-          console.log(`✅ Shopify inventory updated for ${shopifyItems.length} items`);
+          console.log(`✅ Shopify inventory updated for ${storeItems.length} items (store ${storeId})`);
         }
       })
       .catch(err => {
-        console.error('Failed to update Shopify inventory:', err);
+        console.error(`Failed to update Shopify inventory for store ${storeId}:`, err);
       });
   }
 }

@@ -32,12 +32,16 @@ let syncStatus: ISyncStatus = {
 /**
  * Perform complete data synchronization (products, customers, orders)
  */
-export const performFullSync = async (): Promise<ISyncStatus> => {
+export const performFullSync = async (storeId: string): Promise<ISyncStatus> => {
+  if (!storeId) {
+    throw new Error('performFullSync requires a storeId');
+  }
+
   if (syncStatus.inProgress) {
     throw new Error('Sync already in progress');
   }
 
-  console.log('🔄 Starting full data synchronization...');
+  console.log(`🔄 Starting full data synchronization for store ${storeId}...`);
   syncStatus.inProgress = true;
   syncStatus.errors = [];
   
@@ -46,19 +50,19 @@ export const performFullSync = async (): Promise<ISyncStatus> => {
   try {
     // Step 1: Sync Products
     console.log('📦 Syncing products...');
-    const productResult = await syncProducts();
+    const productResult = await syncProducts(storeId);
     syncStatus.stats.productsSync = productResult.synced;
     syncStatus.errors.push(...productResult.errors);
 
     // Step 2: Sync Customers
     console.log('👥 Syncing customers...');
-    const customerResult = await syncCustomers();
+    const customerResult = await syncCustomers(storeId);
     syncStatus.stats.customersSync = customerResult.synced;
     syncStatus.errors.push(...customerResult.errors);
 
     // Step 3: Sync Orders (last 90 days)
     console.log('📋 Syncing orders...');
-    const orderResult = await syncOrders(90);
+    const orderResult = await syncOrders(90, storeId);
     syncStatus.stats.ordersSync = orderResult.synced;
     syncStatus.errors.push(...orderResult.errors);
 
@@ -69,8 +73,8 @@ export const performFullSync = async (): Promise<ISyncStatus> => {
     syncStatus.lastFullSync = new Date();
     syncStatus.inProgress = false;
 
-    // Update lastSyncAt for all connected stores
-    await updateStoresLastSyncAt();
+    // Update lastSyncAt for the synced store only
+    await updateStoreLastSyncAt(storeId);
 
     const duration = Math.round((Date.now() - startTime) / 1000);
     console.log(`✅ Full sync completed in ${duration}s`);
@@ -92,12 +96,16 @@ export const performFullSync = async (): Promise<ISyncStatus> => {
 /**
  * Perform incremental sync - only recent changes since last sync
  */
-export const performIncrementalSync = async (): Promise<ISyncStatus> => {
+export const performIncrementalSync = async (storeId: string): Promise<ISyncStatus> => {
+  if (!storeId) {
+    throw new Error('performIncrementalSync requires a storeId');
+  }
+
   if (syncStatus.inProgress) {
     throw new Error('Sync already in progress');
   }
 
-  console.log('🔄 Starting incremental synchronization...');
+  console.log(`🔄 Starting incremental synchronization for store ${storeId}...`);
   syncStatus.inProgress = true;
   
   const startTime = Date.now();
@@ -110,7 +118,7 @@ export const performIncrementalSync = async (): Promise<ISyncStatus> => {
 
     // Sync recent orders only
     console.log(`📋 Syncing orders from last ${daysSinceLastSync} days...`);
-    const orderResult = await syncOrders(daysSinceLastSync);
+    const orderResult = await syncOrders(daysSinceLastSync, storeId);
     incrementalErrors.push(...orderResult.errors);
 
     // For products and customers, we'll do a more targeted sync
@@ -121,8 +129,8 @@ export const performIncrementalSync = async (): Promise<ISyncStatus> => {
     syncStatus.inProgress = false;
     syncStatus.errors = incrementalErrors;
 
-    // Update lastSyncAt for all connected stores
-    await updateStoresLastSyncAt();
+    // Update lastSyncAt for the synced store only
+    await updateStoreLastSyncAt(storeId);
 
     const duration = Math.round((Date.now() - startTime) / 1000);
     console.log(`✅ Incremental sync completed in ${duration}s`);
@@ -493,17 +501,33 @@ export const getSyncStatus = (): ISyncStatus => {
 export const scheduledSync = async (type: 'full' | 'incremental' = 'incremental'): Promise<void> => {
   try {
     console.log(`⏰ Running scheduled ${type} sync...`);
-    
-    if (type === 'full') {
-      await performFullSync();
-    } else {
-      await performIncrementalSync();
+
+    // Iterate connected stores explicitly so each sync runs with that
+    // store's own credentials - never a first-connected-store fallback
+    const stores = await Store.find({ 'shopify.isConnected': true }).select('_id').lean();
+
+    if (stores.length === 0) {
+      console.log('⏰ No connected stores - nothing to sync');
+      return;
     }
-    
-    console.log(`✅ Scheduled ${type} sync completed successfully`);
+
+    for (const store of stores) {
+      const storeId = store._id.toString();
+      try {
+        if (type === 'full') {
+          await performFullSync(storeId);
+        } else {
+          await performIncrementalSync(storeId);
+        }
+        console.log(`✅ Scheduled ${type} sync completed for store ${storeId}`);
+      } catch (error) {
+        console.error(`❌ Scheduled ${type} sync failed for store ${storeId}:`, error);
+        // Continue with the remaining stores
+      }
+    }
   } catch (error) {
     console.error(`❌ Scheduled ${type} sync failed:`, error);
-    
+
     // Could implement retry logic or alerting here
     // For now, just log the error
   }
@@ -526,18 +550,18 @@ export const resetSyncStatus = (): void => {
 };
 
 /**
- * Update lastSyncAt timestamp for all connected stores
+ * Update lastSyncAt timestamp for the store that was actually synced
  * Called after successful sync completion
  */
-const updateStoresLastSyncAt = async (): Promise<void> => {
+const updateStoreLastSyncAt = async (storeId: string): Promise<void> => {
   try {
-    const result = await Store.updateMany(
-      { 'shopify.isConnected': true },
+    await Store.updateOne(
+      { _id: storeId },
       { $set: { 'shopify.lastSyncAt': new Date() } }
     );
-    console.log(`📊 Updated lastSyncAt for ${result.modifiedCount} connected stores`);
+    console.log(`📊 Updated lastSyncAt for store ${storeId}`);
   } catch (error) {
-    console.error('Failed to update stores lastSyncAt:', error);
+    console.error('Failed to update store lastSyncAt:', error);
     // Don't throw - this is non-critical
   }
 };

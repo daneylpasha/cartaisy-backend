@@ -1,7 +1,8 @@
-import axios, { AxiosInstance } from 'axios';
+import { AxiosInstance } from 'axios';
 import Order from '../models/Order';
 import Store from '../models/Store';
 import Product from '../models/Product';
+import { getShopifyClientForStore } from './shopifyService';
 
 /**
  * Shopify Order Sync Service
@@ -11,29 +12,12 @@ import Product from '../models/Product';
  */
 export class ShopifyOrderSyncService {
   /**
-   * Create a Shopify API client for a store
+   * Create a Shopify API client for a store.
+   * Delegates to the shared store-scoped helper so encrypted Admin tokens
+   * are decrypted instead of being sent raw.
    */
   private static async getShopifyClient(storeId: string): Promise<AxiosInstance | null> {
-    try {
-      const store = await Store.findById(storeId).select('+shopify.accessToken');
-
-      if (!store?.shopify?.accessToken || !store.shopify.shop || !store.shopify.isConnected) {
-        console.log('Store not connected to Shopify or missing credentials');
-        return null;
-      }
-
-      return axios.create({
-        baseURL: `https://${store.shopify.shop}/admin/api/2024-01`,
-        headers: {
-          'X-Shopify-Access-Token': store.shopify.accessToken,
-          'Content-Type': 'application/json',
-        },
-        timeout: 30000,
-      });
-    } catch (error) {
-      console.error('Error creating Shopify client:', error);
-      return null;
-    }
+    return getShopifyClientForStore(storeId);
   }
 
   /**

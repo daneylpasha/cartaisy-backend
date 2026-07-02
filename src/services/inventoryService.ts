@@ -194,7 +194,7 @@ export const releaseInventory = async (
 /**
  * Sync inventory levels from Shopify
  */
-export const updateInventoryLevels = async (productId?: string): Promise<void> => {
+export const updateInventoryLevels = async (productId?: string, storeId?: string): Promise<void> => {
   try {
     if (productId) {
       // Update specific product
@@ -203,7 +203,16 @@ export const updateInventoryLevels = async (productId?: string): Promise<void> =
         throw new Error('Product not found or not synced with Shopify');
       }
 
-      const shopifyInventory = await getInventoryLevels(product.shopifyProductId);
+      // The product's own storeId is the trusted store context; fail closed
+      // without it, and enforce ownership when a caller store is supplied
+      if (!product.storeId) {
+        throw new Error('Product has no storeId; run the product tenancy backfill before syncing inventory');
+      }
+      if (storeId && product.storeId.toString() !== storeId) {
+        throw new Error('Product does not belong to the requested store');
+      }
+
+      const shopifyInventory = await getInventoryLevels(product.shopifyProductId, product.storeId.toString());
       
       // Update product inventory
       let totalQuantity = 0;
@@ -232,15 +241,18 @@ export const updateInventoryLevels = async (productId?: string): Promise<void> =
 
       console.log(`📦 Updated inventory for product: ${product.title}`);
     } else {
-      // Update all products with Shopify IDs
-      const products = await Product.find({ 
+      // Update all products with Shopify IDs, scoped to the caller's store
+      // when one is supplied (scheduled jobs iterate every store's products,
+      // each resolved through its own storeId)
+      const products = await Product.find({
         shopifyProductId: { $exists: true },
-        status: 'active'
+        status: 'active',
+        ...(storeId ? { storeId } : {})
       });
 
       for (const product of products) {
         try {
-          await updateInventoryLevels(product._id.toString());
+          await updateInventoryLevels(product._id.toString(), storeId);
         } catch (error) {
           console.error(`Error updating inventory for product ${product._id}:`, error);
         }
@@ -410,9 +422,10 @@ export const handleBackorders = async (productId: string): Promise<BackorderInfo
  * Update Shopify inventory levels
  */
 export const updateShopifyInventory = async (
-  productId: string, 
-  variantId: string, 
-  quantity: number
+  productId: string,
+  variantId: string,
+  quantity: number,
+  expectedStoreId?: string
 ): Promise<void> => {
   try {
     const product = await Product.findById(productId);
@@ -420,8 +433,17 @@ export const updateShopifyInventory = async (
       throw new Error('Product not found or not synced with Shopify');
     }
 
+    // The product's own storeId is the trusted store context; fail closed
+    // without it, and enforce ownership when a caller store is supplied
+    if (!product.storeId) {
+      throw new Error('Product has no storeId; run the product tenancy backfill before updating inventory');
+    }
+    if (expectedStoreId && product.storeId.toString() !== expectedStoreId) {
+      throw new Error('Product does not belong to the requested store');
+    }
+
     // Update Shopify
-    await updateInventory(variantId, quantity);
+    await updateInventory(variantId, quantity, product.storeId.toString());
 
     // Update local database
     const variant = product.variants.find(v => v.id === variantId);
@@ -523,21 +545,21 @@ const estimateRestockDate = async (productId: string): Promise<Date | undefined>
 /**
  * Bulk inventory update for multiple products
  */
-export const bulkUpdateInventory = async (updates: BulkInventoryUpdate[]): Promise<BulkUpdateResult> => {
+export const bulkUpdateInventory = async (updates: BulkInventoryUpdate[], expectedStoreId?: string): Promise<BulkUpdateResult> => {
   const errors: string[] = [];
   let success = 0;
 
   for (const update of updates) {
     try {
       if (update.variantId) {
-        await updateShopifyInventory(update.productId, update.variantId, update.quantity);
+        await updateShopifyInventory(update.productId, update.variantId, update.quantity, expectedStoreId);
       } else {
         // Update all variants proportionally
         const product = await Product.findById(update.productId);
         if (product && product.variants.length > 0) {
           const quantityPerVariant = Math.floor(update.quantity / product.variants.length);
           for (const variant of product.variants) {
-            await updateShopifyInventory(update.productId, variant.id, quantityPerVariant);
+            await updateShopifyInventory(update.productId, variant.id, quantityPerVariant, expectedStoreId);
           }
         }
       }
