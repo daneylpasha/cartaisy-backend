@@ -1,53 +1,36 @@
-import { Request, Response, NextFunction } from 'express';
-import { verifyWebhookSignature as verifySignature, syncProduct } from '../services/shopifyService';
+import { Request, Response } from 'express';
+import { syncProduct } from '../services/shopifyService';
 import { syncProductData, syncCustomerData } from '../services/syncService';
 import Product from '../models/Product';
 import User from '../models/User';
 import Order from '../models/Order';
-import { tenantConfig } from '../config/tenant';
+import { getTrustedWebhookStoreId } from '../middleware/shopifyWebhookAuth';
 
 /**
- * Middleware to verify Shopify webhook signature
+ * Fail closed if the trusted store context is missing. The webhook middleware
+ * chain (HMAC verification + shop-domain Store resolution) must run before
+ * any handler; without it no handler may mutate data.
  */
-export const verifyWebhookMiddleware = (req: Request, res: Response, next: NextFunction): void => {
-  try {
-    const signature = req.get('X-Shopify-Hmac-Sha256');
-    const body = JSON.stringify(req.body);
-    const secret = tenantConfig.shopify.webhookSecret;
-
-    if (!signature) {
-      res.status(401).json({
-        error: 'Missing webhook signature'
-      });
-      return;
-    }
-
-    const isValid = verifySignature(body, signature, secret);
-
-    if (!isValid) {
-      console.warn('⚠️ Invalid webhook signature received');
-      res.status(401).json({
-        error: 'Invalid webhook signature'
-      });
-      return;
-    }
-
-    next();
-  } catch (error) {
-    console.error('Error verifying webhook signature:', error);
-    res.status(500).json({
-      error: 'Webhook verification failed'
-    });
+const requireTrustedStoreId = (req: Request, res: Response): string | null => {
+  const storeId = getTrustedWebhookStoreId(req);
+  if (!storeId) {
+    console.error('❌ Webhook handler invoked without trusted store context; rejecting');
+    res.status(401).json({ error: 'Webhook store context missing' });
+    return null;
   }
+  return storeId;
 };
 
 /**
  * Handle product update webhook from Shopify
  */
 export const handleProductUpdate = async (req: Request, res: Response): Promise<Response | void> => {
+  const storeId = requireTrustedStoreId(req, res);
+  if (!storeId) return;
+
   try {
     const shopifyProduct = req.body;
-    console.log(`📦 Received product update webhook for: ${shopifyProduct.title}`);
+    console.log(`📦 Received product update webhook for: ${shopifyProduct.title} (store: ${storeId})`);
 
     // Find existing product
     const existingProduct = await Product.findOne({ 
@@ -85,9 +68,12 @@ export const handleProductUpdate = async (req: Request, res: Response): Promise<
  * Handle product creation webhook from Shopify
  */
 export const handleProductCreate = async (req: Request, res: Response): Promise<Response | void> => {
+  const storeId = requireTrustedStoreId(req, res);
+  if (!storeId) return;
+
   try {
     const shopifyProduct = req.body;
-    console.log(`🆕 Received product create webhook for: ${shopifyProduct.title}`);
+    console.log(`🆕 Received product create webhook for: ${shopifyProduct.title} (store: ${storeId})`);
 
     // Check if product already exists (shouldn't, but safety check)
     const existingProduct = await Product.findOne({ 
@@ -116,9 +102,12 @@ export const handleProductCreate = async (req: Request, res: Response): Promise<
  * Handle product deletion webhook from Shopify
  */
 export const handleProductDelete = async (req: Request, res: Response): Promise<Response | void> => {
+  const storeId = requireTrustedStoreId(req, res);
+  if (!storeId) return;
+
   try {
     const shopifyProduct = req.body;
-    console.log(`🗑️ Received product delete webhook for: ${shopifyProduct.id}`);
+    console.log(`🗑️ Received product delete webhook for: ${shopifyProduct.id} (store: ${storeId})`);
 
     // Find and update product status instead of deleting (preserve analytics)
     const existingProduct = await Product.findOne({ 
@@ -146,9 +135,12 @@ export const handleProductDelete = async (req: Request, res: Response): Promise<
  * Handle order creation webhook from Shopify
  */
 export const handleOrderCreate = async (req: Request, res: Response): Promise<Response | void> => {
+  const storeId = requireTrustedStoreId(req, res);
+  if (!storeId) return;
+
   try {
     const shopifyOrder = req.body;
-    console.log(`📋 Received order create webhook for: ${shopifyOrder.order_number}`);
+    console.log(`📋 Received order create webhook for: ${shopifyOrder.order_number} (store: ${storeId})`);
 
     // Check if order already exists
     const existingOrder = await Order.findOne({ 
@@ -275,9 +267,12 @@ export const handleOrderCreate = async (req: Request, res: Response): Promise<Re
  * Handle order update webhook from Shopify
  */
 export const handleOrderUpdate = async (req: Request, res: Response): Promise<Response | void> => {
+  const storeId = requireTrustedStoreId(req, res);
+  if (!storeId) return;
+
   try {
     const shopifyOrder = req.body;
-    console.log(`📋 Received order update webhook for: ${shopifyOrder.order_number}`);
+    console.log(`📋 Received order update webhook for: ${shopifyOrder.order_number} (store: ${storeId})`);
 
     // Find existing order
     const existingOrder = await Order.findOne({ 
@@ -326,9 +321,12 @@ export const handleOrderUpdate = async (req: Request, res: Response): Promise<Re
  * Handle order payment webhook from Shopify
  */
 export const handleOrderPaid = async (req: Request, res: Response): Promise<Response | void> => {
+  const storeId = requireTrustedStoreId(req, res);
+  if (!storeId) return;
+
   try {
     const shopifyOrder = req.body;
-    console.log(`💳 Received order paid webhook for: ${shopifyOrder.order_number}`);
+    console.log(`💳 Received order paid webhook for: ${shopifyOrder.order_number} (store: ${storeId})`);
 
     // Find existing order
     const existingOrder = await Order.findOne({ 
@@ -371,9 +369,12 @@ export const handleOrderPaid = async (req: Request, res: Response): Promise<Resp
  * Handle customer creation webhook from Shopify
  */
 export const handleCustomerCreate = async (req: Request, res: Response): Promise<Response | void> => {
+  const storeId = requireTrustedStoreId(req, res);
+  if (!storeId) return;
+
   try {
     const shopifyCustomer = req.body;
-    console.log(`👤 Received customer create webhook for: ${shopifyCustomer.email}`);
+    console.log(`👤 Received customer create webhook for: ${shopifyCustomer.email} (store: ${storeId})`);
 
     // Check if customer already exists
     const existingUser = await User.findOne({ email: shopifyCustomer.email });
@@ -409,9 +410,12 @@ export const handleCustomerCreate = async (req: Request, res: Response): Promise
  * Handle customer update webhook from Shopify
  */
 export const handleCustomerUpdate = async (req: Request, res: Response): Promise<Response | void> => {
+  const storeId = requireTrustedStoreId(req, res);
+  if (!storeId) return;
+
   try {
     const shopifyCustomer = req.body;
-    console.log(`👤 Received customer update webhook for: ${shopifyCustomer.email}`);
+    console.log(`👤 Received customer update webhook for: ${shopifyCustomer.email} (store: ${storeId})`);
 
     // Find existing user
     const existingUser = await User.findOne({ 
@@ -446,9 +450,12 @@ export const handleCustomerUpdate = async (req: Request, res: Response): Promise
  * Handle inventory level update webhook from Shopify
  */
 export const handleInventoryUpdate = async (req: Request, res: Response): Promise<Response | void> => {
+  const storeId = requireTrustedStoreId(req, res);
+  if (!storeId) return;
+
   try {
     const inventoryLevel = req.body;
-    console.log(`📦 Received inventory update webhook for item: ${inventoryLevel.inventory_item_id}`);
+    console.log(`📦 Received inventory update webhook for item: ${inventoryLevel.inventory_item_id} (store: ${storeId})`);
 
     // Find products with this inventory item
     const products = await Product.find({
