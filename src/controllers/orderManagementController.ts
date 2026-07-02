@@ -4,7 +4,16 @@ import Order from '../models/Order';
 import { ShopifyOrderSyncService } from '../services/shopifyOrderSyncService';
 import { OrderExportService } from '../services/orderExportService';
 import { AuthenticatedRequest } from '../types';
-import { getStoreIdFromRequest } from '../middleware/storeAuth';
+
+/**
+ * Validated store context set by the store ownership middleware
+ * (requireOwnedStoreParam / requireOwnedStoreContext). Raw params, query,
+ * body, or headers must never be used for store context here.
+ */
+const getValidatedStoreId = (req: AuthenticatedRequest): string | null => {
+  const storeId = (req as { storeId?: unknown }).storeId;
+  return storeId ? String(storeId) : null;
+};
 
 /**
  * Order Management Controller
@@ -18,13 +27,13 @@ import { getStoreIdFromRequest } from '../middleware/storeAuth';
  */
 export const getOrders = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    // Get storeId from X-Store-ID header, query param, or authenticated user
-    const storeId = getStoreIdFromRequest(req);
+    // Validated store context set by the store ownership middleware
+    const storeId = getValidatedStoreId(req);
 
     if (!storeId) {
       res.status(400).json({
         status: 'error',
-        message: 'Store ID required. Provide X-Store-ID header or storeId query parameter.',
+        message: 'Store ID required.',
       });
       return;
     }
@@ -148,13 +157,13 @@ export const getOrderDetails = async (req: AuthenticatedRequest, res: Response):
   try {
     const { orderId } = req.params as { orderId: string };
 
-    // Get storeId from X-Store-ID header, query param, or authenticated user
-    const storeId = getStoreIdFromRequest(req);
+    // Validated store context set by the store ownership middleware
+    const storeId = getValidatedStoreId(req);
 
     if (!storeId) {
       res.status(400).json({
         status: 'error',
-        message: 'Store ID required. Provide X-Store-ID header or storeId query parameter.',
+        message: 'Store ID required.',
       });
       return;
     }
@@ -204,13 +213,13 @@ export const updateOrderStatus = async (req: AuthenticatedRequest, res: Response
   try {
     const { orderId } = req.params as { orderId: string };
 
-    // Get storeId from X-Store-ID header, query param, or authenticated user
-    const storeId = getStoreIdFromRequest(req);
+    // Validated store context set by the store ownership middleware
+    const storeId = getValidatedStoreId(req);
 
     if (!storeId) {
       res.status(400).json({
         status: 'error',
-        message: 'Store ID required. Provide X-Store-ID header or storeId query parameter.',
+        message: 'Store ID required.',
       });
       return;
     }
@@ -436,7 +445,15 @@ export const updateOrderStatus = async (req: AuthenticatedRequest, res: Response
  */
 export const exportOrders = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const { storeId } = req.params as { storeId?: string };
+    const storeId = getValidatedStoreId(req);
+    if (!storeId) {
+      res.status(400).json({
+        status: 'error',
+        message: 'Store ID required.',
+      });
+      return;
+    }
+
     const { startDate, endDate, status, paymentStatus, fulfillmentStatus } = req.query as {
       startDate?: string;
       endDate?: string;
@@ -445,7 +462,7 @@ export const exportOrders = async (req: AuthenticatedRequest, res: Response): Pr
       fulfillmentStatus?: string;
     };
 
-    const csv = await OrderExportService.exportToCSV(storeId || '', {
+    const csv = await OrderExportService.exportToCSV(storeId, {
       startDate: startDate ? new Date(startDate) : undefined,
       endDate: endDate ? new Date(endDate) : undefined,
       status: status,
@@ -472,6 +489,29 @@ export const exportOrderDetails = async (req: AuthenticatedRequest, res: Respons
   try {
     const { orderId } = req.params as { orderId: string };
 
+    const storeId = getValidatedStoreId(req);
+    if (!storeId) {
+      res.status(400).json({
+        status: 'error',
+        message: 'Store ID required.',
+      });
+      return;
+    }
+
+    // Verify the order belongs to the requesting store before exporting
+    const ownedOrder = await Order.findOne({
+      _id: orderId,
+      storeId: new mongoose.Types.ObjectId(storeId),
+    }).select('_id');
+
+    if (!ownedOrder) {
+      res.status(404).json({
+        status: 'error',
+        message: 'Order not found',
+      });
+      return;
+    }
+
     const orderDetails = await OrderExportService.exportOrderDetails(orderId);
 
     res.status(200).json({
@@ -494,7 +534,19 @@ export const syncToShopify = async (req: AuthenticatedRequest, res: Response): P
   try {
     const { orderId } = req.params as { orderId: string };
 
-    const order = await Order.findById(orderId);
+    const storeId = getValidatedStoreId(req);
+    if (!storeId) {
+      res.status(400).json({
+        status: 'error',
+        message: 'Store ID required.',
+      });
+      return;
+    }
+
+    const order = await Order.findOne({
+      _id: orderId,
+      storeId: new mongoose.Types.ObjectId(storeId),
+    });
     if (!order) {
       res.status(404).json({
         status: 'error',
@@ -543,7 +595,19 @@ export const completeDraftOrder = async (req: AuthenticatedRequest, res: Respons
   try {
     const { orderId } = req.params as { orderId: string };
 
-    const order = await Order.findById(orderId);
+    const storeId = getValidatedStoreId(req);
+    if (!storeId) {
+      res.status(400).json({
+        status: 'error',
+        message: 'Store ID required.',
+      });
+      return;
+    }
+
+    const order = await Order.findOne({
+      _id: orderId,
+      storeId: new mongoose.Types.ObjectId(storeId),
+    });
     if (!order) {
       res.status(404).json({
         status: 'error',
@@ -587,10 +651,18 @@ export const completeDraftOrder = async (req: AuthenticatedRequest, res: Respons
  */
 export const getOrderStats = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const { storeId } = req.params as { storeId?: string };
+    const storeId = getValidatedStoreId(req);
+    if (!storeId) {
+      res.status(400).json({
+        status: 'error',
+        message: 'Store ID required.',
+      });
+      return;
+    }
+
     const { startDate, endDate } = req.query as { startDate?: string; endDate?: string };
 
-    const stats = await OrderExportService.exportOrderStats(storeId || '', {
+    const stats = await OrderExportService.exportOrderStats(storeId, {
       startDate: startDate ? new Date(startDate) : undefined,
       endDate: endDate ? new Date(endDate) : undefined,
     });
@@ -613,6 +685,15 @@ export const getOrderStats = async (req: AuthenticatedRequest, res: Response): P
  */
 export const bulkUpdateOrders = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
+    const storeId = getValidatedStoreId(req);
+    if (!storeId) {
+      res.status(400).json({
+        status: 'error',
+        message: 'Store ID required.',
+      });
+      return;
+    }
+
     const { orderIds, updates } = req.body as {
       orderIds?: string[];
       updates?: { status?: string; paymentStatus?: string; fulfillmentStatus?: string };
@@ -654,7 +735,10 @@ export const bulkUpdateOrders = async (req: AuthenticatedRequest, res: Response)
 
     for (const orderId of orderIds) {
       try {
-        const order = await Order.findById(orderId);
+        const order = await Order.findOne({
+          _id: orderId,
+          storeId: new mongoose.Types.ObjectId(storeId),
+        });
         if (!order) {
           results.failed++;
           results.errors.push(`Order ${orderId} not found`);
@@ -708,13 +792,13 @@ export const addMerchantNote = async (req: AuthenticatedRequest, res: Response):
     const { orderId } = req.params as { orderId: string };
     const { note } = req.body as { note?: string };
 
-    // Get storeId from X-Store-ID header, query param, or authenticated user
-    const storeId = getStoreIdFromRequest(req);
+    // Validated store context set by the store ownership middleware
+    const storeId = getValidatedStoreId(req);
 
     if (!storeId) {
       res.status(400).json({
         status: 'error',
-        message: 'Store ID required. Provide X-Store-ID header or storeId query parameter.',
+        message: 'Store ID required.',
       });
       return;
     }

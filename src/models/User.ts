@@ -425,16 +425,19 @@ UserSchema.virtual('fullName').get(function (this: IUser): string {
   return this.name;
 });
 
+// Guarded: addresses is undefined when the document is loaded with a field
+// selection (e.g. populate('user', 'name email')), and an unguarded access
+// throws during serialization
 UserSchema.virtual('defaultAddress').get(function (this: IUser): IAddress | null {
-  return this.addresses.find(addr => addr.isDefault) || null;
+  return (this.addresses || []).find(addr => addr.isDefault) || null;
 });
 
 UserSchema.virtual('hasShippingAddress').get(function (this: IUser): boolean {
-  return this.addresses.some(addr => addr.type === 'shipping');
+  return (this.addresses || []).some(addr => addr.type === 'shipping');
 });
 
 UserSchema.virtual('hasBillingAddress').get(function (this: IUser): boolean {
-  return this.addresses.some(addr => addr.type === 'billing');
+  return (this.addresses || []).some(addr => addr.type === 'billing');
 });
 
 // =============================================================================

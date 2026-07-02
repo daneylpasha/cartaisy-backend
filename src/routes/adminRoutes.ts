@@ -14,6 +14,9 @@ import {
   getInventoryReservations
 } from '../services/inventoryService';
 // import { auth } from '../middleware/auth'; // Temporarily disabled
+import { RequestHandler } from 'express';
+import { authenticate, authorize } from '../middleware/auth';
+import { requireOwnedStoreContext } from '../middleware/storeOwnership';
 import Product from '../models/Product';
 import Order from '../models/Order';
 import User from '../models/User';
@@ -21,6 +24,21 @@ import Customer from '../models/Customer';
 import Store from '../models/Store';
 
 const router = express.Router();
+
+// Store-ownership chain for admin routes that accept a caller-supplied
+// storeId (params/query/body/header). These must never trust raw store IDs.
+const ownedStoreChain = [
+  authenticate,
+  authorize('admin', 'super_admin'),
+  requireOwnedStoreContext(),
+] as unknown as RequestHandler[];
+
+// Same chain for routes where the store filter is optional for super admins
+const ownedStoreChainOptional = [
+  authenticate,
+  authorize('admin', 'super_admin'),
+  requireOwnedStoreContext({ required: false }),
+] as unknown as RequestHandler[];
 
 // Apply authentication middleware - in production, add admin role check
 // router.use(auth); // Temporarily disabled to fix server startup
@@ -72,9 +90,11 @@ router.get('/dashboard', async (req: Request, res: Response) => {
  * Query params: storeId (optional) - filter by store
  * Headers: X-Store-ID (optional) - alternative way to pass store ID
  */
-router.get('/sync/status', async (req: Request, res: Response) => {
+router.get('/sync/status', ...ownedStoreChainOptional, async (req: Request, res: Response) => {
   try {
-    const storeId = (req.query.storeId as string) || req.headers['x-store-id'] as string;
+    // Validated store context set by the store ownership middleware
+    // (undefined only for super admins requesting the global view)
+    const storeId = (req as any).storeId as string | undefined;
 
     // Get global sync status
     const [syncStatus, integrityCheck] = await Promise.all([
@@ -220,16 +240,10 @@ router.post('/sync/trigger', async (req: Request, res: Response) => {
 /**
  * POST /api/admin/shopify/fetch-location - Fetch and save Shopify location ID for a store
  */
-router.post('/shopify/fetch-location', async (req: Request, res: Response) => {
+router.post('/shopify/fetch-location', ...ownedStoreChain, async (req: Request, res: Response) => {
   try {
-    const { storeId } = req.body;
-
-    if (!storeId) {
-      return res.status(400).json({
-        success: false,
-        error: 'storeId is required'
-      });
-    }
+    // Validated store context set by the store ownership middleware
+    const storeId = (req as any).storeId as string;
 
     const store = await Store.findById(storeId).select('+shopify.accessToken');
 
@@ -280,14 +294,16 @@ router.post('/shopify/fetch-location', async (req: Request, res: Response) => {
  * POST /api/admin/shopify/set-location - Manually set Shopify location ID for a store
  * Use this if you know your Shopify location ID (find it in Shopify Admin > Settings > Locations)
  */
-router.post('/shopify/set-location', async (req: Request, res: Response) => {
+router.post('/shopify/set-location', ...ownedStoreChain, async (req: Request, res: Response) => {
   try {
-    const { storeId, locationId } = req.body;
+    // Validated store context set by the store ownership middleware
+    const storeId = (req as any).storeId as string;
+    const { locationId } = req.body;
 
-    if (!storeId || !locationId) {
+    if (!locationId) {
       return res.status(400).json({
         success: false,
-        error: 'storeId and locationId are required'
+        error: 'locationId is required'
       });
     }
 
