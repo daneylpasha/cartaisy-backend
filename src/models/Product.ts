@@ -122,7 +122,7 @@ const ProductSEOSchema = new Schema({
   title: { type: String, required: true, maxlength: 60 },
   description: { type: String, maxlength: 160 },
   keywords: { type: [String], default: [] },
-  slug: { type: String, required: true, unique: true, lowercase: true }
+  slug: { type: String, required: true, lowercase: true }
 }, { _id: false });
 
 // =============================================================================
@@ -130,13 +130,19 @@ const ProductSEOSchema = new Schema({
 // =============================================================================
 
 const ProductSchema = new Schema<IProduct>({
-  // Shopify Integration
-  shopifyProductId: {
-    type: String,
-    sparse: true,
-    unique: true
+  // Tenant ownership. Optional until the backfill in
+  // docs/PRODUCT_TENANCY_MIGRATION.md has run; all runtime create paths set it.
+  storeId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Store',
+    index: true
   },
-  
+
+  // Shopify Integration (unique per store, see compound indexes below)
+  shopifyProductId: {
+    type: String
+  },
+
   // Core Product Information
   title: { 
     type: String, 
@@ -152,7 +158,6 @@ const ProductSchema = new Schema<IProduct>({
   handle: {
     type: String,
     required: [true, 'Product handle is required'],
-    unique: true,
     lowercase: true,
     trim: true
   },
@@ -253,6 +258,20 @@ ProductSchema.index({ 'seo.slug': 1 });
 ProductSchema.index({ shopifyProductId: 1 });
 ProductSchema.index({ 'variants.inventoryItemId': 1 }, { sparse: true }); // Shopify inventory webhook lookup
 ProductSchema.index({ status: 1 });
+
+// Tenant-scoped uniqueness: the same Shopify product ID, handle, or slug may
+// exist in different stores, but not twice within one store. Legacy documents
+// without storeId group under the null key; their values were globally unique
+// before this change, so they cannot collide (see
+// docs/PRODUCT_TENANCY_MIGRATION.md for the backfill and legacy index drop).
+ProductSchema.index(
+  { storeId: 1, shopifyProductId: 1 },
+  { unique: true, partialFilterExpression: { shopifyProductId: { $exists: true } } }
+);
+ProductSchema.index({ storeId: 1, handle: 1 }, { unique: true });
+ProductSchema.index({ storeId: 1, 'seo.slug': 1 }, { unique: true });
+// Store-scoped inventory webhook lookup
+ProductSchema.index({ storeId: 1, 'variants.inventoryItemId': 1 });
 ProductSchema.index({ 'mobileDisplay.isFeatured': 1, 'mobileDisplay.priority': -1 });
 ProductSchema.index({ tags: 1 });
 ProductSchema.index({ 'analytics.engagementScore': -1 });
