@@ -2,6 +2,8 @@
 
 This audit documents the current store ownership behavior and the recommended policy for future enforcement. It is intentionally documentation-only; no runtime behavior changes are included.
 
+> Update (2026-07-02, issue #67): enforcement extended per the implementation plan below. `requireOwnedStoreContext` (in `src/middleware/storeOwnership.ts`) validates supplied store IDs from params/query/body/`X-Store-ID` against the authenticated user's store, defaults to the user's own store when none is supplied, and implements the super-admin rule from item 4 (skip comparison **and** set `req.storeId` from the requested source). It is wired into all order management routes (`/api/v1/admin/stores/:storeId/orders*` via `requireOwnedStoreParam`, the `/orders*` routes via `requireOwnedStoreContext`) and the storeId-accepting `adminRoutes` endpoints (`/sync/status`, `/shopify/fetch-location`, `/shopify/set-location`, now also authenticated). Order controllers use the validated `req.storeId` only, and `:orderId` lookups are store-scoped. Remaining `adminRoutes` endpoints without store inputs still have auth disabled, and admin analytics remains globally scoped — both are follow-up work.
+
 ## Current Behavior
 
 Global API requests pass through `strictStoreValidation`. That middleware accepts `X-Store-ID`, validates the ObjectId format, and sets `req.storeId` for guest requests. When an Authorization token is present, it tries to compare `decoded.storeId` with `X-Store-ID`, but currently issued JWTs contain `userId` only. For normal tokens, this means the global middleware cannot prove store ownership by token payload.

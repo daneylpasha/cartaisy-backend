@@ -135,9 +135,11 @@ export class OrderExportService {
   /**
    * Export single order details (for printing/PDF)
    */
-  static async exportOrderDetails(orderId: string): Promise<any> {
+  static async exportOrderDetails(orderId: string, storeId: string): Promise<any> {
     try {
-      const order = await Order.findById(orderId)
+      // Store scope is part of the contract so any future related-document
+      // queries in this export cannot cross the tenant boundary
+      const order = await Order.findOne({ _id: orderId, storeId })
         .populate('user', 'name email phone')
         .populate('customer', 'name email phone')
         .populate('lineItems.productId', 'title images sku price')
