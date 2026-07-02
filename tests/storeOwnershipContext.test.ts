@@ -131,6 +131,20 @@ describe('requireOwnedStoreContext', () => {
     expect(req.storeId).toBe(otherStoreId.toString());
   });
 
+  it('rejects a super admin who omits the store ID on a required-store route, even with an own storeId', async () => {
+    // Policy: super admin store context must always come from the request,
+    // never silently from their own record
+    const req = createRequest({}, { role: 'super_admin', storeId: ownedStoreId });
+    const res = createResponse();
+    const next = jest.fn() as NextFunction;
+
+    await requireOwnedStoreContext()(req, res, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({ success: false, error: 'Store ID required' });
+  });
+
   it('leaves req.storeId unset for a super admin global view when required is false', async () => {
     const req = createRequest({}, { role: 'super_admin', storeId: undefined });
     const res = createResponse();
@@ -307,5 +321,24 @@ describe('order management routes enforce store ownership', () => {
     const response = await request(app).get(`/api/v1/admin/stores/${storeAId}/orders`);
 
     expect(response.status).toBe(401);
+  });
+
+  test('/orders/stats resolves the stats route, not the :orderId route', async () => {
+    // Regression: /orders/:orderId used to shadow /orders/stats and /orders/export
+    const response = await request(app)
+      .get('/api/v1/admin/orders/stats')
+      .set('Authorization', `Bearer ${adminAToken}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.status).toBe('success');
+  });
+
+  test('super admin omitting the store on /orders gets an explicit 400', async () => {
+    const response = await request(app)
+      .get('/api/v1/admin/orders')
+      .set('Authorization', `Bearer ${superAdminToken}`);
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({ success: false, error: 'Store ID required' });
   });
 });

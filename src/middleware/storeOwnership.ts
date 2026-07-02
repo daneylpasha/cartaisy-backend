@@ -161,15 +161,13 @@ export const requireOwnedStoreContext = (options: StoreContextOptions = {}) => {
         } else if (!required) {
           req.storeId = undefined;
         } else {
-          const ownStoreId = normalizeObjectId(req.user.storeId);
-          if (!ownStoreId) {
-            res.status(400).json({
-              success: false,
-              error: 'Store ID required',
-            });
-            return;
-          }
-          req.storeId = ownStoreId;
+          // Super admins must always name the target store explicitly;
+          // never silently fall back to their own record
+          res.status(400).json({
+            success: false,
+            error: 'Store ID required',
+          });
+          return;
         }
         next();
         return;

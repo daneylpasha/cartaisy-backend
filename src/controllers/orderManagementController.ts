@@ -512,7 +512,7 @@ export const exportOrderDetails = async (req: AuthenticatedRequest, res: Respons
       return;
     }
 
-    const orderDetails = await OrderExportService.exportOrderDetails(orderId);
+    const orderDetails = await OrderExportService.exportOrderDetails(orderId, storeId);
 
     res.status(200).json({
       status: 'success',

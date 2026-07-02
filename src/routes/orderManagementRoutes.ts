@@ -55,6 +55,33 @@ router.get('/stores/:storeId/orders', ownedStoreParam, orderController.getOrders
  */
 router.get('/orders', ownedStoreContext, orderController.getOrders as unknown as RequestHandler);
 
+// Static /orders/* paths must be registered before the parameterized
+// /orders/:orderId route, or Express would match them as orderId values
+// (e.g. /orders/export -> orderId = 'export')
+
+/**
+ * GET /orders/export (without storeId)
+ * Export all orders to CSV
+ */
+router.get('/orders/export', ownedStoreContext, orderController.exportOrders as unknown as RequestHandler);
+
+/**
+ * GET /orders/stats (without storeId)
+ * Get statistics for all orders
+ */
+router.get('/orders/stats', ownedStoreContext, orderController.getOrderStats as unknown as RequestHandler);
+
+/**
+ * POST /orders/bulk-update
+ * Bulk update multiple orders
+ *
+ * Body:
+ * - orderIds: string[] (required)
+ * - updates: { status?, paymentStatus?, fulfillmentStatus? }
+ */
+router.post('/orders/bulk-update', ownedStoreContext, orderController.bulkUpdateOrders as unknown as RequestHandler);
+
+
 // =============================================================================
 // SINGLE ORDER OPERATIONS
 // =============================================================================
@@ -108,12 +135,6 @@ router.post('/orders/:orderId/notes', ownedStoreContext, orderController.addMerc
 router.get('/stores/:storeId/orders/export', ownedStoreParam, orderController.exportOrders as unknown as RequestHandler);
 
 /**
- * GET /orders/export (without storeId)
- * Export all orders to CSV
- */
-router.get('/orders/export', ownedStoreContext, orderController.exportOrders as unknown as RequestHandler);
-
-/**
  * GET /orders/:orderId/export
  * Export single order details (for printing/invoice)
  */
@@ -149,24 +170,8 @@ router.post('/orders/:orderId/complete-shopify', ownedStoreContext, orderControl
  */
 router.get('/stores/:storeId/orders/stats', ownedStoreParam, orderController.getOrderStats as unknown as RequestHandler);
 
-/**
- * GET /orders/stats (without storeId)
- * Get statistics for all orders
- */
-router.get('/orders/stats', ownedStoreContext, orderController.getOrderStats as unknown as RequestHandler);
-
 // =============================================================================
 // BULK OPERATIONS
 // =============================================================================
-
-/**
- * POST /orders/bulk-update
- * Bulk update multiple orders
- *
- * Body:
- * - orderIds: string[] (required)
- * - updates: { status?, paymentStatus?, fulfillmentStatus? }
- */
-router.post('/orders/bulk-update', ownedStoreContext, orderController.bulkUpdateOrders as unknown as RequestHandler);
 
 export default router;
