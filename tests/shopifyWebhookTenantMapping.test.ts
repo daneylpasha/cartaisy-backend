@@ -61,6 +61,18 @@ describe('Shopify webhook verification and tenant mapping', () => {
     });
   });
 
+  // Keep the suite self-contained: some tests mutate or add Store records
+  // (inactive store, duplicate shop domain), and relying only on the global
+  // tests/setup.ts cleanup would make the next beforeEach hit the unique
+  // slug index if that global hook ever changes.
+  afterEach(async () => {
+    await Promise.all([
+      Store.deleteMany({}),
+      Order.deleteMany({}),
+      User.deleteMany({}),
+    ]);
+  });
+
   const expectNoWebhookWrites = async () => {
     expect(await Order.countDocuments({})).toBe(0);
     expect(await User.countDocuments({ email: 'webhook.tenant@example.com' })).toBe(0);
