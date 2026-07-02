@@ -251,6 +251,7 @@ const ProductSchema = new Schema<IProduct>({
 ProductSchema.index({ handle: 1 });
 ProductSchema.index({ 'seo.slug': 1 });
 ProductSchema.index({ shopifyProductId: 1 });
+ProductSchema.index({ 'variants.inventoryItemId': 1 }, { sparse: true }); // Shopify inventory webhook lookup
 ProductSchema.index({ status: 1 });
 ProductSchema.index({ 'mobileDisplay.isFeatured': 1, 'mobileDisplay.priority': -1 });
 ProductSchema.index({ tags: 1 });
