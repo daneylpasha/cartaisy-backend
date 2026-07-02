@@ -129,6 +129,7 @@ Current behavior:
 Current hotfix candidates before the full tenant refactor:
 
 1. Fix `handleInventoryUpdate` to match `inventoryLevel.inventory_item_id` against `variants.inventoryItemId`, with a regression test proving a Shopify inventory-level webhook updates the intended product variant instead of matching zero products.
+   > Update (2026-07-02, issue #64): done. `handleInventoryUpdate` now queries and matches `variants.inventoryItemId`, logs zero-match webhooks safely without writes, and `tests/inventoryWebhookLookup.test.ts` covers the regression. Store-scoped inventory lookup (`{ storeId, 'variants.inventoryItemId' }`) still depends on Product tenancy and remains follow-up work.
 2. Decide whether `/api/webhooks/health` should remain intentionally public. If it remains public, keep its response minimal and document/rate-limit it as public infrastructure exposure; do not accidentally place it behind Shopify HMAC verification meant only for Shopify POST payloads.
 
 Required target behavior:
