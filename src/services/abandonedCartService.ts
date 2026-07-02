@@ -368,10 +368,12 @@ export async function sendAbandonedCartNotification(
     // Get customer with shopifyCartId to verify cart from Shopify
     const customer = await Customer.findById(cart.customerId).select('deviceTokens shopifyCartId');
 
-    // Verify cart from Shopify before sending notification
-    if (customer?.shopifyCartId && shopifyStorefront.isConfigured()) {
+    // Verify cart from Shopify before sending notification, using the
+    // store's own Storefront credentials (the global client is gated off in
+    // production/SaaS mode and must not decide which shop is queried)
+    if (customer?.shopifyCartId) {
       try {
-        const cartResponse = await shopifyStorefront.getCart(customer.shopifyCartId);
+        const cartResponse = await shopifyStorefront.getCartForStore(storeId, customer.shopifyCartId);
         const shopifyCart = cartResponse?.data?.cart;
         const actualItemCount = shopifyCart?.lines?.edges?.length || 0;
 

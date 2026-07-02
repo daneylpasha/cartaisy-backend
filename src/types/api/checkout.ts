@@ -457,6 +457,33 @@ export interface CartData {
 }
 
 // =============================================================================
+// SHOPIFY-HOSTED CHECKOUT HANDOFF (SaaS checkout v1)
+// =============================================================================
+
+export interface CheckoutHandoffRequest {
+  /** Shopify Storefront cart ID */
+  cartId: string;
+  /** ISO 3166-1 alpha-2 country code for localized checkout (e.g. 'US') */
+  country?: string;
+}
+
+export interface CheckoutHandoffData {
+  /** Shopify-hosted checkout URL for the tenant store's cart */
+  checkoutUrl: string;
+  cartId: string;
+  storeId: string;
+  totalQuantity?: number;
+  total?: number;
+  currency?: string;
+}
+
+export interface CheckoutHandoffResponse {
+  success: boolean;
+  data: CheckoutHandoffData;
+  message?: string;
+}
+
+// =============================================================================
 // TYPE GUARDS
 // =============================================================================
 
