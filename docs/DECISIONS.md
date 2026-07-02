@@ -82,6 +82,14 @@ Known gap: exact original decision dates are not known for most entries. Use "Da
 - Impact: Prefer focused documentation and follow-up implementation issues for tenant ownership, Shopify API scoping, checkout, webhooks, and migrations.
 - Related docs: `docs/SHOPIFY_TENANT_CLIENT_AUDIT.md`, `docs/HOME_MODULE_CONFIG_AUDIT.md`, `docs/STORE_OWNERSHIP_VALIDATION_POLICY.md`.
 
+### Shopify webhooks require verification and tenant mapping before handlers
+
+- Date: 2026-07-02.
+- Decision: Every Shopify webhook must pass raw-body HMAC verification (single app-level `SHOPIFY_WEBHOOK_SECRET`, timing-safe comparison) and resolve its `X-Shopify-Shop-Domain` header to exactly one active connected `Store` before any handler runs. Missing/invalid HMAC returns 401; missing, malformed, unknown, disconnected, inactive, or ambiguous shop domains return 403; handlers fail closed with 401 if the trusted store context is missing.
+- Reason: Unverified or unmapped webhooks allow spoofed or cross-tenant payloads to mutate global data.
+- Impact: Webhook handlers receive a trusted `storeId` via `getTrustedWebhookStoreId()` from `src/middleware/shopifyWebhookAuth.ts`. New webhook routes must be mounted under `/api/webhooks/shopify` so the raw-body parser and verification chain apply. Store-scoped webhook writes remain follow-up work pending Product tenancy.
+- Related docs: `docs/SHOPIFY_ADMIN_WEBHOOK_TENANT_AUDIT.md`, `docs/cartaisy/TENANCY_MODEL.md`. GitHub issue: #63.
+
 ### Keep backend docs linked to shared Cartaisy context
 
 - Date: 2026-07-01.

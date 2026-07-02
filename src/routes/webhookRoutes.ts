@@ -1,7 +1,7 @@
 import express from 'express';
-import { 
-  handleProductCreate, 
-  handleProductUpdate, 
+import {
+  handleProductCreate,
+  handleProductUpdate,
   handleProductDelete,
   handleOrderCreate,
   handleOrderUpdate,
@@ -9,11 +9,16 @@ import {
   handleCustomerCreate,
   handleInventoryUpdate
 } from '../controllers/webhookController';
+import {
+  verifyShopifyWebhook,
+  resolveShopifyWebhookStore,
+} from '../middleware/shopifyWebhookAuth';
 
 const router = express.Router();
 
-// Middleware to verify Shopify webhook signatures - disabled for now
-// router.use(verifyShopifyWebhook);
+// Every Shopify webhook must pass HMAC verification and resolve its shop
+// domain to exactly one trusted Store before any handler can run
+router.use('/shopify', verifyShopifyWebhook, resolveShopifyWebhookStore);
 
 // Product webhooks
 router.post('/shopify/products/create', handleProductCreate);

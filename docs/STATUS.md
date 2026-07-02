@@ -1,6 +1,6 @@
 # Backend Status
 
-Last updated: 2026-07-01.
+Last updated: 2026-07-02.
 
 This file is a human/agent-maintained snapshot, not an automatically guaranteed source of truth. Verify current behavior in code, tests, CI, and deployed environments before making implementation decisions.
 
@@ -27,7 +27,7 @@ Known gap: status categories below are based on repo inspection and existing doc
 | Cart/checkout | Partial | Unified cart, cart, checkout-adjacent code, and guest/customer cart flows exist. Checkout strategy and order completion assumptions remain high risk and must be verified before changes. |
 | Orders/customer account | Partial | Customer auth/account, addresses, wishlists, reviews, orders, order management, and customer management code exists. Tenant ownership and Shopify order sync paths need careful verification. |
 | Dashboard APIs | Partial | Admin, store settings, branding, customer management, order management, email, security, compliance, abandoned cart, notification, and Shopify connection/sync routes exist. Authorization consistency must be verified. |
-| Webhooks/sync | Partial | Webhook routes/controllers and sync services exist. Tenant mapping, signature validation, retry behavior, and store-scoped sync behavior must be verified before production claims. |
+| Webhooks/sync | Partial | Shopify webhook HMAC verification (raw-body, timing-safe) and shop-domain-to-Store tenant mapping are enforced before webhook handlers run (issue #63); handlers fail closed without a trusted `storeId`. Store-scoped webhook writes, Product tenancy, retry behavior, and store-scoped sync behavior still require follow-up work. |
 | Testing/CI | Partial | Jest tests, tenant-scoped Storefront tests, type-check script, build script, and CI workflow exist. Test coverage is not proof that all tenant/security/checkout risks are covered. |
 | Release readiness | Partial | CI/CD workflow files and deployment scripts exist. Deployed infrastructure, secrets, rollback behavior, and first-merchant readiness must be verified with humans before release. |
 

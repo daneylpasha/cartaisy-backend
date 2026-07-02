@@ -34,6 +34,7 @@ import { strictStoreValidation } from './middleware/strictStoreValidation';
 import { queryProtection } from './middleware/queryInjectionProtection';
 import { auditLogger } from './middleware/auditLogger';
 import { loginLimiter } from './middleware/storeLimiter';
+import { shopifyWebhookBodyParser } from './middleware/shopifyWebhookAuth';
 
 const app: Application = express();
 
@@ -97,6 +98,9 @@ app.use(`/api/${apiConfig.version}/`, limiter);
 app.use(morgan('combined'));
 
 // Body parsing (handle JSON data from mobile app)
+// Shopify webhook routes must capture the exact raw body before the global
+// JSON parser runs, because Shopify HMAC verification needs the original bytes
+app.use('/api/webhooks/shopify', shopifyWebhookBodyParser);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 

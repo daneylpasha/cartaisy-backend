@@ -108,7 +108,9 @@ That first-connected-store behavior is explicitly used or inherited by:
 
 ## Webhook verification and tenant mapping
 
-Webhook tenant-mapping status: not implemented.
+Webhook tenant-mapping status: not implemented at audit time.
+
+> Update (2026-07-02, issue #63): the webhook tenant resolver is now implemented in `src/middleware/shopifyWebhookAuth.ts`. Raw-body capture, timing-safe HMAC verification, `X-Shopify-Shop-Domain` normalization, resolution to exactly one active connected `Store`, and fail-closed handler guards are enforced for all `/api/webhooks/shopify/*` routes. Store-scoped webhook writes (target behavior item 7 below) still depend on Product tenancy and remain follow-up work. The remainder of this section describes the state found during the audit.
 
 Current behavior:
 
