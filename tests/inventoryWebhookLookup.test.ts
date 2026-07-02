@@ -62,13 +62,14 @@ describe('Shopify inventory webhook identifier lookup', () => {
   });
 
   beforeEach(async () => {
-    await Store.create({
+    const store = await Store.create({
       name: 'Known Store',
       slug: 'known-store',
       shopify: { shop: KNOWN_SHOP, isConnected: true },
     });
 
     await Product.create({
+      storeId: store._id,
       title: 'Inventory Test Product',
       description: 'Product used for inventory webhook lookup tests',
       handle: 'test-inventory-product',

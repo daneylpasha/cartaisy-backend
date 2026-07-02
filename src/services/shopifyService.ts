@@ -294,11 +294,17 @@ export const getConnectedStoreInfo = async (): Promise<{ shop: string; storeId: 
  * Fetch all products from Shopify and sync with our Product model
  */
 export const syncProducts = async (): Promise<SyncResult> => {
-  // First log which store we're syncing from
+  // Resolve the store once so the Admin client and every persisted product
+  // use the same store context
   const storeInfo = await getConnectedStoreInfo();
   console.log(`📦 [Sync] Connected store info:`, storeInfo);
 
-  const client = await getShopifyClient();
+  if (!storeInfo) {
+    console.log('❌ No connected Shopify store - cannot sync products');
+    return { synced: 0, errors: ['No Shopify store connected'] };
+  }
+
+  const client = await getShopifyClientForStore(storeInfo.storeId);
   const errors: string[] = [];
   let synced = 0;
   const limit = 50;
@@ -330,7 +336,7 @@ export const syncProducts = async (): Promise<SyncResult> => {
 
       for (const shopifyProduct of products) {
         try {
-          await syncProduct(shopifyProduct.id.toString(), shopifyProduct);
+          await syncProduct(shopifyProduct.id.toString(), shopifyProduct, storeInfo.storeId);
           synced++;
         } catch (error) {
           const errorMsg = `Failed to sync product ${shopifyProduct.id}: ${error instanceof Error ? error.message : String(error)}`;
@@ -425,8 +431,14 @@ const fetchInventoryLevels = async (
 /**
  * Sync single product with enhanced mobile features
  */
-export const syncProduct = async (productId: string, shopifyProduct?: IShopifyProduct): Promise<void> => {
-  const client = await getShopifyClient();
+export const syncProduct = async (productId: string, shopifyProduct?: IShopifyProduct, storeId?: string): Promise<void> => {
+  // Product persistence is tenant-scoped; refuse to upsert without a trusted
+  // store context rather than falling back to a global lookup
+  if (!storeId) {
+    throw new Error(`Cannot sync product ${productId} without a storeId`);
+  }
+
+  const client = await getShopifyClientForStore(storeId);
 
   try {
     // Fetch product from Shopify if not provided
@@ -445,10 +457,11 @@ export const syncProduct = async (productId: string, shopifyProduct?: IShopifyPr
       inventoryLevels = await fetchInventoryLevels(client, shopifyProduct.variants);
     }
 
-    // Check if product already exists in our database
-    let existingProduct = await Product.findOne({ shopifyProductId: productId });
+    // Check if product already exists in this store
+    let existingProduct = await Product.findOne({ storeId, shopifyProductId: productId });
 
     const productData: any = {
+      storeId,
       shopifyProductId: productId,
       title: shopifyProduct.title,
       description: shopifyProduct.body_html || '',

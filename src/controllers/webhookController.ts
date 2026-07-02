@@ -32,26 +32,27 @@ export const handleProductUpdate = async (req: Request, res: Response): Promise<
     const shopifyProduct = req.body;
     console.log(`📦 Received product update webhook for: ${shopifyProduct.title} (store: ${storeId})`);
 
-    // Find existing product
-    const existingProduct = await Product.findOne({ 
-      shopifyProductId: shopifyProduct.id.toString() 
+    // Find existing product within the trusted store only
+    const existingProduct = await Product.findOne({
+      storeId,
+      shopifyProductId: shopifyProduct.id.toString()
     });
 
     if (existingProduct) {
       // Merge Shopify data with our enhancements
       const mergedData = await syncProductData(shopifyProduct, existingProduct);
-      
+
       // Handle any data conflicts
       const { resolved } = await handleDataConflicts(existingProduct.toObject(), mergedData, 'product');
-      
+
       // Update the product
       Object.assign(existingProduct, resolved);
       await existingProduct.save();
-      
+
       console.log(`✅ Updated product: ${shopifyProduct.title}`);
     } else {
-      // Create new product
-      await syncProduct(shopifyProduct.id.toString(), shopifyProduct);
+      // Create new product in the trusted store
+      await syncProduct(shopifyProduct.id.toString(), shopifyProduct, storeId);
       console.log(`🆕 Created new product: ${shopifyProduct.title}`);
     }
 
@@ -75,9 +76,10 @@ export const handleProductCreate = async (req: Request, res: Response): Promise<
     const shopifyProduct = req.body;
     console.log(`🆕 Received product create webhook for: ${shopifyProduct.title} (store: ${storeId})`);
 
-    // Check if product already exists (shouldn't, but safety check)
-    const existingProduct = await Product.findOne({ 
-      shopifyProductId: shopifyProduct.id.toString() 
+    // Check if product already exists in this store (shouldn't, but safety check)
+    const existingProduct = await Product.findOne({
+      storeId,
+      shopifyProductId: shopifyProduct.id.toString()
     });
 
     if (existingProduct) {
@@ -85,8 +87,8 @@ export const handleProductCreate = async (req: Request, res: Response): Promise<
       return handleProductUpdate(req, res);
     }
 
-    // Create new product
-    await syncProduct(shopifyProduct.id.toString(), shopifyProduct);
+    // Create new product in the trusted store
+    await syncProduct(shopifyProduct.id.toString(), shopifyProduct, storeId);
     console.log(`✅ Created product: ${shopifyProduct.title}`);
 
     res.status(200).json({ success: true });
@@ -109,9 +111,11 @@ export const handleProductDelete = async (req: Request, res: Response): Promise<
     const shopifyProduct = req.body;
     console.log(`🗑️ Received product delete webhook for: ${shopifyProduct.id} (store: ${storeId})`);
 
-    // Find and update product status instead of deleting (preserve analytics)
-    const existingProduct = await Product.findOne({ 
-      shopifyProductId: shopifyProduct.id.toString() 
+    // Find and update product status instead of deleting (preserve analytics);
+    // scoped to the trusted store only
+    const existingProduct = await Product.findOne({
+      storeId,
+      shopifyProductId: shopifyProduct.id.toString()
     });
 
     if (existingProduct) {
@@ -468,8 +472,10 @@ export const handleInventoryUpdate = async (req: Request, res: Response): Promis
     console.log(`📦 Received inventory update webhook for item: ${inventoryItemId} (store: ${storeId})`);
 
     // Shopify sends inventory_item_id, which maps to variants.inventoryItemId
-    // (variants.id is the Shopify variant ID, a different identifier)
+    // (variants.id is the Shopify variant ID, a different identifier);
+    // scoped to the trusted store only
     const products = await Product.find({
+      storeId,
       'variants.inventoryItemId': inventoryItemId
     });
 

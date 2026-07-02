@@ -175,6 +175,7 @@ Required target behavior:
    - Add `storeId` to Product.
    - Replace global unique Shopify/product handle/slug constraints with store-scoped compound indexes.
    - Backfill or migration-plan existing Product records before enabling multi-store writes.
+   > Update (2026-07-02, issue #65): done. Product has `storeId`, store-scoped compound unique indexes replace the global ones, `syncProduct`/`syncProducts` require and persist `storeId`, product and inventory webhook handlers query by `{ storeId, ... }`, and the backfill/index-drop runbook is `docs/PRODUCT_TENANCY_MIGRATION.md`. Customer/order sync and webhook writes (items 4-7) remain follow-up work.
 
 4. Replace legacy Admin helpers with store-scoped APIs.
    - Add `syncProductsForStore(storeId)`, `syncProductForStore(storeId, ...)`, `syncCustomersForStore(storeId)`, `syncOrdersForStore(storeId)`, `getInventoryLevelsForStore(storeId, ...)`, `updateInventoryForStore(storeId, ...)`, and `createOrderForStore(storeId, ...)`.

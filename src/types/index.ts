@@ -249,6 +249,7 @@ export interface IProductSEO {
 
 export interface IProduct extends Document {
   _id: ObjectId;
+  storeId?: ObjectId;
   shopifyProductId?: string;
   title: string;
   description: string;

@@ -90,6 +90,14 @@ Known gap: exact original decision dates are not known for most entries. Use "Da
 - Impact: Webhook handlers receive a trusted `storeId` via `getTrustedWebhookStoreId()` from `src/middleware/shopifyWebhookAuth.ts`. New webhook routes must be mounted under `/api/webhooks/shopify` so the raw-body parser and verification chain apply. Store-scoped webhook writes remain follow-up work pending Product tenancy.
 - Related docs: `docs/SHOPIFY_ADMIN_WEBHOOK_TENANT_AUDIT.md`, `docs/cartaisy/TENANCY_MODEL.md`. GitHub issue: #63.
 
+### Product uniqueness is tenant-scoped
+
+- Date: 2026-07-02.
+- Decision: `Product` records carry `storeId`, and Shopify identifier uniqueness (`shopifyProductId`, `handle`, `seo.slug`) is enforced per store via compound unique indexes, not globally. Product persistence paths (sync and webhooks) must set/scope by a trusted `storeId`; `syncProduct()` refuses to upsert without one.
+- Reason: Global unique Shopify identifiers block multi-merchant onboarding and can mix or overwrite catalog data across tenants.
+- Impact: New product write paths must include `storeId`. Existing single-store deployments must run the backfill and drop legacy global unique indexes per `docs/PRODUCT_TENANCY_MIGRATION.md` before onboarding a second store. `storeId` stays schema-optional until backfill completes everywhere.
+- Related docs: `docs/PRODUCT_TENANCY_MIGRATION.md`, `docs/SHOPIFY_ADMIN_WEBHOOK_TENANT_AUDIT.md`, `docs/cartaisy/TENANCY_MODEL.md`. GitHub issue: #65.
+
 ### Keep backend docs linked to shared Cartaisy context
 
 - Date: 2026-07-01.
