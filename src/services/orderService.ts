@@ -117,9 +117,11 @@ export const createMobileOrder = async (
         }
       }
 
-      // 6. Create order in our database
+      // 6. Create order in our database, stamped with the customer's store
+      // so downstream Shopify sync paths have a trusted tenant context
       const orderData = {
         user: userId,
+        storeId: (user as any).storeId,
         email: user.email,
         lineItems: processedItems.map(item => ({
           productId: item.product._id,
@@ -174,9 +176,15 @@ export const createMobileOrder = async (
       const order = new Order(orderData);
       await order.save({ session });
 
-      // 7. Create order in Shopify (if configured)
+      // 7. Create order in Shopify using the order's own store context.
+      // Fail closed: without a trusted storeId the Shopify order is skipped
+      // (the local order still completes) instead of writing to an
+      // arbitrary first-connected merchant.
       let shopifyOrder;
-      if (tenantConfig.shopify.storeUrl && tenantConfig.shopify.accessToken) {
+      const shopifyStoreId = ((order as any).storeId ?? (user as any)?.storeId)?.toString();
+      if (!shopifyStoreId) {
+        console.warn('Order has no store context - skipping Shopify order creation');
+      } else {
         try {
           shopifyOrder = await createShopifyOrder({
             email: user.email,
@@ -187,7 +195,7 @@ export const createMobileOrder = async (
             billingAddress: cartData.billingAddress,
             shippingAddress: cartData.shippingAddress,
             specialInstructions: cartData.specialInstructions
-          });
+          }, shopifyStoreId);
 
           // Update order with Shopify ID
           order.shopifyOrderId = shopifyOrder.id.toString();
@@ -699,13 +707,18 @@ async function reserveInventoryForOrder(items: ProcessedCartItem[]): Promise<Res
 }
 
 async function commitInventoryReservations(reservations: ReservationInfo[]): Promise<void> {
-  // Collect items for Shopify inventory update
+  // Collect items for Shopify inventory update, plus the owning store so the
+  // adjustment runs against that merchant's credentials
   const shopifyItems: Array<{ inventoryItemId: string; quantity: number }> = [];
+  let shopifyStoreId: string | undefined;
 
   // Update local database inventory
   for (const reservation of reservations) {
     const product = await Product.findById(reservation.productId);
     if (product) {
+      if (!shopifyStoreId && product.storeId) {
+        shopifyStoreId = product.storeId.toString();
+      }
       if (reservation.variantId) {
         const variant = product.variants.find(v => v.id === reservation.variantId);
         if (variant) {
@@ -736,9 +749,12 @@ async function commitInventoryReservations(reservations: ReservationInfo[]): Pro
     }
   }
 
-  // Update Shopify inventory (async, don't block order completion)
-  if (shopifyItems.length > 0) {
-    reduceShopifyInventoryForOrder(shopifyItems)
+  // Update Shopify inventory (async, don't block order completion).
+  // Fail closed: without a trusted store context, skip the Shopify write.
+  if (shopifyItems.length > 0 && !shopifyStoreId) {
+    console.warn('No store context for order inventory reduction - skipping Shopify update');
+  } else if (shopifyItems.length > 0 && shopifyStoreId) {
+    reduceShopifyInventoryForOrder(shopifyItems, shopifyStoreId)
       .then(result => {
         if (result.errors.length > 0) {
           console.warn('Shopify inventory sync errors:', result.errors);

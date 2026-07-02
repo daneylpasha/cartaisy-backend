@@ -98,6 +98,14 @@ Known gap: exact original decision dates are not known for most entries. Use "Da
 - Impact: New product write paths must include `storeId`. Existing single-store deployments must run the backfill and drop legacy global unique indexes per `docs/PRODUCT_TENANCY_MIGRATION.md` before onboarding a second store. `storeId` stays schema-optional until backfill completes everywhere.
 - Related docs: `docs/PRODUCT_TENANCY_MIGRATION.md`, `docs/SHOPIFY_ADMIN_WEBHOOK_TENANT_AUDIT.md`, `docs/cartaisy/TENANCY_MODEL.md`. GitHub issue: #65.
 
+### No first-connected-store Shopify Admin fallback
+
+- Date: 2026-07-02.
+- Decision: The legacy `getShopifyClient()` helper (first connected store) is removed. Every Shopify Admin API call must resolve credentials through `getShopifyClientForStore(storeId)` with a trusted store context (authenticated user's store, order/product record's store, or explicit per-store job iteration), and helpers fail closed when `storeId` is missing.
+- Reason: First-connected-store credential selection can run sync, inventory, and order operations against the wrong merchant.
+- Impact: New Admin-touching code must accept/derive a trusted `storeId`. Scheduled sync iterates connected stores explicitly and updates only the synced store's `lastSyncAt`. Routes without a store context reject with a controlled error instead of guessing.
+- Related docs: `docs/SHOPIFY_ADMIN_WEBHOOK_TENANT_AUDIT.md`, `docs/cartaisy/SHOPIFY_API_POLICY.md`, `docs/cartaisy/TENANCY_MODEL.md`. GitHub issue: #66.
+
 ### Keep backend docs linked to shared Cartaisy context
 
 - Date: 2026-07-01.
