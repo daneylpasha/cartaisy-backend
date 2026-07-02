@@ -141,52 +141,18 @@ export const getShopifyClientForStore = async (storeId: string): Promise<AxiosIn
   }
 };
 
-/**
- * Get the first connected store's Shopify client (for backward compatibility)
- * This is used by sync functions that don't have a specific storeId
- */
-export const getShopifyClient = async (): Promise<AxiosInstance | null> => {
-  try {
-    // Find first connected store
-    const store = await Store.findOne({ 'shopify.isConnected': true }).select('+shopify.accessToken');
-
-    if (!store?.shopify?.accessToken || !store.shopify.shop) {
-      console.log('No connected Shopify store found');
-      return null;
-    }
-
-    // Try to decrypt the access token, fallback to raw token if not encrypted
-    let accessToken = store.shopify.accessToken;
-    const isEncrypted = accessToken.includes(':') && accessToken.split(':').length === 3;
-
-    if (isEncrypted) {
-      try {
-        accessToken = decrypt(store.shopify.accessToken);
-      } catch (decryptError) {
-        console.warn(`Failed to decrypt token, using raw token`);
-      }
-    }
-
-    return axios.create({
-      baseURL: `https://${store.shopify.shop}/admin/api/2024-01`,
-      headers: {
-        'X-Shopify-Access-Token': accessToken,
-        'Content-Type': 'application/json',
-      },
-      timeout: 30000,
-    });
-  } catch (error) {
-    console.error('Error creating Shopify client:', error);
-    return null;
-  }
-};
+// The legacy first-connected-store getShopifyClient() helper was removed
+// (issue #66): every Admin API call must resolve credentials through
+// getShopifyClientForStore(storeId) with a trusted store context.
 
 /**
  * Test Shopify API connectivity
  */
-export const testShopifyConnection = async (): Promise<boolean> => {
+export const testShopifyConnection = async (storeId: string): Promise<boolean> => {
   try {
-    const client = await getShopifyClient();
+    if (!storeId) return false;
+
+    const client = await getShopifyClientForStore(storeId);
     if (!client) return false;
 
     const response = await client.get('/shop.json');
@@ -201,7 +167,7 @@ export const testShopifyConnection = async (): Promise<boolean> => {
  * Verify which Shopify store is connected and return shop details
  * This helps debug when products don't match
  */
-export const verifyShopifyStoreInfo = async (): Promise<{
+export const verifyShopifyStoreInfo = async (storeId: string): Promise<{
   connected: boolean;
   databaseShop: string | null;
   databaseStoreId: string | null;
@@ -215,7 +181,9 @@ export const verifyShopifyStoreInfo = async (): Promise<{
   productCount: number | null;
 }> => {
   try {
-    const store = await Store.findOne({ 'shopify.isConnected': true }).select('shopify.shop');
+    const store = storeId
+      ? await Store.findById(storeId).select('shopify.shop')
+      : null;
 
     if (!store?.shopify?.shop) {
       return {
@@ -227,7 +195,7 @@ export const verifyShopifyStoreInfo = async (): Promise<{
       };
     }
 
-    const client = await getShopifyClient();
+    const client = await getShopifyClientForStore(storeId);
     if (!client) {
       return {
         connected: false,
@@ -271,40 +239,20 @@ export const verifyShopifyStoreInfo = async (): Promise<{
   }
 };
 
-/**
- * Get connected store info for debugging
- */
-export const getConnectedStoreInfo = async (): Promise<{ shop: string; storeId: string } | null> => {
-  try {
-    const store = await Store.findOne({ 'shopify.isConnected': true }).select('shopify.shop');
-    if (!store?.shopify?.shop) {
-      return null;
-    }
-    return {
-      shop: store.shopify.shop,
-      storeId: store._id.toString()
-    };
-  } catch (error) {
-    console.error('Error getting connected store info:', error);
-    return null;
-  }
-};
+// getConnectedStoreInfo() (first-connected-store lookup) was removed with
+// issue #66; callers must operate on an explicit, trusted storeId.
 
 /**
  * Fetch all products from Shopify and sync with our Product model
  */
-export const syncProducts = async (): Promise<SyncResult> => {
-  // Resolve the store once so the Admin client and every persisted product
-  // use the same store context
-  const storeInfo = await getConnectedStoreInfo();
-  console.log(`📦 [Sync] Connected store info:`, storeInfo);
-
-  if (!storeInfo) {
-    console.log('❌ No connected Shopify store - cannot sync products');
-    return { synced: 0, errors: ['No Shopify store connected'] };
+export const syncProducts = async (storeId: string): Promise<SyncResult> => {
+  // Product sync is tenant-scoped; fail closed without a trusted store context
+  if (!storeId) {
+    console.log('❌ syncProducts called without a storeId - refusing to sync');
+    return { synced: 0, errors: ['Missing storeId for product sync'] };
   }
 
-  const client = await getShopifyClientForStore(storeInfo.storeId);
+  const client = await getShopifyClientForStore(storeId);
   const errors: string[] = [];
   let synced = 0;
   const limit = 50;
@@ -319,7 +267,7 @@ export const syncProducts = async (): Promise<SyncResult> => {
     let url = `/products.json?limit=${limit}`;
     let pageCount = 0;
 
-    console.log(`📦 [Sync] Starting product sync from shop: ${storeInfo?.shop}...`);
+    console.log(`📦 [Sync] Starting product sync for store: ${storeId}...`);
 
     while (url) {
       pageCount++;
@@ -336,7 +284,7 @@ export const syncProducts = async (): Promise<SyncResult> => {
 
       for (const shopifyProduct of products) {
         try {
-          await syncProduct(shopifyProduct.id.toString(), shopifyProduct, storeInfo.storeId);
+          await syncProduct(shopifyProduct.id.toString(), shopifyProduct, storeId);
           synced++;
         } catch (error) {
           const errorMsg = `Failed to sync product ${shopifyProduct.id}: ${error instanceof Error ? error.message : String(error)}`;
@@ -580,8 +528,14 @@ export const syncProduct = async (productId: string, shopifyProduct?: IShopifyPr
 /**
  * Import Shopify customers and merge with our User model
  */
-export const syncCustomers = async (): Promise<SyncResult> => {
-  const client = await getShopifyClient();
+export const syncCustomers = async (storeId: string): Promise<SyncResult> => {
+  // Fail closed without a trusted store context
+  if (!storeId) {
+    console.log('❌ syncCustomers called without a storeId - refusing to sync');
+    return { synced: 0, errors: ['Missing storeId for customer sync'] };
+  }
+
+  const client = await getShopifyClientForStore(storeId);
   const errors: string[] = [];
   let synced = 0;
   const limit = 50;
@@ -686,8 +640,14 @@ export const syncCustomers = async (): Promise<SyncResult> => {
 /**
  * Import recent orders and enhance with our tracking system
  */
-export const syncOrders = async (daysBack: number = 30): Promise<SyncResult> => {
-  const client = await getShopifyClient();
+export const syncOrders = async (daysBack: number = 30, storeId?: string): Promise<SyncResult> => {
+  // Fail closed without a trusted store context
+  if (!storeId) {
+    console.log('❌ syncOrders called without a storeId - refusing to sync');
+    return { synced: 0, errors: ['Missing storeId for order sync'] };
+  }
+
+  const client = await getShopifyClientForStore(storeId);
   const errors: string[] = [];
   let synced = 0;
 
@@ -814,8 +774,12 @@ export const syncOrders = async (daysBack: number = 30): Promise<SyncResult> => 
 /**
  * Get real-time inventory levels for a product
  */
-export const getInventoryLevels = async (productId: string): Promise<InventoryLevelsResponse> => {
-  const client = await getShopifyClient();
+export const getInventoryLevels = async (productId: string, storeId: string): Promise<InventoryLevelsResponse> => {
+  if (!storeId) {
+    throw new Error('Cannot read inventory levels without a storeId');
+  }
+
+  const client = await getShopifyClientForStore(storeId);
 
   if (!client) {
     throw new Error('No Shopify store connected');
@@ -854,9 +818,15 @@ export const getInventoryLevels = async (productId: string): Promise<InventoryLe
 export const adjustInventory = async (
   inventoryItemId: string,
   adjustment: number,
+  storeId: string,
   locationId?: string
 ): Promise<boolean> => {
-  const client = await getShopifyClient();
+  if (!storeId) {
+    console.warn('No storeId - skipping inventory adjustment');
+    return false;
+  }
+
+  const client = await getShopifyClientForStore(storeId);
 
   if (!client) {
     console.warn('No Shopify client - skipping inventory adjustment');
@@ -896,8 +866,13 @@ export const adjustInventory = async (
  * Call this after order is confirmed to sync inventory with Shopify
  */
 export const reduceShopifyInventoryForOrder = async (
-  items: Array<{ inventoryItemId: string; quantity: number }>
+  items: Array<{ inventoryItemId: string; quantity: number }>,
+  storeId: string
 ): Promise<{ success: boolean; errors: string[] }> => {
+  if (!storeId) {
+    return { success: false, errors: ['Missing storeId for inventory reduction'] };
+  }
+
   const errors: string[] = [];
 
   for (const item of items) {
@@ -906,7 +881,7 @@ export const reduceShopifyInventoryForOrder = async (
       continue;
     }
 
-    const success = await adjustInventory(item.inventoryItemId, -item.quantity);
+    const success = await adjustInventory(item.inventoryItemId, -item.quantity, storeId);
     if (!success) {
       errors.push(`Failed to adjust inventory for item ${item.inventoryItemId}`);
     }
@@ -922,8 +897,12 @@ export const reduceShopifyInventoryForOrder = async (
  * Update Shopify inventory for a variant using Inventory Levels API
  * Uses inventory_item_id and location_id for accurate inventory updates
  */
-export const updateInventory = async (inventoryItemId: string, quantity: number, locationId?: string): Promise<void> => {
-  const client = await getShopifyClient();
+export const updateInventory = async (inventoryItemId: string, quantity: number, storeId: string, locationId?: string): Promise<void> => {
+  if (!storeId) {
+    throw new Error('Cannot update inventory without a storeId');
+  }
+
+  const client = await getShopifyClientForStore(storeId);
 
   if (!client) {
     throw new Error('No Shopify store connected');
@@ -964,8 +943,12 @@ export const createOrder = async (orderData: {
   shippingAddress: IAddress;
   billingAddress: IAddress;
   specialInstructions?: string;
-}): Promise<any> => {
-  const client = await getShopifyClient();
+}, storeId: string): Promise<any> => {
+  if (!storeId) {
+    throw new Error('Cannot create Shopify order without a storeId');
+  }
+
+  const client = await getShopifyClientForStore(storeId);
 
   if (!client) {
     throw new Error('No Shopify store connected');
@@ -1018,8 +1001,12 @@ export const createOrder = async (orderData: {
 /**
  * Update order status and sync
  */
-export const updateOrderStatus = async (shopifyOrderId: string, status: string): Promise<void> => {
-  const client = await getShopifyClient();
+export const updateOrderStatus = async (shopifyOrderId: string, status: string, storeId: string): Promise<void> => {
+  if (!storeId) {
+    throw new Error('Cannot update Shopify order status without a storeId');
+  }
+
+  const client = await getShopifyClientForStore(storeId);
 
   if (!client) {
     throw new Error('No Shopify store connected');

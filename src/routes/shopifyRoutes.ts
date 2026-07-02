@@ -26,6 +26,22 @@ const router = express.Router();
 // Apply authentication middleware to all routes
 router.use(authenticate);
 
+/**
+ * Trusted store context for Shopify Admin operations: the authenticated
+ * user's storeId (set by `authenticate` from the User/Customer record).
+ * Callers without a store fail closed.
+ */
+const getRequestStoreId = (req: Request): string | null => {
+  const storeId = (req as any).user?.storeId;
+  return storeId ? storeId.toString() : null;
+};
+
+const missingStoreResponse = (res: Response): Response =>
+  res.status(403).json({
+    success: false,
+    error: 'No store context for this user'
+  });
+
 // ===============================
 // SYNC MANAGEMENT ROUTES
 // ===============================
@@ -54,7 +70,13 @@ router.get('/sync/status', async (req: Request, res: Response) => {
  */
 router.post('/sync/full', async (req: Request, res: Response) => {
   try {
-    const result = await performFullSync();
+    const storeId = getRequestStoreId(req);
+    if (!storeId) {
+      missingStoreResponse(res);
+      return;
+    }
+
+    const result = await performFullSync(storeId);
     res.json({
       success: true,
       message: 'Full synchronization completed',
@@ -74,7 +96,13 @@ router.post('/sync/full', async (req: Request, res: Response) => {
  */
 router.post('/sync/incremental', async (req: Request, res: Response) => {
   try {
-    const result = await performIncrementalSync();
+    const storeId = getRequestStoreId(req);
+    if (!storeId) {
+      missingStoreResponse(res);
+      return;
+    }
+
+    const result = await performIncrementalSync(storeId);
     res.json({
       success: true,
       message: 'Incremental synchronization completed',
@@ -98,8 +126,14 @@ router.post('/sync/incremental', async (req: Request, res: Response) => {
  */
 router.post('/inventory/sync', async (req: Request, res: Response) => {
   try {
+    const storeId = getRequestStoreId(req);
+    if (!storeId) {
+      missingStoreResponse(res);
+      return;
+    }
+
     const { productId } = req.body;
-    await updateInventoryLevels(productId);
+    await updateInventoryLevels(productId, storeId);
     
     res.json({
       success: true,
@@ -167,16 +201,22 @@ router.get('/inventory/history/:productId', async (req: Request, res: Response) 
  */
 router.put('/inventory/bulk-update', async (req: Request, res: Response) => {
   try {
+    const storeId = getRequestStoreId(req);
+    if (!storeId) {
+      missingStoreResponse(res);
+      return;
+    }
+
     const { updates } = req.body;
-    
+
     if (!Array.isArray(updates)) {
       return res.status(400).json({
         success: false,
         error: 'Updates must be an array'
       });
     }
-    
-    const result = await bulkUpdateInventory(updates);
+
+    const result = await bulkUpdateInventory(updates, storeId);
     
     res.json({
       success: true,
@@ -417,23 +457,37 @@ router.get('/products/sync-status', async (req: Request, res: Response) => {
  */
 router.get('/test-connection', async (req: Request, res: Response) => {
   try {
-    const { getShopifyClient } = require('../services/shopifyService');
-    const shopify = getShopifyClient();
-    
+    const storeId = getRequestStoreId(req);
+    if (!storeId) {
+      missingStoreResponse(res);
+      return;
+    }
+
+    const { getShopifyClientForStore } = require('../services/shopifyService');
+    const client = await getShopifyClientForStore(storeId);
+
+    if (!client) {
+      res.status(500).json({
+        success: false,
+        error: 'Failed to connect to Shopify API',
+        details: 'Store is not connected to Shopify'
+      });
+      return;
+    }
+
     // Try to get shop info to test connection
-    const shopInfo = await shopify.get({
-      path: 'shop'
-    });
+    const response = await client.get('/shop.json');
+    const shop = response.data?.shop || {};
 
     res.json({
       success: true,
       message: 'Successfully connected to Shopify',
       data: {
-        shopName: shopInfo.body.shop.name,
-        domain: shopInfo.body.shop.domain,
-        email: shopInfo.body.shop.email,
-        currency: shopInfo.body.shop.currency,
-        timezone: shopInfo.body.shop.timezone
+        shopName: shop.name,
+        domain: shop.domain,
+        email: shop.email,
+        currency: shop.currency,
+        timezone: shop.timezone
       }
     });
   } catch (error) {

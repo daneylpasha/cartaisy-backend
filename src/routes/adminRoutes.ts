@@ -4,11 +4,10 @@ import {
   getBackgroundJobsStatus, 
   runBackgroundJobManually 
 } from '../services/backgroundJobService';
-import { 
-  getSyncStatus, 
-  performFullSync, 
-  performIncrementalSync,
-  validateSyncIntegrity 
+import {
+  getSyncStatus,
+  scheduledSync,
+  validateSyncIntegrity
 } from '../services/syncService';
 import {
   getLowStockProducts,
@@ -195,14 +194,19 @@ router.post('/sync/trigger', async (req: Request, res: Response) => {
       });
     }
 
-    const result = type === 'full' ? 
-      await performFullSync() : 
-      await performIncrementalSync();
+    // This route has no authenticated store context, so run the scheduled
+    // per-store sync: each connected store syncs with its own credentials
+    // (never a first-connected-store fallback)
+    await scheduledSync(type);
 
+    // Per-store failures are logged by scheduledSync and do not abort the
+    // loop, so report the run as triggered rather than uniformly successful;
+    // data reflects the most recent store's sync status (per-store status
+    // tracking is follow-up work)
     res.json({
       success: true,
-      message: `${type} sync completed successfully`,
-      data: result
+      message: `${type} sync triggered for all connected stores`,
+      data: getSyncStatus()
     });
   } catch (error) {
     console.error(`Error triggering ${req.body.type} sync:`, error);
@@ -1016,12 +1020,13 @@ async function performHealthCheck(): Promise<any> {
   }
 
   try {
-    // Shopify connectivity check (basic)
-    const { getShopifyClient } = require('../services/shopifyService');
-    await getShopifyClient(); // Just instantiate, don't make API call
+    // Shopify connectivity check (basic): verify the Store collection is
+    // queryable for connected stores; per-store clients are resolved with
+    // getShopifyClientForStore at call time
+    await Store.findOne({ 'shopify.isConnected': true }).select('_id').lean();
     checks.shopify = true;
   } catch (error) {
-    issues.push('Shopify client initialization failed');
+    issues.push('Shopify store lookup failed');
   }
 
   const healthyChecks = Object.values(checks).filter(Boolean).length;
