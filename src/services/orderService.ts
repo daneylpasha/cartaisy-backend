@@ -707,29 +707,33 @@ async function reserveInventoryForOrder(items: ProcessedCartItem[]): Promise<Res
 }
 
 async function commitInventoryReservations(reservations: ReservationInfo[]): Promise<void> {
-  // Collect items for Shopify inventory update, plus the owning store so the
-  // adjustment runs against that merchant's credentials
-  const shopifyItems: Array<{ inventoryItemId: string; quantity: number }> = [];
-  let shopifyStoreId: string | undefined;
+  // Group Shopify inventory updates by each product's own store so every
+  // adjustment runs against that merchant's credentials - a mixed-store
+  // batch must never fire items at another store's Admin API
+  const shopifyItemsByStore = new Map<string, Array<{ inventoryItemId: string; quantity: number }>>();
 
   // Update local database inventory
   for (const reservation of reservations) {
     const product = await Product.findById(reservation.productId);
     if (product) {
-      if (!shopifyStoreId && product.storeId) {
-        shopifyStoreId = product.storeId.toString();
-      }
       if (reservation.variantId) {
         const variant = product.variants.find(v => v.id === reservation.variantId);
         if (variant) {
           variant.inventory.quantity -= reservation.quantity;
 
-          // Collect inventoryItemId for Shopify update
+          // Collect inventoryItemId for Shopify update under the owning store
           if (variant.inventoryItemId) {
-            shopifyItems.push({
-              inventoryItemId: variant.inventoryItemId,
-              quantity: reservation.quantity
-            });
+            const itemStoreId = product.storeId?.toString();
+            if (itemStoreId) {
+              const storeItems = shopifyItemsByStore.get(itemStoreId) || [];
+              storeItems.push({
+                inventoryItemId: variant.inventoryItemId,
+                quantity: reservation.quantity
+              });
+              shopifyItemsByStore.set(itemStoreId, storeItems);
+            } else {
+              console.warn(`Product ${product._id} has no storeId - skipping Shopify inventory update for this item`);
+            }
           }
         }
       }
@@ -749,21 +753,19 @@ async function commitInventoryReservations(reservations: ReservationInfo[]): Pro
     }
   }
 
-  // Update Shopify inventory (async, don't block order completion).
-  // Fail closed: without a trusted store context, skip the Shopify write.
-  if (shopifyItems.length > 0 && !shopifyStoreId) {
-    console.warn('No store context for order inventory reduction - skipping Shopify update');
-  } else if (shopifyItems.length > 0 && shopifyStoreId) {
-    reduceShopifyInventoryForOrder(shopifyItems, shopifyStoreId)
+  // Update Shopify inventory per owning store (async, don't block order
+  // completion). Items without a store context were already skipped above.
+  for (const [storeId, storeItems] of shopifyItemsByStore) {
+    reduceShopifyInventoryForOrder(storeItems, storeId)
       .then(result => {
         if (result.errors.length > 0) {
-          console.warn('Shopify inventory sync errors:', result.errors);
+          console.warn(`Shopify inventory sync errors for store ${storeId}:`, result.errors);
         } else {
-          console.log(`✅ Shopify inventory updated for ${shopifyItems.length} items`);
+          console.log(`✅ Shopify inventory updated for ${storeItems.length} items (store ${storeId})`);
         }
       })
       .catch(err => {
-        console.error('Failed to update Shopify inventory:', err);
+        console.error(`Failed to update Shopify inventory for store ${storeId}:`, err);
       });
   }
 }

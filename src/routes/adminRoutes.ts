@@ -1020,11 +1020,14 @@ async function performHealthCheck(): Promise<any> {
   }
 
   try {
-    // Shopify connectivity check (basic): verify the Store collection is
-    // queryable for connected stores; per-store clients are resolved with
-    // getShopifyClientForStore at call time
-    await Store.findOne({ 'shopify.isConnected': true }).select('_id').lean();
-    checks.shopify = true;
+    // Shopify connectivity check (basic): at least one connected store must
+    // exist; per-store clients are resolved with getShopifyClientForStore at
+    // call time
+    const connectedStore = await Store.findOne({ 'shopify.isConnected': true }).select('_id').lean();
+    checks.shopify = !!connectedStore;
+    if (!connectedStore) {
+      issues.push('No Shopify store connected');
+    }
   } catch (error) {
     issues.push('Shopify store lookup failed');
   }
