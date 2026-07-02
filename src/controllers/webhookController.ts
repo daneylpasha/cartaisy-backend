@@ -455,16 +455,33 @@ export const handleInventoryUpdate = async (req: Request, res: Response): Promis
 
   try {
     const inventoryLevel = req.body;
-    console.log(`📦 Received inventory update webhook for item: ${inventoryLevel.inventory_item_id} (store: ${storeId})`);
+    const inventoryItemId = inventoryLevel?.inventory_item_id?.toString();
 
-    // Find products with this inventory item
+    // Acknowledge with 200: a payload without inventory_item_id can never
+    // succeed on retry, and non-2xx responses put the webhook into
+    // Shopify's retry pipeline and count toward endpoint removal
+    if (!inventoryItemId) {
+      console.warn(`⚠️ Inventory update webhook missing inventory_item_id; skipping (store: ${storeId})`);
+      return res.status(200).json({ success: true });
+    }
+
+    console.log(`📦 Received inventory update webhook for item: ${inventoryItemId} (store: ${storeId})`);
+
+    // Shopify sends inventory_item_id, which maps to variants.inventoryItemId
+    // (variants.id is the Shopify variant ID, a different identifier)
     const products = await Product.find({
-      'variants.id': inventoryLevel.inventory_item_id.toString()
+      'variants.inventoryItemId': inventoryItemId
     });
+
+    if (products.length === 0) {
+      console.warn(`⚠️ No product variant matches inventory item ${inventoryItemId}; skipping inventory update (store: ${storeId})`);
+      return res.status(200).json({ success: true });
+    }
 
     for (const product of products) {
       // Update the specific variant's inventory
-      const variant = product.variants.find(v => v.id === inventoryLevel.inventory_item_id.toString());
+      const variant = product.variants.find(v => v.inventoryItemId === inventoryItemId);
+      const previousQuantity = variant?.inventory.quantity || 0;
       if (variant) {
         variant.inventory.quantity = inventoryLevel.available || 0;
       }
@@ -476,7 +493,7 @@ export const handleInventoryUpdate = async (req: Request, res: Response): Promis
       // Add to inventory history
       product.inventoryTracking.history.push({
         date: new Date(),
-        change: inventoryLevel.available - (variant?.inventory.quantity || 0),
+        change: (inventoryLevel.available || 0) - previousQuantity,
         newQuantity: inventoryLevel.available || 0,
         reason: 'shopify_sync',
         note: 'Updated from Shopify webhook'
