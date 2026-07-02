@@ -3010,7 +3010,8 @@
 					},
 					"country": {
 						"type": "string",
-						"description": "ISO 3166-1 alpha-2 country code for localized checkout (e.g. 'US')"
+						"description": "ISO 3166-1 alpha-2 country code for localized checkout (e.g. 'US').\nValidated here so an invalid value fails fast as a 4xx instead of\nsurfacing as a misleading Shopify-side cart lookup failure.",
+						"pattern": "^[A-Z]{2}$"
 					}
 				},
 				"required": [

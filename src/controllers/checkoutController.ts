@@ -221,10 +221,20 @@ export class CheckoutController extends Controller {
         },
       };
     } catch (error) {
-      console.error(
-        'Error creating checkout handoff:',
-        error instanceof Error ? error.message : 'Unknown error'
-      );
+      // Expected client errors (4xx) are normal traffic, not server faults -
+      // keep error-level logging for genuine failures only
+      const isClientError = error instanceof ApiError && error.statusCode < 500;
+      if (isClientError) {
+        console.warn(
+          'Checkout handoff rejected:',
+          error instanceof Error ? error.message : 'Unknown error'
+        );
+      } else {
+        console.error(
+          'Error creating checkout handoff:',
+          error instanceof Error ? error.message : 'Unknown error'
+        );
+      }
 
       if (error instanceof ApiError) {
         this.setStatus(error.statusCode);

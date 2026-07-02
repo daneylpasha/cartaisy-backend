@@ -926,7 +926,7 @@ const models: TsoaRoute.Models = {
         "dataType": "refObject",
         "properties": {
             "cartId": {"dataType":"string","required":true},
-            "country": {"dataType":"string"},
+            "country": {"dataType":"string","validators":{"pattern":{"errorMsg":"country must be a 2-letter uppercase ISO 3166-1 alpha-2 code","value":"^[A-Z]{2}$"}}},
         },
         "additionalProperties": false,
     },

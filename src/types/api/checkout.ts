@@ -463,7 +463,12 @@ export interface CartData {
 export interface CheckoutHandoffRequest {
   /** Shopify Storefront cart ID */
   cartId: string;
-  /** ISO 3166-1 alpha-2 country code for localized checkout (e.g. 'US') */
+  /**
+   * ISO 3166-1 alpha-2 country code for localized checkout (e.g. 'US').
+   * Validated here so an invalid value fails fast as a 4xx instead of
+   * surfacing as a misleading Shopify-side cart lookup failure.
+   * @pattern ^[A-Z]{2}$ country must be a 2-letter uppercase ISO 3166-1 alpha-2 code
+   */
   country?: string;
 }
 
