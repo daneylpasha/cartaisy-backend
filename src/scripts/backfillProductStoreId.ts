@@ -98,7 +98,9 @@ async function backfillProductStoreId() {
       console.log('✅ No legacy global unique indexes present');
     } else {
       for (const idx of legacyPresent) {
-        if (dropLegacyIndexes && !dryRun) {
+        if (dropLegacyIndexes && dryRun) {
+          console.log(`💡 Dry run: would drop legacy unique index: ${idx.name}`);
+        } else if (dropLegacyIndexes) {
           await productsCollection.dropIndex(idx.name!);
           console.log(`🗑️ Dropped legacy unique index: ${idx.name}`);
         } else {
