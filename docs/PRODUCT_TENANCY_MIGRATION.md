@@ -86,7 +86,11 @@ the script.
 ## Sample output (recorded 2026-07-03 against a seeded local test database)
 
 Seeded with one store, three legacy products without `storeId`, and the
-pre-tenancy `handle_1` unique index. Dry run (exit 0, nothing written):
+pre-tenancy `handle_1` unique index. Dry run, recorded with
+`--dry-run --drop-legacy-indexes` (exit 0, nothing written). With plain
+`--dry-run` (runbook step 3) the index line reads
+`⚠️ Legacy unique index still present: handle_1 (re-run with --drop-legacy-indexes to drop; ...)`
+instead:
 
 ```
 🔄 Starting Product.storeId backfill (dry run)...
