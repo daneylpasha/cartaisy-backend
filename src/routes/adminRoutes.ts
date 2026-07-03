@@ -26,7 +26,7 @@ const router = express.Router();
 
 // Every admin endpoint requires an authenticated admin/super-admin user.
 // There is no public endpoint on this router; the unauthenticated health
-// check lives at /api/health (see src/app.ts).
+// check lives at /api/health (see src/server.ts).
 router.use(authenticate as unknown as RequestHandler);
 router.use(authorize('admin', 'super_admin') as unknown as RequestHandler);
 
