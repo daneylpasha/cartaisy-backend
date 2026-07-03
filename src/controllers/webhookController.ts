@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { Request, Response } from 'express';
 import { syncProduct } from '../services/shopifyService';
 import { syncProductData, syncCustomerData } from '../services/syncService';
@@ -349,25 +350,29 @@ export const handleCustomerCreate = async (req: Request, res: Response): Promise
     const shopifyCustomer = req.body;
     console.log(`👤 Received customer create webhook for: ${shopifyCustomer.email} (store: ${storeId})`);
 
-    // Check if customer already exists
-    const existingUser = await User.findOne({ email: shopifyCustomer.email });
+    // Check if customer already exists within the trusted store only; the
+    // same email may exist in other stores and must never be cross-linked
+    const existingUser = await User.findOne({ storeId, email: shopifyCustomer.email });
 
     if (existingUser) {
       // Update existing user with Shopify data
       const mergedData = await syncCustomerData(shopifyCustomer, existingUser);
       Object.assign(existingUser, mergedData);
       await existingUser.save();
-      console.log(`✅ Updated existing user: ${shopifyCustomer.email}`);
+      console.log(`✅ Updated existing user: ${shopifyCustomer.email} (store: ${storeId})`);
     } else {
-      // Create new user
+      // Create new user bound to the trusted store, with a random password
+      // (they'll need to reset it), matching the syncCustomers pattern
       const userData = await syncCustomerData(shopifyCustomer);
       const newUser = new User({
         ...userData,
+        storeId,
+        password: crypto.randomBytes(16).toString('hex'),
         role: 'customer',
         isActive: true
       });
       await newUser.save();
-      console.log(`🆕 Created new user: ${shopifyCustomer.email}`);
+      console.log(`🆕 Created new user: ${shopifyCustomer.email} (store: ${storeId})`);
     }
 
     res.status(200).json({ success: true });
@@ -390,8 +395,11 @@ export const handleCustomerUpdate = async (req: Request, res: Response): Promise
     const shopifyCustomer = req.body;
     console.log(`👤 Received customer update webhook for: ${shopifyCustomer.email} (store: ${storeId})`);
 
-    // Find existing user
-    const existingUser = await User.findOne({ 
+    // Find existing user within the trusted store only; the same email or
+    // Shopify customer ID may exist in other stores and must never be
+    // cross-linked
+    const existingUser = await User.findOne({
+      storeId,
       $or: [
         { email: shopifyCustomer.email },
         { shopifyCustomerId: shopifyCustomer.id.toString() }

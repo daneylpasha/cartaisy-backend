@@ -3,6 +3,33 @@
 GitHub issue: #49
 Audit date: 2026-07-01
 
+> Update (2026-07-03, issue #77): customer and order webhook/sync matching is
+> now store-scoped, closing the "order sync matches globally / users matched
+> by global email" follow-up below. `syncCustomers`/`syncOrders` match and
+> create `User`/`Order` records only within their explicit `storeId` (created
+> records now carry `storeId`), and the `customers/create`/`customers/update`
+> webhook handlers match users only within the trusted webhook store. The
+> `orders/*` webhook handlers were store-scoped earlier by issue #76. A
+> `{ storeId, shopifyCustomerId }` lookup index was added on users; the
+> store-scoped unique `{ storeId, email }` users index and the
+> `{ storeId, shopifyOrderId }` / `{ storeId, orderNumber }` orders indexes
+> already existed.
+>
+> **Migration for existing data**: sync/webhook-created records from before
+> this change have no `storeId`, so store-scoped matching will not find them
+> and could create a store-bound duplicate on the next sync/webhook. Before
+> onboarding a second store (single-store deployments can map everything to
+> the one store):
+>
+> 1. Backfill Shopify-imported customer users:
+>    `db.users.updateMany({ storeId: { $exists: false }, role: 'customer', shopifyCustomerId: { $exists: true } }, { $set: { storeId: ObjectId('<storeId>') } })`
+> 2. Backfill Shopify-synced orders:
+>    `db.orders.updateMany({ storeId: { $exists: false }, shopifyOrderId: { $exists: true } }, { $set: { storeId: ObjectId('<storeId>') } })`
+> 3. Verify with `db.users.getIndexes()` that the unique
+>    `{ storeId: 1, email: 1 }` index exists; if legacy data holds duplicate
+>    emails within one store (or among storeless users), the index build
+>    fails in logs and the duplicates must be merged manually first.
+
 ## Scope
 
 This audit covers Shopify Admin API helper functions, sync jobs, inventory/order helper paths, and Shopify webhook tenant mapping. It is documentation-only. It does not change checkout, payment, order model design, dashboard UI, mobile app behavior, webhook topics, or runtime service wiring.

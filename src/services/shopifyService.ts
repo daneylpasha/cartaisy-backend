@@ -558,10 +558,13 @@ export const syncCustomers = async (storeId: string): Promise<SyncResult> => {
 
       for (const shopifyCustomer of customers) {
         try {
-          // Check if customer already exists
-          let existingUser = await User.findOne({ email: shopifyCustomer.email });
+          // Check if customer already exists within the synced store only;
+          // the same email may exist in other stores and must never be
+          // cross-linked
+          let existingUser = await User.findOne({ storeId, email: shopifyCustomer.email });
 
           const customerData = {
+            storeId,
             shopifyCustomerId: shopifyCustomer.id.toString(),
             name: `${shopifyCustomer.first_name || ''} ${shopifyCustomer.last_name || ''}`.trim() || 'Shopify Customer',
             email: shopifyCustomer.email,
@@ -673,20 +676,23 @@ export const syncOrders = async (daysBack: number = 30, storeId?: string): Promi
 
       for (const shopifyOrder of orders) {
         try {
-          // Check if order already exists
-          let existingOrder = await Order.findOne({ shopifyOrderId: shopifyOrder.id.toString() });
+          // Check if order already exists within the synced store only; the
+          // same Shopify order ID may exist in other stores (compound index
+          // { storeId, shopifyOrderId }) and must never collide
+          let existingOrder = await Order.findOne({ storeId, shopifyOrderId: shopifyOrder.id.toString() });
 
           if (!existingOrder) {
-            // Find user by email
-            const user = await User.findOne({ email: shopifyOrder.email });
+            // Find user by email within the synced store only
+            const user = await User.findOne({ storeId, email: shopifyOrder.email });
 
             if (!user) {
-              console.warn(`User not found for order ${shopifyOrder.order_number}, skipping...`);
+              console.warn(`User not found for order ${shopifyOrder.order_number} in store ${storeId}, skipping...`);
               continue;
             }
 
-            // Create new order with enhanced tracking
+            // Create new order with enhanced tracking, bound to the synced store
             const orderData = {
+              storeId,
               shopifyOrderId: shopifyOrder.id.toString(),
               shopifyOrderNumber: shopifyOrder.order_number.toString(),
               orderNumber: shopifyOrder.name || shopifyOrder.order_number.toString(),
