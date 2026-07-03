@@ -197,9 +197,13 @@ describe('store-scoped customer and order webhook/sync matching', () => {
       const updatedB = await User.findById(userB._id);
       expect(untouchedA!.isVerified).toBe(false);
       expect(untouchedA!.phone).toBeUndefined();
+      expect(untouchedA!.shopifyCustomerId).toBeUndefined();
       expect(updatedB!.isVerified).toBe(true);
       expect(updatedB!.phone).toBe('+15550003333');
       expect(updatedB!.name).toBe('Store B Name');
+      // The email-matched user gains the Shopify account linkage so future
+      // ID-based webhook matches find them
+      expect(updatedB!.shopifyCustomerId).toBe('70640550');
     });
 
     // handleCustomerUpdate is exported but customers/update has no route

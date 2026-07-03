@@ -360,6 +360,11 @@ export const handleCustomerCreate = async (req: Request, res: Response): Promise
       // isVerified/phone), so both topics apply identical semantics
       const mergedData = await syncCustomerData(shopifyCustomer, existingUser);
       const { resolved } = await handleDataConflicts(existingUser.toObject(), mergedData, 'customer');
+      // Local-wins would drop the Shopify account linkage for a user
+      // matched by email only; keep it so future ID-based matches find them
+      if (!resolved.shopifyCustomerId && mergedData.shopifyCustomerId) {
+        resolved.shopifyCustomerId = mergedData.shopifyCustomerId;
+      }
       Object.assign(existingUser, resolved);
       await existingUser.save();
       console.log(`✅ Updated existing user: ${shopifyCustomer.email} (store: ${storeId})`);
@@ -414,7 +419,11 @@ export const handleCustomerUpdate = async (req: Request, res: Response): Promise
       // Merge and resolve conflicts
       const mergedData = await syncCustomerData(shopifyCustomer, existingUser);
       const { resolved } = await handleDataConflicts(existingUser.toObject(), mergedData, 'customer');
-      
+      // Local-wins would drop the Shopify account linkage for a user
+      // matched by email only; keep it so future ID-based matches find them
+      if (!resolved.shopifyCustomerId && mergedData.shopifyCustomerId) {
+        resolved.shopifyCustomerId = mergedData.shopifyCustomerId;
+      }
       Object.assign(existingUser, resolved);
       await existingUser.save();
       console.log(`✅ Updated user: ${shopifyCustomer.email}`);
