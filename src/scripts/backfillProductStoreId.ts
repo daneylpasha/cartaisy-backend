@@ -217,7 +217,11 @@ export async function backfillProductStoreId(options: BackfillOptions = {}): Pro
       }
     }
 
-    console.log('\n💡 After dropping legacy indexes, restart the app (or run Product.syncIndexes()) so the store-scoped compound indexes are created.');
+    // Only actionable when index work remains or just happened; a clean
+    // post-migration run should not prompt an unnecessary restart
+    if (legacyPresent.length > 0 || compoundMissing.length > 0) {
+      console.log('\n💡 After dropping legacy indexes, restart the app (or run Product.syncIndexes()) so the store-scoped compound indexes are created.');
+    }
     console.log('🏁 Backfill complete');
 
     return {
@@ -236,16 +240,36 @@ export async function backfillProductStoreId(options: BackfillOptions = {}): Pro
   }
 }
 
+/**
+ * Parse CLI arguments. A `--store-id` flag without a value (missing or
+ * followed by another flag) is an error: silently falling back to
+ * auto-detect would backfill a store the operator never named.
+ */
+export function parseCliArgs(argv: string[]): BackfillOptions {
+  const options: BackfillOptions = {
+    dryRun: argv.includes('--dry-run'),
+    dropLegacyIndexes: argv.includes('--drop-legacy-indexes'),
+  };
+
+  const storeIdFlagIndex = argv.indexOf('--store-id');
+  if (storeIdFlagIndex !== -1) {
+    const value = argv[storeIdFlagIndex + 1];
+    if (!value || value.startsWith('--')) {
+      throw new Error('--store-id requires a value (e.g. --store-id 665f0a...)');
+    }
+    options.storeId = value;
+  }
+
+  return options;
+}
+
 // CLI entry point (kept separate so tests can import the function without
 // running it or having it close their database connection)
 if (require.main === module) {
-  const storeIdFlagIndex = process.argv.indexOf('--store-id');
-  backfillProductStoreId({
-    dryRun: process.argv.includes('--dry-run'),
-    dropLegacyIndexes: process.argv.includes('--drop-legacy-indexes'),
-    storeId: storeIdFlagIndex !== -1 ? process.argv[storeIdFlagIndex + 1] : undefined,
-  }).catch((error) => {
-    console.error('❌ Backfill failed:', error instanceof Error ? error.message : error);
-    process.exitCode = 1;
-  });
+  Promise.resolve()
+    .then(() => backfillProductStoreId(parseCliArgs(process.argv)))
+    .catch((error) => {
+      console.error('❌ Backfill failed:', error instanceof Error ? error.message : error);
+      process.exitCode = 1;
+    });
 }

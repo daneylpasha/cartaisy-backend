@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 import Store from '../src/models/Store';
 import Product from '../src/models/Product';
-import { backfillProductStoreId } from '../src/scripts/backfillProductStoreId';
+import { backfillProductStoreId, parseCliArgs } from '../src/scripts/backfillProductStoreId';
 
 // =============================================================================
 // Product tenancy migration script (issues #65 / #78)
@@ -128,5 +128,34 @@ describe('backfillProductStoreId migration script', () => {
   test('reports the compound store-scoped unique indexes present when the schema built them', async () => {
     const summary = await backfillProductStoreId({ dryRun: true });
     expect(summary.compoundIndexesMissing).toEqual([]);
+  });
+});
+
+describe('parseCliArgs', () => {
+  const base = ['node', 'backfillProductStoreId.ts'];
+
+  test('parses flags and a store id value', () => {
+    expect(parseCliArgs([...base, '--dry-run', '--store-id', 'abc123', '--drop-legacy-indexes'])).toEqual({
+      dryRun: true,
+      dropLegacyIndexes: true,
+      storeId: 'abc123',
+    });
+  });
+
+  test('omits storeId when the flag is absent', () => {
+    expect(parseCliArgs([...base, '--dry-run'])).toEqual({
+      dryRun: true,
+      dropLegacyIndexes: false,
+    });
+  });
+
+  test('rejects --store-id with no value instead of silently auto-detecting', () => {
+    expect(() => parseCliArgs([...base, '--store-id'])).toThrow(/--store-id requires a value/);
+  });
+
+  test('rejects --store-id followed by another flag', () => {
+    expect(() => parseCliArgs([...base, '--store-id', '--dry-run'])).toThrow(
+      /--store-id requires a value/
+    );
   });
 });
