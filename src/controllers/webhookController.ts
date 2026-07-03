@@ -3,8 +3,13 @@ import { syncProduct } from '../services/shopifyService';
 import { syncProductData, syncCustomerData } from '../services/syncService';
 import Product from '../models/Product';
 import User from '../models/User';
-import Order from '../models/Order';
 import { getTrustedWebhookStoreId } from '../middleware/shopifyWebhookAuth';
+import {
+  reconcileShopifyOrder,
+  mapShopifyFinancialStatus,
+  mapShopifyFulfillmentStatus,
+  mapToMobileStatus,
+} from '../services/orderReconciliationService';
 
 /**
  * Fail closed if the trusted store context is missing. The webhook middleware
@@ -136,7 +141,12 @@ export const handleProductDelete = async (req: Request, res: Response): Promise<
 };
 
 /**
- * Handle order creation webhook from Shopify
+ * Handle order creation webhook from Shopify.
+ *
+ * Reconciles the order into a store-scoped local Order (issue #76): matches
+ * the CheckoutHandoff that started the Shopify-hosted checkout where
+ * possible, attributes the order to the store's Customer or a guest
+ * session/contact, and never creates dashboard User records.
  */
 export const handleOrderCreate = async (req: Request, res: Response): Promise<Response | void> => {
   const storeId = requireTrustedStoreId(req, res);
@@ -146,129 +156,49 @@ export const handleOrderCreate = async (req: Request, res: Response): Promise<Re
     const shopifyOrder = req.body;
     console.log(`📋 Received order create webhook for: ${shopifyOrder.order_number} (store: ${storeId})`);
 
-    // Check if order already exists
-    const existingOrder = await Order.findOne({ 
-      shopifyOrderId: shopifyOrder.id.toString() 
-    });
+    const { order, created, attribution } = await reconcileShopifyOrder(storeId, shopifyOrder);
 
-    if (existingOrder) {
-      console.warn(`⚠️ Order ${shopifyOrder.order_number} already exists`);
+    // Unprocessable payloads (no order id / no email) can never succeed on
+    // retry; the service already logged why. Acknowledge with 200 so the
+    // webhook does not enter Shopify's retry pipeline.
+    if (!order) {
       return res.status(200).json({ success: true });
     }
 
-    // Find or create user
-    let user = await User.findOne({ email: shopifyOrder.email });
-    
-    if (!user) {
-      // Create user from order data
-      const userData = {
-        name: `${shopifyOrder.billing_address?.first_name || ''} ${shopifyOrder.billing_address?.last_name || ''}`.trim(),
-        email: shopifyOrder.email,
-        role: 'customer',
-        isActive: true,
-        isVerified: true,
-        shopifyCustomerId: shopifyOrder.customer?.id?.toString(),
-        addresses: shopifyOrder.billing_address ? [{
-          type: 'billing' as const,
-          firstName: shopifyOrder.billing_address.first_name,
-          lastName: shopifyOrder.billing_address.last_name,
-          address1: shopifyOrder.billing_address.address1,
-          address2: shopifyOrder.billing_address.address2,
-          city: shopifyOrder.billing_address.city,
-          province: shopifyOrder.billing_address.province,
-          country: shopifyOrder.billing_address.country,
-          zip: shopifyOrder.billing_address.zip,
-          phone: shopifyOrder.billing_address.phone,
-          isDefault: true
-        }] : []
-      };
-
-      user = new User(userData);
-      await user.save();
-      console.log(`👤 Created user: ${shopifyOrder.email}`);
+    if (!created) {
+      // Duplicate webhook delivery: idempotent no-op
+      console.warn(`⚠️ Order ${shopifyOrder.order_number} already exists (store: ${storeId})`);
+      return res.status(200).json({ success: true });
     }
 
-    // Create enhanced order
-    const orderData = {
-      shopifyOrderId: shopifyOrder.id.toString(),
-      shopifyOrderNumber: shopifyOrder.order_number.toString(),
-      orderNumber: shopifyOrder.name || shopifyOrder.order_number.toString(),
-      user: user._id,
-      email: shopifyOrder.email,
-      
-      lineItems: shopifyOrder.line_items?.map((item: any) => ({
-        productId: item.product_id?.toString(),
-        variantId: item.variant_id?.toString(),
-        quantity: item.quantity,
-        price: parseFloat(item.price),
-        title: item.title,
-        sku: item.sku
-      })) || [],
-      
-      subtotalPrice: parseFloat(shopifyOrder.subtotal_price),
-      totalTax: parseFloat(shopifyOrder.total_tax),
-      totalPrice: parseFloat(shopifyOrder.total_price),
-      currency: shopifyOrder.currency,
-      
-      billingAddress: mapShopifyAddress(shopifyOrder.billing_address),
-      shippingAddress: mapShopifyAddress(shopifyOrder.shipping_address),
-      
-      shipping: {
-        method: shopifyOrder.shipping_lines?.[0]?.title || 'Standard',
-        cost: shopifyOrder.shipping_lines?.[0] ? 
-          parseFloat(shopifyOrder.shipping_lines[0].price) : 0,
-        carrier: shopifyOrder.shipping_lines?.[0]?.carrier_identifier,
-        trackingNumber: shopifyOrder.tracking_number,
-        trackingUrl: shopifyOrder.tracking_url
-      },
-      
-      financialStatus: mapShopifyFinancialStatus(shopifyOrder.financial_status),
-      fulfillmentStatus: mapShopifyFulfillmentStatus(shopifyOrder.fulfillment_status),
-      
-      // Enhanced mobile status
-      mobileStatus: {
-        current: 'confirmed',
-        history: [{
-          status: 'placed',
-          timestamp: new Date(shopifyOrder.created_at),
-          note: 'Order received from Shopify'
-        }]
-      },
-      
-      placedAt: new Date(shopifyOrder.created_at),
-      source: 'web',
-      channel: 'website',
-      
-      // Notification preferences
-      notificationPreferences: {
-        pushEnabled: true,
-        emailEnabled: true,
-        smsEnabled: false
-      }
-    };
+    // Notification failures must not push the webhook into Shopify's retry
+    // pipeline; the order itself is already saved
+    try {
+      await order.sendNotification(
+        'email',
+        'Order Confirmation',
+        `Your order #${shopifyOrder.order_number} has been received and is being processed.`
+      );
+    } catch (notificationError) {
+      console.warn('Failed to send order confirmation notification:', notificationError);
+    }
 
-    const newOrder = new Order(orderData);
-    await newOrder.save();
-
-    // Send order confirmation notification
-    await newOrder.sendNotification(
-      'email',
-      'Order Confirmation',
-      `Your order #${shopifyOrder.order_number} has been received and is being processed.`
-    );
-
-    console.log(`✅ Created order: ${shopifyOrder.order_number}`);
+    console.log(`✅ Created order: ${shopifyOrder.order_number} (store: ${storeId}, attribution: ${attribution})`);
     res.status(200).json({ success: true });
   } catch (error) {
     console.error('Error handling order create webhook:', error);
-    res.status(500).json({ 
-      error: 'Failed to process order create webhook' 
+    res.status(500).json({
+      error: 'Failed to process order create webhook'
     });
   }
 };
 
 /**
- * Handle order update webhook from Shopify
+ * Handle order update webhook from Shopify.
+ *
+ * An order unknown locally (e.g. placed before webhooks were subscribed, or
+ * whose create webhook was missed) is reconciled store-scoped from this
+ * payload instead of being rejected with a 404 that Shopify would retry.
  */
 export const handleOrderUpdate = async (req: Request, res: Response): Promise<Response | void> => {
   const storeId = requireTrustedStoreId(req, res);
@@ -278,21 +208,25 @@ export const handleOrderUpdate = async (req: Request, res: Response): Promise<Re
     const shopifyOrder = req.body;
     console.log(`📋 Received order update webhook for: ${shopifyOrder.order_number} (store: ${storeId})`);
 
-    // Find existing order
-    const existingOrder = await Order.findOne({ 
-      shopifyOrderId: shopifyOrder.id.toString() 
-    });
+    const { order, created } = await reconcileShopifyOrder(storeId, shopifyOrder);
 
-    if (!existingOrder) {
-      console.warn(`⚠️ Order ${shopifyOrder.order_number} not found for update`);
-      return res.status(404).json({ error: 'Order not found' });
+    // Unprocessable payloads can never succeed on retry; already logged
+    if (!order) {
+      return res.status(200).json({ success: true });
+    }
+
+    if (created) {
+      // The order was just built from this payload, so its statuses and
+      // tracking are already current
+      console.log(`🆕 Stored previously unknown order from update webhook: ${shopifyOrder.order_number} (store: ${storeId})`);
+      return res.status(200).json({ success: true });
     }
 
     // Update order status
     const newMobileStatus = mapToMobileStatus(shopifyOrder.fulfillment_status);
-    
-    if (existingOrder.mobileStatus.current !== newMobileStatus) {
-      await existingOrder.updateMobileStatus(
+
+    if (order.mobileStatus.current !== newMobileStatus) {
+      await order.updateMobileStatus(
         newMobileStatus,
         'Status updated from Shopify',
         shopifyOrder.shipping_address?.city
@@ -300,29 +234,33 @@ export const handleOrderUpdate = async (req: Request, res: Response): Promise<Re
     }
 
     // Update financial status
-    existingOrder.financialStatus = mapShopifyFinancialStatus(shopifyOrder.financial_status);
-    existingOrder.fulfillmentStatus = mapShopifyFulfillmentStatus(shopifyOrder.fulfillment_status);
+    order.financialStatus = mapShopifyFinancialStatus(shopifyOrder.financial_status);
+    order.fulfillmentStatus = mapShopifyFulfillmentStatus(shopifyOrder.fulfillment_status);
 
     // Update tracking information
     if (shopifyOrder.tracking_number) {
-      existingOrder.shipping.trackingNumber = shopifyOrder.tracking_number;
-      existingOrder.shipping.trackingUrl = shopifyOrder.tracking_url;
+      order.shipping.trackingNumber = shopifyOrder.tracking_number;
+      order.shipping.trackingUrl = shopifyOrder.tracking_url;
     }
 
-    await existingOrder.save();
-    console.log(`✅ Updated order: ${shopifyOrder.order_number}`);
+    await order.save();
+    console.log(`✅ Updated order: ${shopifyOrder.order_number} (store: ${storeId})`);
 
     res.status(200).json({ success: true });
   } catch (error) {
     console.error('Error handling order update webhook:', error);
-    res.status(500).json({ 
-      error: 'Failed to process order update webhook' 
+    res.status(500).json({
+      error: 'Failed to process order update webhook'
     });
   }
 };
 
 /**
- * Handle order payment webhook from Shopify
+ * Handle order payment webhook from Shopify.
+ *
+ * An order unknown locally is reconciled store-scoped from this payload
+ * first. The paid transition (and its notification) only fires when the
+ * order was not already paid, so duplicate paid webhooks are idempotent.
  */
 export const handleOrderPaid = async (req: Request, res: Response): Promise<Response | void> => {
   const storeId = requireTrustedStoreId(req, res);
@@ -332,39 +270,50 @@ export const handleOrderPaid = async (req: Request, res: Response): Promise<Resp
     const shopifyOrder = req.body;
     console.log(`💳 Received order paid webhook for: ${shopifyOrder.order_number} (store: ${storeId})`);
 
-    // Find existing order
-    const existingOrder = await Order.findOne({ 
-      shopifyOrderId: shopifyOrder.id.toString() 
-    });
+    const { order } = await reconcileShopifyOrder(storeId, shopifyOrder);
 
-    if (!existingOrder) {
-      console.warn(`⚠️ Order ${shopifyOrder.order_number} not found for payment update`);
-      return res.status(404).json({ error: 'Order not found' });
+    // Unprocessable payloads can never succeed on retry; already logged
+    if (!order) {
+      return res.status(200).json({ success: true });
+    }
+
+    if (order.financialStatus === 'paid') {
+      // Duplicate paid webhook, or the order was just created from this
+      // already-paid payload: nothing left to transition
+      console.log(`💳 Order ${shopifyOrder.order_number} already marked paid (store: ${storeId})`);
+      return res.status(200).json({ success: true });
     }
 
     // Update financial status to paid
-    existingOrder.financialStatus = 'paid';
-    
+    order.financialStatus = 'paid';
+
     // Update mobile status to processing
-    await existingOrder.updateMobileStatus(
+    await order.updateMobileStatus(
       'processing',
       'Payment confirmed',
       undefined
     );
 
-    // Send payment confirmation notification
-    await existingOrder.sendNotification(
-      'push',
-      'Payment Confirmed',
-      `Payment for order #${shopifyOrder.order_number} has been confirmed. We're processing your order now!`
-    );
+    await order.save();
 
-    console.log(`✅ Payment confirmed for order: ${shopifyOrder.order_number}`);
+    // Notification failures must not push the webhook into Shopify's retry
+    // pipeline; the paid state is already saved
+    try {
+      await order.sendNotification(
+        'push',
+        'Payment Confirmed',
+        `Payment for order #${shopifyOrder.order_number} has been confirmed. We're processing your order now!`
+      );
+    } catch (notificationError) {
+      console.warn('Failed to send payment confirmation notification:', notificationError);
+    }
+
+    console.log(`✅ Payment confirmed for order: ${shopifyOrder.order_number} (store: ${storeId})`);
     res.status(200).json({ success: true });
   } catch (error) {
     console.error('Error handling order paid webhook:', error);
-    res.status(500).json({ 
-      error: 'Failed to process order paid webhook' 
+    res.status(500).json({
+      error: 'Failed to process order paid webhook'
     });
   }
 };
@@ -520,54 +469,3 @@ export const handleInventoryUpdate = async (req: Request, res: Response): Promis
 
 // Helper functions (imported from shopifyService)
 import { handleDataConflicts } from '../services/syncService';
-
-function mapShopifyAddress(shopifyAddress: any): any {
-  if (!shopifyAddress) return null;
-  
-  return {
-    firstName: shopifyAddress.first_name,
-    lastName: shopifyAddress.last_name,
-    company: shopifyAddress.company,
-    address1: shopifyAddress.address1,
-    address2: shopifyAddress.address2,
-    city: shopifyAddress.city,
-    province: shopifyAddress.province,
-    country: shopifyAddress.country,
-    zip: shopifyAddress.zip,
-    phone: shopifyAddress.phone
-  };
-}
-
-function mapShopifyFinancialStatus(status: string): any {
-  const statusMap: { [key: string]: any } = {
-    'pending': 'pending',
-    'authorized': 'authorized',
-    'partially_paid': 'partially_paid',
-    'paid': 'paid',
-    'partially_refunded': 'partially_refunded',
-    'refunded': 'refunded',
-    'voided': 'voided'
-  };
-  
-  return statusMap[status] || 'pending';
-}
-
-function mapShopifyFulfillmentStatus(status: string): any {
-  const statusMap: { [key: string]: any } = {
-    'fulfilled': 'fulfilled',
-    'partial': 'partial',
-    'restocked': 'restocked'
-  };
-  
-  return statusMap[status] || 'unfulfilled';
-}
-
-function mapToMobileStatus(fulfillmentStatus: string): any {
-  const statusMap: { [key: string]: any } = {
-    'fulfilled': 'delivered',
-    'partial': 'shipped',
-    'restocked': 'returned'
-  };
-  
-  return statusMap[fulfillmentStatus] || 'confirmed';
-}

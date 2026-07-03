@@ -114,6 +114,14 @@ Known gap: exact original decision dates are not known for most entries. Use "Da
 - Impact: Mobile opens the returned `checkoutUrl` instead of the native multi-step flow for SaaS stores. Non-sensitive handoff metadata (`CheckoutHandoff`: storeId, cart ID, customer/guest correlation) is recorded for future order webhook reconciliation. Native Stripe checkout remains available only in dev/single-store mode until a separate tenant-safety issue redesigns it.
 - Related docs: `docs/CHECKOUT_TENANT_SAFETY_AUDIT.md`, `docs/cartaisy/SHOPIFY_API_POLICY.md`. GitHub issue: #68.
 
+### Shopify order webhooks reconcile checkout handoff orders store-scoped
+
+- Date: 2026-07-03.
+- Decision: Verified Shopify order webhooks (`orders/create`, `orders/updated`, `orders/paid`) reconcile orders into local, store-scoped `Order` records using only the trusted webhook store context. Attribution rules, in priority order: (1) a matched `CheckoutHandoff` with a `customerId` belonging to the store links `Order.customer`; (2) a matched handoff with a `guestSessionId` creates a guest order carrying that session; (3) with no handoff match, a store-scoped `Customer` email match links `Order.customer`; (4) otherwise the order is stored store-scoped as a guest order with `guestContact` from the payload. Webhook order writes never create dashboard `User` records. Handoffs are matched by cart/checkout token within the trusted store only and marked `reconciled` with the order reference. `shopifyOrderId` and `orderNumber` are unique per store (compound indexes with `storeId`), never globally - every Shopify store numbers orders from #1001, so cross-store collisions are the norm. Duplicate webhook deliveries are idempotent; unknown orders arriving via `orders/updated`/`orders/paid` are stored store-scoped instead of rejected with 404; unprocessable payloads (no order ID or email) are acknowledged with 200 and logged, because they can never succeed on retry.
+- Reason: Without reconciliation, a shopper can pay in Shopify while Cartaisy never records the order for customer history, merchant dashboard, or support flows. Global order uniqueness and global email matching would leak or corrupt data across tenants.
+- Impact: The order webhook handlers delegate to `src/services/orderReconciliationService.ts`. The legacy global unique indexes `shopifyOrderId_1` and `orderNumber_1` on the orders collection are dropped at startup by `src/utils/dropInvalidIndexes.ts` and replaced by store-scoped compound unique indexes. Refunds/cancellations and customer webhook writes remain follow-up work.
+- Related docs: `docs/CHECKOUT_TENANT_SAFETY_AUDIT.md`, `docs/SHOPIFY_ADMIN_WEBHOOK_TENANT_AUDIT.md`, `docs/cartaisy/TENANCY_MODEL.md`. GitHub issue: #76.
+
 ### Keep backend docs linked to shared Cartaisy context
 
 - Date: 2026-07-01.

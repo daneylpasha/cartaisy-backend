@@ -446,11 +446,10 @@ const HelpRequestSchema = new Schema({
 // =============================================================================
 
 const OrderSchema = new Schema<IOrder>({
-  // Shopify Integration
+  // Shopify Integration (unique per store, see compound index below)
   shopifyOrderId: {
     type: String,
     sparse: true,
-    unique: true,
     index: true,
     trim: true
   },
@@ -466,11 +465,12 @@ const OrderSchema = new Schema<IOrder>({
     trim: true
   },
   
-  // Basic Order Information
+  // Basic Order Information (unique per store, see compound index below:
+  // every Shopify store numbers orders from #1001, so names collide across
+  // stores by design)
   orderNumber: {
     type: String,
     required: [true, 'Order number is required'],
-    unique: true,
     trim: true,
     index: true,
     maxlength: [50, 'Order number cannot exceed 50 characters']
@@ -802,6 +802,19 @@ OrderSchema.index({ 'mobileStatus.current': 1, placedAt: -1 });
 OrderSchema.index({ source: 1, channel: 1, placedAt: -1 });
 OrderSchema.index({ financialStatus: 1, fulfillmentStatus: 1 });
 // OrderSchema.index({ shopifyOrderId: 1 }); // Already has index: true
+
+// Tenant-scoped uniqueness: the same Shopify order ID or order number may
+// exist in different stores (issue #76), mirroring the Product tenancy
+// pattern - every Shopify store numbers orders from #1001, so cross-store
+// collisions are the norm, not the exception. Legacy orders without storeId
+// group under the null key; their values were globally unique before, so
+// they cannot collide. The legacy global unique indexes shopifyOrderId_1 and
+// orderNumber_1 are dropped at startup by src/utils/dropInvalidIndexes.ts.
+OrderSchema.index(
+  { storeId: 1, shopifyOrderId: 1 },
+  { unique: true, partialFilterExpression: { shopifyOrderId: { $exists: true } } }
+);
+OrderSchema.index({ storeId: 1, orderNumber: 1 }, { unique: true });
 
 // Compound indexes for complex queries
 OrderSchema.index({ user: 1, 'mobileStatus.current': 1, placedAt: -1 });
