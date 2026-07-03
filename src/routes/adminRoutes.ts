@@ -13,7 +13,6 @@ import {
   getLowStockProducts,
   getInventoryReservations
 } from '../services/inventoryService';
-// import { auth } from '../middleware/auth'; // Temporarily disabled
 import { RequestHandler } from 'express';
 import { authenticate, authorize } from '../middleware/auth';
 import { requireOwnedStoreContext } from '../middleware/storeOwnership';
@@ -25,23 +24,23 @@ import Store from '../models/Store';
 
 const router = express.Router();
 
-// Store-ownership chain for admin routes that accept a caller-supplied
+// Every admin endpoint requires an authenticated admin/super-admin user.
+// There is no public endpoint on this router; the unauthenticated health
+// check lives at /api/health (see src/app.ts).
+router.use(authenticate as unknown as RequestHandler);
+router.use(authorize('admin', 'super_admin') as unknown as RequestHandler);
+
+// Store-ownership middleware for admin routes that accept a caller-supplied
 // storeId (params/query/body/header). These must never trust raw store IDs.
+// Authentication and role checks already run at router level above.
 const ownedStoreChain = [
-  authenticate,
-  authorize('admin', 'super_admin'),
   requireOwnedStoreContext(),
 ] as unknown as RequestHandler[];
 
-// Same chain for routes where the store filter is optional for super admins
+// Same middleware for routes where the store filter is optional for super admins
 const ownedStoreChainOptional = [
-  authenticate,
-  authorize('admin', 'super_admin'),
   requireOwnedStoreContext({ required: false }),
 ] as unknown as RequestHandler[];
-
-// Apply authentication middleware - in production, add admin role check
-// router.use(auth); // Temporarily disabled to fix server startup
 
 // ===============================
 // SYNC STATUS DASHBOARD

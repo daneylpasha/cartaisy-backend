@@ -1,6 +1,6 @@
 # Backend Status
 
-Last updated: 2026-07-02.
+Last updated: 2026-07-03.
 
 This file is a human/agent-maintained snapshot, not an automatically guaranteed source of truth. Verify current behavior in code, tests, CI, and deployed environments before making implementation decisions.
 
@@ -22,7 +22,7 @@ Known gap: status categories below are based on repo inspection and existing doc
 | --- | --- | --- |
 | SaaS tenancy | Partial | Store is the intended tenant boundary. Many models and routes include `storeId`; Product now has `storeId` with store-scoped unique indexes and a documented backfill (`docs/PRODUCT_TENANCY_MIGRATION.md`, issue #65). Ownership policy docs identify routes and middleware patterns that need verification or follow-up. |
 | Shopify integration | Partial | Tenant-scoped Storefront helper methods and tests exist for several mobile-facing paths. The legacy first-connected-store Admin helper `getShopifyClient()` is removed (issue #66): runtime sync/inventory/order/admin paths resolve credentials via `getShopifyClientForStore(storeId)` and fail closed without a trusted store context. Customer/order sync record matching is still global (audit follow-up issue 6), and per-store sync status tracking remains follow-up work. |
-| Store ownership/security | Partial | Customer auth and store admin middleware derive store context from records. Order management and admin storeId-accepting routes now enforce ownership via `requireOwnedStoreParam`/`requireOwnedStoreContext` with explicit super-admin behavior (issue #67). Remaining `adminRoutes` endpoints still have auth disabled (separate follow-up), and admin analytics queries remain globally scoped. `docs/STORE_OWNERSHIP_VALIDATION_POLICY.md` documents the policy. |
+| Store ownership/security | Partial | Customer auth and store admin middleware derive store context from records. Order management and admin storeId-accepting routes now enforce ownership via `requireOwnedStoreParam`/`requireOwnedStoreContext` with explicit super-admin behavior (issue #67). All `adminRoutes` endpoints now require router-level authentication with admin/super-admin authorization (issue #75); no endpoint on that router is public (the unauthenticated health check remains `/api/health`). Admin analytics/dashboard/help-request queries remain globally scoped rather than store-scoped (follow-up). `docs/STORE_OWNERSHIP_VALIDATION_POLICY.md` documents the policy. |
 | Home modules/config | Partial | Current home module models/controllers and response assembly are documented in `docs/HOME_MODULE_CONFIG_AUDIT.md`. Validation and Shopify ID ownership gaps remain. |
 | Cart/checkout | Partial | Unified cart, cart, and guest/customer cart flows exist. Checkout strategy is decided and implemented as Shopify-hosted checkout handoff (`POST /api/v1/checkout/handoff`, issue #68): tenant-scoped Storefront `checkoutUrl` with fail-closed store context; legacy native Stripe checkout is gated off in production/SaaS mode. Order webhook reconciliation for handoff checkouts and any future native checkout tenant-safety remain follow-up work. |
 | Orders/customer account | Partial | Customer auth/account, addresses, wishlists, reviews, orders, order management, and customer management code exists. Tenant ownership and Shopify order sync paths need careful verification. |
