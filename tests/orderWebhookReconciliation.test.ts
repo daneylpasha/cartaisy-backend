@@ -424,5 +424,67 @@ describe('Shopify order webhook reconciliation', () => {
       expect(response.status).toBe(200);
       expect(await Order.countDocuments({})).toBe(0);
     });
+
+    test('a payload failing schema validation is acknowledged with 200, not 500-looped into retries', async () => {
+      const response = await postWebhook(
+        app,
+        'orders/create',
+        shopifyOrderPayload({ subtotal_price: null, total_tax: null, total_price: null }),
+        SHOP_A
+      );
+
+      expect(response.status).toBe(200);
+      expect(await Order.countDocuments({})).toBe(0);
+    });
+  });
+
+  describe('sparse payloads still reconcile', () => {
+    test('a digital order without a shipping address falls back to billing and is stored', async () => {
+      const response = await postWebhook(
+        app,
+        'orders/create',
+        shopifyOrderPayload({ shipping_address: null }),
+        SHOP_A
+      );
+
+      expect(response.status).toBe(200);
+
+      const order = await Order.findOne({ storeId: storeAId });
+      expect(order).not.toBeNull();
+      expect(order!.shippingAddress?.address1).toBe('1 Test St');
+    });
+
+    test('a guest order without a billing address takes guestContact.fullName from shipping', async () => {
+      const response = await postWebhook(
+        app,
+        'orders/create',
+        shopifyOrderPayload({
+          cart_token: null,
+          checkout_token: null,
+          billing_address: null,
+          customer: null,
+        }),
+        SHOP_A
+      );
+
+      expect(response.status).toBe(200);
+
+      const order = await Order.findOne({ storeId: storeAId });
+      expect(order).not.toBeNull();
+      expect(order!.isGuestOrder).toBe(true);
+      expect(order!.guestContact?.fullName).toBe('Sam Shopper');
+    });
+
+    test('a fully addressless order is acknowledged with 200 and not stored (schema requires a shipping address)', async () => {
+      const response = await postWebhook(
+        app,
+        'orders/create',
+        shopifyOrderPayload({ billing_address: null, shipping_address: null }),
+        SHOP_A
+      );
+
+      expect(response.status).toBe(200);
+      expect(await Order.countDocuments({})).toBe(0);
+    });
   });
 });

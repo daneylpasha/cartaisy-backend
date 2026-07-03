@@ -258,7 +258,10 @@ const buildOrderData = (
     currency: shopifyOrder.currency,
 
     billingAddress: mapShopifyAddress(shopifyOrder.billing_address),
-    shippingAddress: mapShopifyAddress(shopifyOrder.shipping_address),
+    // Digital/no-ship Shopify orders carry no shipping address, but the
+    // schema requires one; fall back to billing so they still reconcile
+    shippingAddress: mapShopifyAddress(shopifyOrder.shipping_address)
+      || mapShopifyAddress(shopifyOrder.billing_address),
 
     shipping: {
       method: shopifyOrder.shipping_lines?.[0]?.title || 'Standard',
@@ -299,13 +302,28 @@ const buildOrderData = (
     if (attribution.guestSessionId) {
       orderData.guestSessionId = attribution.guestSessionId;
     }
+    // Guest orders require a fullName; fall back through every name source
+    // in the payload and finally to the email so a nameless order can still
+    // be stored instead of failing validation into Shopify's retry pipeline
+    const fullName =
+      [
+        shopifyOrder.billing_address?.first_name,
+        shopifyOrder.billing_address?.last_name,
+      ].filter(Boolean).join(' ') ||
+      [
+        shopifyOrder.shipping_address?.first_name,
+        shopifyOrder.shipping_address?.last_name,
+      ].filter(Boolean).join(' ') ||
+      [
+        shopifyOrder.customer?.first_name,
+        shopifyOrder.customer?.last_name,
+      ].filter(Boolean).join(' ') ||
+      email;
+
     orderData.guestContact = {
       email,
       phone: shopifyOrder.billing_address?.phone || shopifyOrder.shipping_address?.phone,
-      fullName: [
-        shopifyOrder.billing_address?.first_name,
-        shopifyOrder.billing_address?.last_name,
-      ].filter(Boolean).join(' ') || undefined,
+      fullName,
     };
   }
 
@@ -369,6 +387,15 @@ export const reconcileShopifyOrder = async (
         // index { storeId, shopifyOrderId }; fall back to the winner's order
         order = await Order.findOne({ storeId, shopifyOrderId });
         if (!order) throw error;
+      } else if (error?.name === 'ValidationError') {
+        // A payload that fails schema validation can never succeed on
+        // retry: log it clearly and let the handler acknowledge with 200
+        // instead of 500-looping in Shopify's retry pipeline
+        console.warn(
+          `⚠️ Shopify order ${shopifyOrderId} failed validation and was not stored (store: ${storeId}):`,
+          error.message
+        );
+        return { order: null, created: false, handoff, attribution };
       } else {
         throw error;
       }
