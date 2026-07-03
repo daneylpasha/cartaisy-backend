@@ -369,7 +369,8 @@ export const handleCustomerCreate = async (req: Request, res: Response): Promise
         storeId,
         password: crypto.randomBytes(16).toString('hex'),
         role: 'customer',
-        isActive: true
+        isActive: true,
+        importedFromShopify: true
       });
       await newUser.save();
       console.log(`🆕 Created new user: ${shopifyCustomer.email} (store: ${storeId})`);

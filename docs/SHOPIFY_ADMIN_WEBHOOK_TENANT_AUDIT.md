@@ -17,9 +17,10 @@ Audit date: 2026-07-01
 >
 > **Migration for existing data**: sync/webhook-created records from before
 > this change have no `storeId`, so store-scoped matching will not find them
-> and could create a store-bound duplicate on the next sync/webhook. Before
-> onboarding a second store (single-store deployments can map everything to
-> the one store):
+> and could create a store-bound duplicate on the next sync/webhook. Run the
+> backfill **as part of deploying this change** - even a single existing
+> store will duplicate its legacy customers/orders on the next sync
+> otherwise (single-store deployments map everything to the one store):
 >
 > 1. Backfill Shopify-imported customer users:
 >    `db.users.updateMany({ storeId: { $exists: false }, role: 'customer', shopifyCustomerId: { $exists: true } }, { $set: { storeId: ObjectId('<storeId>') } })`
