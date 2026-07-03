@@ -61,6 +61,21 @@ Target state: release readiness should be verified across code, configuration, t
 - Include rollback/migration notes for schema, index, or data changes.
 - Do not add or run migrations from docs-only issues.
 
+### Product tenancy migration gates (issue #78) — operator work
+
+Blockers before onboarding a second store, and before any release that
+depends on multi-store product safety. Follow the runbook in
+`docs/PRODUCT_TENANCY_MIGRATION.md` per environment (staging, then
+production) and record the evidence in its "Execution status" table. All
+steps must be executed by the project owner/operator with a database backup
+— never by AI agents against shared environments.
+
+- [ ] Dry run completed (`backfillProductStoreId.ts --dry-run`) and its output reviewed: correct target store, plausible product sample, before-picture "Product counts by store" recorded.
+- [ ] Real backfill completed; `db.products.countDocuments({ storeId: { $exists: false } })` returns `0`.
+- [ ] Product counts by store verified against the dry-run before-picture (script output or the aggregate in the runbook).
+- [ ] Legacy global unique indexes (`shopifyProductId_1`, `handle_1`, `seo.slug_1`) checked and dropped where present (`--drop-legacy-indexes`); `db.products.getIndexes()` shows no single-field unique index on those fields.
+- [ ] Store-scoped compound unique indexes verified present (`{ storeId, shopifyProductId }`, `{ storeId, handle }`, `{ storeId, "seo.slug" }`) — the script prints this verdict on every run.
+
 ## Webhook and sync checks
 
 - Confirm webhook signature validation and event-to-store mapping.
