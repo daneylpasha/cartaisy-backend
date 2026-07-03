@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { Request, Response } from 'express';
 import { syncProduct } from '../services/shopifyService';
 import { syncProductData, syncCustomerData } from '../services/syncService';
@@ -349,25 +350,38 @@ export const handleCustomerCreate = async (req: Request, res: Response): Promise
     const shopifyCustomer = req.body;
     console.log(`👤 Received customer create webhook for: ${shopifyCustomer.email} (store: ${storeId})`);
 
-    // Check if customer already exists
-    const existingUser = await User.findOne({ email: shopifyCustomer.email });
+    // Check if customer already exists within the trusted store only; the
+    // same email may exist in other stores and must never be cross-linked
+    const existingUser = await User.findOne({ storeId, email: shopifyCustomer.email });
 
     if (existingUser) {
-      // Update existing user with Shopify data
+      // Update existing user with Shopify data through the same
+      // conflict-resolution rules as customers/update (local wins except
+      // isVerified/phone), so both topics apply identical semantics
       const mergedData = await syncCustomerData(shopifyCustomer, existingUser);
-      Object.assign(existingUser, mergedData);
+      const { resolved } = await handleDataConflicts(existingUser.toObject(), mergedData, 'customer');
+      // Local-wins would drop the Shopify account linkage for a user
+      // matched by email only; keep it so future ID-based matches find them
+      if (!resolved.shopifyCustomerId && mergedData.shopifyCustomerId) {
+        resolved.shopifyCustomerId = mergedData.shopifyCustomerId;
+      }
+      Object.assign(existingUser, resolved);
       await existingUser.save();
-      console.log(`✅ Updated existing user: ${shopifyCustomer.email}`);
+      console.log(`✅ Updated existing user: ${shopifyCustomer.email} (store: ${storeId})`);
     } else {
-      // Create new user
+      // Create new user bound to the trusted store, with a random password
+      // (they'll need to reset it), matching the syncCustomers pattern
       const userData = await syncCustomerData(shopifyCustomer);
       const newUser = new User({
         ...userData,
+        storeId,
+        password: crypto.randomBytes(16).toString('hex'),
         role: 'customer',
-        isActive: true
+        isActive: true,
+        importedFromShopify: true
       });
       await newUser.save();
-      console.log(`🆕 Created new user: ${shopifyCustomer.email}`);
+      console.log(`🆕 Created new user: ${shopifyCustomer.email} (store: ${storeId})`);
     }
 
     res.status(200).json({ success: true });
@@ -390,8 +404,11 @@ export const handleCustomerUpdate = async (req: Request, res: Response): Promise
     const shopifyCustomer = req.body;
     console.log(`👤 Received customer update webhook for: ${shopifyCustomer.email} (store: ${storeId})`);
 
-    // Find existing user
-    const existingUser = await User.findOne({ 
+    // Find existing user within the trusted store only; the same email or
+    // Shopify customer ID may exist in other stores and must never be
+    // cross-linked
+    const existingUser = await User.findOne({
+      storeId,
       $or: [
         { email: shopifyCustomer.email },
         { shopifyCustomerId: shopifyCustomer.id.toString() }
@@ -402,7 +419,11 @@ export const handleCustomerUpdate = async (req: Request, res: Response): Promise
       // Merge and resolve conflicts
       const mergedData = await syncCustomerData(shopifyCustomer, existingUser);
       const { resolved } = await handleDataConflicts(existingUser.toObject(), mergedData, 'customer');
-      
+      // Local-wins would drop the Shopify account linkage for a user
+      // matched by email only; keep it so future ID-based matches find them
+      if (!resolved.shopifyCustomerId && mergedData.shopifyCustomerId) {
+        resolved.shopifyCustomerId = mergedData.shopifyCustomerId;
+      }
       Object.assign(existingUser, resolved);
       await existingUser.save();
       console.log(`✅ Updated user: ${shopifyCustomer.email}`);

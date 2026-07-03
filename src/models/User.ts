@@ -416,6 +416,13 @@ UserSchema.index({ isActive: 1, role: 1 });
 UserSchema.index({ email: 1, isVerified: 1 });
 UserSchema.index({ storeId: 1, email: 1 }, { unique: true }); // Unique email per store
 UserSchema.index({ storeId: 1, role: 1 });
+// Store-scoped customer webhook/sync matching (issue #77). Partial: most
+// users have no Shopify account, and the matching queries always supply a
+// concrete shopifyCustomerId, so they remain eligible for this index.
+UserSchema.index(
+  { storeId: 1, shopifyCustomerId: 1 },
+  { partialFilterExpression: { shopifyCustomerId: { $exists: true } } }
+);
 
 // =============================================================================
 // VIRTUALS
