@@ -153,7 +153,6 @@ interface Attribution {
 
 const resolveAttribution = async (
   storeId: string,
-  shopifyOrder: any,
   handoff: ICheckoutHandoff | null,
   email: string | null
 ): Promise<Attribution> => {
@@ -370,7 +369,7 @@ export const reconcileShopifyOrder = async (
     }
 
     const [resolved, lineItems] = await Promise.all([
-      resolveAttribution(storeId, shopifyOrder, handoff, email),
+      resolveAttribution(storeId, handoff, email),
       resolveLineItems(storeId, shopifyOrder),
     ]);
     attribution = resolved.type;

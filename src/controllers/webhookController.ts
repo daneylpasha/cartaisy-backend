@@ -222,15 +222,26 @@ export const handleOrderUpdate = async (req: Request, res: Response): Promise<Re
       return res.status(200).json({ success: true });
     }
 
-    // Update order status
+    // Update order status. updateMobileStatus persists the document before
+    // sending its own push notification, so a failure after the save is a
+    // notification failure and must not push the webhook into Shopify's
+    // retry pipeline.
     const newMobileStatus = mapToMobileStatus(shopifyOrder.fulfillment_status);
 
     if (order.mobileStatus.current !== newMobileStatus) {
-      await order.updateMobileStatus(
-        newMobileStatus,
-        'Status updated from Shopify',
-        shopifyOrder.shipping_address?.city
-      );
+      try {
+        await order.updateMobileStatus(
+          newMobileStatus,
+          'Status updated from Shopify',
+          shopifyOrder.shipping_address?.city
+        );
+      } catch (statusError) {
+        if (order.isModified()) {
+          // The status change did not persist; let Shopify retry
+          throw statusError;
+        }
+        console.warn('Failed to send order status notification:', statusError);
+      }
     }
 
     // Update financial status
@@ -287,14 +298,23 @@ export const handleOrderPaid = async (req: Request, res: Response): Promise<Resp
     // Update financial status to paid
     order.financialStatus = 'paid';
 
-    // Update mobile status to processing
-    await order.updateMobileStatus(
-      'processing',
-      'Payment confirmed',
-      undefined
-    );
-
-    await order.save();
+    // Update mobile status to processing. updateMobileStatus persists the
+    // document (including financialStatus) before sending its own push
+    // notification, so a failure after the save is a notification failure
+    // and must not push the webhook into Shopify's retry pipeline.
+    try {
+      await order.updateMobileStatus(
+        'processing',
+        'Payment confirmed',
+        undefined
+      );
+    } catch (statusError) {
+      if (order.isModified()) {
+        // The status change did not persist; let Shopify retry
+        throw statusError;
+      }
+      console.warn('Failed to send order status notification:', statusError);
+    }
 
     // Notification failures must not push the webhook into Shopify's retry
     // pipeline; the paid state is already saved
