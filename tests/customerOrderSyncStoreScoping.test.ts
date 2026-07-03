@@ -178,23 +178,28 @@ describe('store-scoped customer and order webhook/sync matching', () => {
     });
 
     test("customers/create for store B updates store B's user, not store A's same-email user", async () => {
-      const userA = await createStoreUser(storeAId, { name: 'Store A Name' });
-      const userB = await createStoreUser(storeBId, { name: 'Store B Name' });
+      const userA = await createStoreUser(storeAId, { name: 'Store A Name', isVerified: false });
+      const userB = await createStoreUser(storeBId, { name: 'Store B Name', isVerified: false });
 
       const response = await postWebhook(
         app,
         'customers/create',
-        shopifyCustomerPayload({ first_name: 'Updated', last_name: 'ByWebhook' }),
+        shopifyCustomerPayload({ verified_email: true, phone: '+15550003333' }),
         SHOP_B
       );
 
       expect(response.status).toBe(200);
       expect(await User.countDocuments({ email: SHARED_EMAIL })).toBe(2);
 
+      // Same conflict-resolution semantics as customers/update: local wins
+      // except isVerified/phone - and only store B's user is touched
       const untouchedA = await User.findById(userA._id);
       const updatedB = await User.findById(userB._id);
-      expect(untouchedA!.name).toBe('Store A Name');
-      expect(updatedB!.name).toBe('Updated ByWebhook');
+      expect(untouchedA!.isVerified).toBe(false);
+      expect(untouchedA!.phone).toBeUndefined();
+      expect(updatedB!.isVerified).toBe(true);
+      expect(updatedB!.phone).toBe('+15550003333');
+      expect(updatedB!.name).toBe('Store B Name');
     });
 
     // handleCustomerUpdate is exported but customers/update has no route

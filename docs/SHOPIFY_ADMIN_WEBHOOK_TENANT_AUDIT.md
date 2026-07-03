@@ -20,7 +20,16 @@ Audit date: 2026-07-01
 > and could create a store-bound duplicate on the next sync/webhook. Run the
 > backfill **as part of deploying this change** - even a single existing
 > store will duplicate its legacy customers/orders on the next sync
-> otherwise (single-store deployments map everything to the one store):
+> otherwise.
+>
+> The commands below assume a **single-store deployment**, where every
+> legacy storeless record belongs to the one store. If more than one store
+> already holds legacy storeless records, do NOT run them as written -
+> stamping one storeId across all tenants' records would misattribute them
+> and hide them from every other store. Instead, partition the records per
+> merchant first (e.g. match `shopifyCustomerId`/`shopifyOrderId` against
+> each store's Shopify customer/order exports) and run one scoped
+> `updateMany` per store:
 >
 > 1. Backfill Shopify-imported customer users:
 >    `db.users.updateMany({ storeId: { $exists: false }, role: 'customer', shopifyCustomerId: { $exists: true } }, { $set: { storeId: ObjectId('<storeId>') } })`

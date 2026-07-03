@@ -355,9 +355,12 @@ export const handleCustomerCreate = async (req: Request, res: Response): Promise
     const existingUser = await User.findOne({ storeId, email: shopifyCustomer.email });
 
     if (existingUser) {
-      // Update existing user with Shopify data
+      // Update existing user with Shopify data through the same
+      // conflict-resolution rules as customers/update (local wins except
+      // isVerified/phone), so both topics apply identical semantics
       const mergedData = await syncCustomerData(shopifyCustomer, existingUser);
-      Object.assign(existingUser, mergedData);
+      const { resolved } = await handleDataConflicts(existingUser.toObject(), mergedData, 'customer');
+      Object.assign(existingUser, resolved);
       await existingUser.save();
       console.log(`✅ Updated existing user: ${shopifyCustomer.email} (store: ${storeId})`);
     } else {
