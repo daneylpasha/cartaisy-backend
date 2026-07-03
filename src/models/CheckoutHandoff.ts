@@ -16,6 +16,10 @@ export interface ICheckoutHandoff extends Document {
   guestSessionId?: string;
   source: 'customer' | 'public';
   checkoutUrl: string;
+  status: 'pending' | 'reconciled';
+  reconciledAt?: Date;
+  shopifyOrderId?: string;
+  orderId?: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -50,6 +54,25 @@ const CheckoutHandoffSchema = new Schema<ICheckoutHandoff>(
     checkoutUrl: {
       type: String,
       required: true,
+    },
+    // Webhook reconciliation state (issue #76). Handoffs created before this
+    // field existed have no status and are treated as pending.
+    status: {
+      type: String,
+      enum: ['pending', 'reconciled'],
+      default: 'pending',
+      index: true,
+    },
+    reconciledAt: {
+      type: Date,
+    },
+    shopifyOrderId: {
+      type: String,
+      index: true,
+    },
+    orderId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Order',
     },
   },
   { timestamps: true }
