@@ -191,6 +191,56 @@ describe('admin analytics store scoping', () => {
       expect(response.body.data).toEqual([]);
     });
 
+    test('product-view metrics scope through the owning product ($lookup), not the view itself', async () => {
+      // ProductView has no storeId of its own; each store gets a product
+      // and one view of it, and admin A must count only their own
+      const productFixture = (storeId: Types.ObjectId, n: number) => ({
+        storeId,
+        shopifyProductId: `7900${n}`,
+        title: `Analytics Product ${n}`,
+        description: 'Store scoping test product',
+        handle: `analytics-product-${n}`,
+        status: 'active',
+        price: 10,
+        images: [{ url: 'https://example.com/p.jpg', alt: 'p', position: 1 }],
+        mobileDisplay: { thumbnailUrl: 'https://example.com/t.jpg', shortDescription: 'p' },
+        seo: { title: `Analytics Product ${n}`, slug: `analytics-product-${n}` },
+        inventoryTracking: { totalQuantity: 1, tracked: true, lowStockThreshold: 1, history: [] },
+        variants: [{
+          id: `${n}`,
+          title: 'Default',
+          price: 10,
+          inventory: { quantity: 1, tracked: true, policy: 'deny' },
+          options: { option1: 'Default' },
+        }],
+      });
+      const [productA, productB] = await Promise.all([
+        Product.create(productFixture(storeAId, 1)),
+        Product.create(productFixture(storeBId, 2)),
+      ]);
+
+      const ProductView = (await import('../src/models/ProductView')).default;
+      const viewFixture = (product: Types.ObjectId, n: number) => ({
+        product,
+        viewedAt: new Date(),
+        session: { sessionId: `view-session-${n}`, sessionStartTime: new Date() },
+        device: { platform: 'mobile' },
+      });
+      await (ProductView as any).create([
+        viewFixture(productA._id, 1),
+        viewFixture(productB._id, 2),
+      ]);
+
+      const response = await request(app)
+        .get('/api/v1/analytics/legacy-dashboard')
+        .set('Authorization', `Bearer ${adminAToken}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.data.metrics.productViews.value).toBe(1);
+
+      await (ProductView as any).deleteMany({});
+    });
+
     test('admin dashboard aggregates only store A orders', async () => {
       const response = await request(app)
         .get('/api/v1/admin/dashboard')

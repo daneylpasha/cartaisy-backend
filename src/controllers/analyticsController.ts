@@ -1379,7 +1379,7 @@ export const recordSession = async (req: Request, res: Response): Promise<void> 
 
 /**
  * Get app engagement metrics (DAU/MAU) for admin dashboard
- * GET /api/v1/admin/stores/:storeId/analytics/app-engagement
+ * GET /api/v1/analytics/app-engagement (store from validated context)
  */
 export const getAppEngagementMetrics = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -1437,7 +1437,7 @@ export const getAppEngagementMetrics = async (req: Request, res: Response): Prom
 
 /**
  * Get quick DAU/MAU stats for dashboard widget
- * GET /api/v1/admin/stores/:storeId/analytics/app-stats
+ * GET /api/v1/analytics/app-stats (store from validated context)
  */
 export const getAppQuickStats = async (req: Request, res: Response): Promise<void> => {
   try {
