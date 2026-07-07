@@ -1,5 +1,6 @@
 import express from 'express';
 import { Request, Response } from 'express';
+import { Types } from 'mongoose';
 import { 
   getBackgroundJobsStatus, 
   runBackgroundJobManually 
@@ -48,9 +49,14 @@ const ownedStoreChainOptional = [
 
 /**
  * GET /api/admin/dashboard - Get comprehensive admin dashboard data
+ *
+ * Store admins see their own store's aggregates only; super admins get the
+ * platform-wide view unless they target a store explicitly (issue #79).
  */
-router.get('/dashboard', async (req: Request, res: Response) => {
+router.get('/dashboard', ...ownedStoreChainOptional, async (req: Request, res: Response) => {
   try {
+    const storeId = (req as any).storeId as string | undefined;
+
     const [
       syncStatus,
       jobsStatus,
@@ -59,8 +65,8 @@ router.get('/dashboard', async (req: Request, res: Response) => {
     ] = await Promise.all([
       getSyncStatus(),
       getBackgroundJobsStatus(),
-      getSystemStatistics(),
-      getRecentActivity()
+      getSystemStatistics(storeId),
+      getRecentActivity(50, storeId)
     ]);
 
     const dashboard = {
@@ -384,12 +390,15 @@ router.post('/jobs/:jobName/run', async (req: Request, res: Response) => {
 
 /**
  * GET /api/admin/inventory/overview - Get inventory overview
+ * Store admins: own store only; super admins: platform-wide or explicit store.
  */
-router.get('/inventory/overview', async (req: Request, res: Response) => {
+router.get('/inventory/overview', ...ownedStoreChainOptional, async (req: Request, res: Response) => {
   try {
+    const storeId = (req as any).storeId as string | undefined;
+
     const [lowStockProducts, inventoryStats] = await Promise.all([
-      getLowStockProducts(),
-      getInventoryStatistics()
+      getLowStockProducts(undefined, storeId),
+      getInventoryStatistics(storeId)
     ]);
 
     res.json({
@@ -411,12 +420,16 @@ router.get('/inventory/overview', async (req: Request, res: Response) => {
 /**
  * GET /api/admin/inventory/reservations - Get current inventory reservations
  */
-router.get('/inventory/reservations', async (req: Request, res: Response) => {
+router.get('/inventory/reservations', ...ownedStoreChainOptional, async (req: Request, res: Response) => {
   try {
-    // Get active products to check their reservations
-    const products = await Product.find({ 
+    const storeId = (req as any).storeId as string | undefined;
+
+    // Get active products to check their reservations (store-scoped for
+    // merchant admins)
+    const products = await Product.find({
+      ...(storeId ? { storeId } : {}),
       status: 'active',
-      'inventoryTracking.tracked': true 
+      'inventoryTracking.tracked': true
     }).limit(50);
 
     const reservations = [];
@@ -476,10 +489,11 @@ router.get('/system/health', async (req: Request, res: Response) => {
 
 /**
  * GET /api/admin/system/stats - System statistics
+ * Store admins: own store only; super admins: platform-wide or explicit store.
  */
-router.get('/system/stats', async (req: Request, res: Response) => {
+router.get('/system/stats', ...ownedStoreChainOptional, async (req: Request, res: Response) => {
   try {
-    const stats = await getSystemStatistics();
+    const stats = await getSystemStatistics((req as any).storeId as string | undefined);
     res.json({
       success: true,
       data: stats
@@ -496,13 +510,17 @@ router.get('/system/stats', async (req: Request, res: Response) => {
 /**
  * GET /api/admin/logs - Get recent system logs (simplified)
  */
-router.get('/logs', async (req: Request, res: Response) => {
+router.get('/logs', ...ownedStoreChainOptional, async (req: Request, res: Response) => {
   try {
     const { limit = 100, level = 'all' } = req.query;
-    
+
     // In a production system, you'd integrate with your logging system
-    // For now, return recent activity from database
-    const recentActivity = await getRecentActivity(parseInt(limit as string));
+    // For now, return recent activity from database (store-scoped for
+    // merchant admins)
+    const recentActivity = await getRecentActivity(
+      parseInt(limit as string),
+      (req as any).storeId as string | undefined
+    );
 
     res.json({
       success: true,
@@ -534,7 +552,7 @@ router.get('/logs', async (req: Request, res: Response) => {
  *   - sortBy: 'createdAt' | 'status' (default: 'createdAt')
  *   - sortOrder: 'asc' | 'desc' (default: 'desc')
  */
-router.get('/help-requests', async (req: Request, res: Response) => {
+router.get('/help-requests', ...ownedStoreChainOptional, async (req: Request, res: Response) => {
   try {
     const {
       status = 'open',
@@ -544,12 +562,18 @@ router.get('/help-requests', async (req: Request, res: Response) => {
       sortOrder = 'desc'
     } = req.query;
 
+    // Validated store context: merchant admins only ever see their own
+    // store's help requests (issue #79)
+    const storeId = (req as any).storeId as string | undefined;
+    const storeFilter = storeId ? { storeId: new Types.ObjectId(storeId) } : {};
+
     const pageNum = parseInt(page as string);
     const limitNum = Math.min(parseInt(limit as string), 100);
     const skip = (pageNum - 1) * limitNum;
 
     // Build match filter
     const matchFilter: any = {
+      ...storeFilter,
       helpRequests: { $exists: true, $ne: [] }
     };
 
@@ -625,9 +649,9 @@ router.get('/help-requests', async (req: Request, res: Response) => {
       adminNotes: item.helpRequest.adminNotes || null
     }));
 
-    // Get status counts
+    // Get status counts (scoped to the same store context as the list)
     const statusCounts = await Order.aggregate([
-      { $match: { helpRequests: { $exists: true, $ne: [] } } },
+      { $match: { ...storeFilter, helpRequests: { $exists: true, $ne: [] } } },
       { $unwind: '$helpRequests' },
       { $group: { _id: '$helpRequests.status', count: { $sum: 1 } } }
     ]);
@@ -667,11 +691,18 @@ router.get('/help-requests', async (req: Request, res: Response) => {
 /**
  * GET /api/admin/help-requests/:orderId/:helpRequestId - Get specific help request details
  */
-router.get('/help-requests/:orderId/:helpRequestId', async (req: Request, res: Response) => {
+router.get('/help-requests/:orderId/:helpRequestId', ...ownedStoreChainOptional, async (req: Request, res: Response) => {
   try {
     const { orderId, helpRequestId } = req.params;
 
-    const order = await Order.findById(orderId)
+    // Store-scoped lookup: a merchant admin gets 404 for another store's
+    // order, indistinguishable from a nonexistent one
+    const storeId = (req as any).storeId as string | undefined;
+
+    const order = await Order.findOne({
+      _id: orderId,
+      ...(storeId ? { storeId } : {})
+    })
       .select('orderNumber email customer user mobileStatus totalPrice placedAt lineItems helpRequests shippingAddress')
       .populate('customer', 'email firstName lastName phone')
       .lean();
@@ -741,7 +772,7 @@ router.get('/help-requests/:orderId/:helpRequestId', async (req: Request, res: R
  *   - status: 'open' | 'in_progress' | 'resolved' | 'closed'
  *   - adminNotes: string (optional)
  */
-router.put('/help-requests/:orderId/:helpRequestId', async (req: Request, res: Response) => {
+router.put('/help-requests/:orderId/:helpRequestId', ...ownedStoreChainOptional, async (req: Request, res: Response) => {
   try {
     const { orderId, helpRequestId } = req.params;
     const { status, adminNotes } = req.body;
@@ -754,7 +785,13 @@ router.put('/help-requests/:orderId/:helpRequestId', async (req: Request, res: R
       });
     }
 
-    const order = await Order.findById(orderId);
+    // Store-scoped lookup: a merchant admin can never modify another
+    // store's help request
+    const requestStoreId = (req as any).storeId as string | undefined;
+    const order = await Order.findOne({
+      _id: orderId,
+      ...(requestStoreId ? { storeId: requestStoreId } : {})
+    });
     if (!order) {
       return res.status(404).json({
         success: false,
@@ -812,19 +849,28 @@ router.put('/help-requests/:orderId/:helpRequestId', async (req: Request, res: R
 // ===============================
 
 /**
+ * Build the store filter for the statistics helpers below. Aggregation
+ * $match stages never auto-cast, so the id is converted to an ObjectId.
+ * undefined = explicit super-admin platform-wide view (issue #79).
+ */
+function statsStoreFilter(storeId?: string): Record<string, any> {
+  return storeId ? { storeId: new Types.ObjectId(storeId) } : {};
+}
+
+/**
  * Get comprehensive system statistics
  */
-async function getSystemStatistics(): Promise<any> {
+async function getSystemStatistics(storeId?: string): Promise<any> {
   const [
     productStats,
     orderStats,
     userStats,
     inventoryStats
   ] = await Promise.all([
-    getProductStatistics(),
-    getOrderStatistics(),
-    getUserStatistics(),
-    getInventoryStatistics()
+    getProductStatistics(storeId),
+    getOrderStatistics(storeId),
+    getUserStatistics(storeId),
+    getInventoryStatistics(storeId)
   ]);
 
   return {
@@ -839,8 +885,10 @@ async function getSystemStatistics(): Promise<any> {
 /**
  * Get product statistics
  */
-async function getProductStatistics(): Promise<any> {
+async function getProductStatistics(storeId?: string): Promise<any> {
+  const storeFilter = statsStoreFilter(storeId);
   const pipeline = [
+    { $match: storeFilter },
     {
       $group: {
         _id: '$status',
@@ -853,8 +901,8 @@ async function getProductStatistics(): Promise<any> {
 
   const [stats, totalProducts, syncedProducts] = await Promise.all([
     Product.aggregate(pipeline),
-    Product.countDocuments(),
-    Product.countDocuments({ shopifyProductId: { $exists: true } })
+    Product.countDocuments(storeFilter),
+    Product.countDocuments({ ...storeFilter, shopifyProductId: { $exists: true } })
   ]);
 
   return {
@@ -869,15 +917,17 @@ async function getProductStatistics(): Promise<any> {
 /**
  * Get order statistics
  */
-async function getOrderStatistics(): Promise<any> {
+async function getOrderStatistics(storeId?: string): Promise<any> {
   const today = new Date();
   const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const storeFilter = statsStoreFilter(storeId);
 
   const [totalOrders, recentOrders, mobileOrders, revenue] = await Promise.all([
-    Order.countDocuments(),
-    Order.countDocuments({ createdAt: { $gte: thirtyDaysAgo } }),
-    Order.countDocuments({ shopifyOrderId: { $exists: false } }),
+    Order.countDocuments(storeFilter),
+    Order.countDocuments({ ...storeFilter, createdAt: { $gte: thirtyDaysAgo } }),
+    Order.countDocuments({ ...storeFilter, shopifyOrderId: { $exists: false } }),
     Order.aggregate([
+      { $match: storeFilter },
       {
         $group: {
           _id: null,
@@ -900,11 +950,12 @@ async function getOrderStatistics(): Promise<any> {
 /**
  * Get user statistics
  */
-async function getUserStatistics(): Promise<any> {
+async function getUserStatistics(storeId?: string): Promise<any> {
+  const storeFilter = statsStoreFilter(storeId);
   const [totalUsers, activeUsers, shopifyCustomers] = await Promise.all([
-    User.countDocuments(),
-    User.countDocuments({ isActive: true }),
-    User.countDocuments({ shopifyCustomerId: { $exists: true } })
+    User.countDocuments(storeFilter),
+    User.countDocuments({ ...storeFilter, isActive: true }),
+    User.countDocuments({ ...storeFilter, shopifyCustomerId: { $exists: true } })
   ]);
 
   return {
@@ -918,10 +969,11 @@ async function getUserStatistics(): Promise<any> {
 /**
  * Get inventory statistics
  */
-async function getInventoryStatistics(): Promise<any> {
+async function getInventoryStatistics(storeId?: string): Promise<any> {
+  const storeFilter = statsStoreFilter(storeId);
   const pipeline = [
     {
-      $match: { 'inventoryTracking.tracked': true }
+      $match: { ...storeFilter, 'inventoryTracking.tracked': true }
     },
     {
       $group: {
@@ -937,6 +989,7 @@ async function getInventoryStatistics(): Promise<any> {
   const [stats, lowStockCount] = await Promise.all([
     Product.aggregate(pipeline),
     Product.countDocuments({
+      ...storeFilter,
       'inventoryTracking.tracked': true,
       $expr: {
         $lte: ['$inventoryTracking.totalQuantity', '$inventoryTracking.lowStockThreshold']
@@ -953,15 +1006,17 @@ async function getInventoryStatistics(): Promise<any> {
 /**
  * Get recent system activity
  */
-async function getRecentActivity(limit: number = 50): Promise<any[]> {
+async function getRecentActivity(limit: number = 50, storeId?: string): Promise<any[]> {
+  const storeFilter = statsStoreFilter(storeId);
+
   // Get recent orders, product updates, and other activities
   const [recentOrders, recentProducts] = await Promise.all([
-    Order.find({})
+    Order.find(storeFilter)
       .sort({ createdAt: -1 })
       .limit(limit / 2)
       .select('_id totals.total mobileStatus.current createdAt')
       .lean(),
-    Product.find({})
+    Product.find(storeFilter)
       .sort({ updatedAt: -1 })
       .limit(limit / 2)
       .select('_id title status updatedAt')

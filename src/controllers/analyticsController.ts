@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import mongoose from 'mongoose';
 import Product from '../models/Product';
 import ProductView from '../models/ProductView';
 import SearchHistory from '../models/SearchHistory';
@@ -8,11 +9,69 @@ import shopifyAnalyticsService from '../services/shopifyAnalyticsService';
 import appAnalyticsService from '../services/appAnalyticsService';
 import * as sessionTrackingService from '../services/sessionTrackingService';
 
+// =============================================================================
+// Store scoping helpers (issue #79)
+//
+// Admin analytics routes run behind requireOwnedStoreContext({required:false}):
+// req.storeId is the VALIDATED store for merchant admins (never a raw
+// header), and undefined only for a super admin's explicit platform-wide
+// view. Aggregation $match stages never auto-cast, so the id is always
+// converted to an ObjectId here.
+// =============================================================================
+
+const getValidatedStoreObjectId = (req: Request): mongoose.Types.ObjectId | undefined => {
+  const storeId = (req as any).storeId;
+  return storeId ? new mongoose.Types.ObjectId(storeId.toString()) : undefined;
+};
+
+/**
+ * ProductView and ProductReview documents carry no storeId of their own, so
+ * they are scoped through the owning product's store via $lookup.
+ */
+const productStoreScopeStages = (
+  storeObjectId: mongoose.Types.ObjectId | undefined,
+  localField: string = 'product'
+): any[] =>
+  storeObjectId
+    ? [
+        {
+          $lookup: {
+            from: 'products',
+            localField,
+            foreignField: '_id',
+            as: '__scopeProduct',
+          },
+        },
+        { $unwind: '$__scopeProduct' },
+        { $match: { '__scopeProduct.storeId': storeObjectId } },
+      ]
+    : [];
+
+const countStoreScoped = async (
+  model: mongoose.Model<any>,
+  match: Record<string, any>,
+  storeObjectId: mongoose.Types.ObjectId | undefined,
+  localField: string = 'product'
+): Promise<number> => {
+  if (!storeObjectId) {
+    return model.countDocuments(match);
+  }
+  const result = await model.aggregate([
+    { $match: match },
+    ...productStoreScopeStages(storeObjectId, localField),
+    { $count: 'count' },
+  ]);
+  return result[0]?.count || 0;
+};
+
 export const getDashboardAnalytics = async (req: Request, res: Response): Promise<void> => {
   try {
     const { timeframe = '30' } = req.query;
     const days = parseInt(timeframe as string);
     const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+    const storeObjectId = getValidatedStoreObjectId(req);
+    const storeFilter = storeObjectId ? { storeId: storeObjectId } : {};
 
     // Get key metrics
     const [
@@ -25,21 +84,22 @@ export const getDashboardAnalytics = async (req: Request, res: Response): Promis
       totalReviews,
       averageRating
     ] = await Promise.all([
-      ProductView.countDocuments({ viewedAt: { $gte: startDate } }),
-      SearchHistory.countDocuments({ searchedAt: { $gte: startDate } }),
-      Order.countDocuments({ placedAt: { $gte: startDate } }),
+      countStoreScoped(ProductView, { viewedAt: { $gte: startDate } }, storeObjectId),
+      SearchHistory.countDocuments({ ...storeFilter, searchedAt: { $gte: startDate } }),
+      Order.countDocuments({ ...storeFilter, placedAt: { $gte: startDate } }),
       Order.aggregate([
-        { $match: { placedAt: { $gte: startDate } } },
+        { $match: { ...storeFilter, placedAt: { $gte: startDate } } },
         { $group: { _id: null, total: { $sum: '$totalPrice' } } }
       ]).then(result => result[0]?.total || 0),
       Order.aggregate([
-        { $match: { placedAt: { $gte: startDate } } },
+        { $match: { ...storeFilter, placedAt: { $gte: startDate } } },
         { $group: { _id: null, avg: { $avg: '$totalPrice' } } }
       ]).then(result => result[0]?.avg || 0),
-      Product.countDocuments({ createdAt: { $gte: startDate } }),
-      ProductReview.countDocuments({ createdAt: { $gte: startDate } }),
+      Product.countDocuments({ ...storeFilter, createdAt: { $gte: startDate } }),
+      countStoreScoped(ProductReview, { createdAt: { $gte: startDate } }, storeObjectId),
       ProductReview.aggregate([
         { $match: { createdAt: { $gte: startDate }, status: 'approved' } },
+        ...productStoreScopeStages(storeObjectId),
         { $group: { _id: null, avg: { $avg: '$rating' } } }
       ]).then(result => result[0]?.avg || 0)
     ]);
@@ -54,20 +114,25 @@ export const getDashboardAnalytics = async (req: Request, res: Response): Promis
       previousOrders,
       previousRevenue
     ] = await Promise.all([
-      ProductView.countDocuments({ 
-        viewedAt: { $gte: previousStartDate, $lt: previousEndDate } 
+      countStoreScoped(
+        ProductView,
+        { viewedAt: { $gte: previousStartDate, $lt: previousEndDate } },
+        storeObjectId
+      ),
+      SearchHistory.countDocuments({
+        ...storeFilter,
+        searchedAt: { $gte: previousStartDate, $lt: previousEndDate }
       }),
-      SearchHistory.countDocuments({ 
-        searchedAt: { $gte: previousStartDate, $lt: previousEndDate } 
-      }),
-      Order.countDocuments({ 
-        placedAt: { $gte: previousStartDate, $lt: previousEndDate } 
+      Order.countDocuments({
+        ...storeFilter,
+        placedAt: { $gte: previousStartDate, $lt: previousEndDate }
       }),
       Order.aggregate([
-        { 
-          $match: { 
-            placedAt: { $gte: previousStartDate, $lt: previousEndDate } 
-          } 
+        {
+          $match: {
+            ...storeFilter,
+            placedAt: { $gte: previousStartDate, $lt: previousEndDate }
+          }
         },
         { $group: { _id: null, total: { $sum: '$totalPrice' } } }
       ]).then(result => result[0]?.total || 0)
@@ -129,6 +194,13 @@ export const getProductAnalytics = async (req: Request, res: Response): Promise<
     const days = parseInt(timeframe as string);
     const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
+    const storeObjectId = getValidatedStoreObjectId(req);
+    const storeFilter = storeObjectId ? { storeId: storeObjectId } : {};
+    // Post-lookup filter for pipelines that already join the product
+    const productStoreMatch = storeObjectId
+      ? [{ $match: { 'product.storeId': storeObjectId } }]
+      : [];
+
     // Most viewed products
     const mostViewed = await ProductView.aggregate([
       {
@@ -149,12 +221,6 @@ export const getProductAnalytics = async (req: Request, res: Response): Promise<
         }
       },
       {
-        $sort: { views: -1 }
-      },
-      {
-        $limit: 10
-      },
-      {
         $lookup: {
           from: 'products',
           localField: '_id',
@@ -164,6 +230,13 @@ export const getProductAnalytics = async (req: Request, res: Response): Promise<
       },
       {
         $unwind: '$product'
+      },
+      ...productStoreMatch,
+      {
+        $sort: { views: -1 }
+      },
+      {
+        $limit: 10
       },
       {
         $project: {
@@ -180,6 +253,7 @@ export const getProductAnalytics = async (req: Request, res: Response): Promise<
     const bestSelling = await Order.aggregate([
       {
         $match: {
+          ...storeFilter,
           placedAt: { $gte: startDate }
         }
       },
@@ -242,12 +316,6 @@ export const getProductAnalytics = async (req: Request, res: Response): Promise<
         }
       },
       {
-        $sort: { viewCount: -1 }
-      },
-      {
-        $limit: 10
-      },
-      {
         $lookup: {
           from: 'products',
           localField: '_id',
@@ -257,11 +325,19 @@ export const getProductAnalytics = async (req: Request, res: Response): Promise<
       },
       {
         $unwind: '$product'
+      },
+      ...productStoreMatch,
+      {
+        $sort: { viewCount: -1 }
+      },
+      {
+        $limit: 10
       }
     ]);
 
     // Top rated products
     const topRated = await Product.find({
+      ...storeFilter,
       'reviews.count': { $gte: 5 },
       'reviews.averageRating': { $gte: 4.0 }
     })
@@ -287,6 +363,7 @@ export const getProductAnalytics = async (req: Request, res: Response): Promise<
       {
         $unwind: '$product'
       },
+      ...productStoreMatch,
       {
         $lookup: {
           from: 'productcategories',
@@ -348,6 +425,11 @@ export const getUserBehaviorAnalytics = async (req: Request, res: Response): Pro
     const days = parseInt(timeframe as string);
     const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
+    const storeObjectId = getValidatedStoreObjectId(req);
+    const storeFilter = storeObjectId ? { storeId: storeObjectId } : {};
+    // ProductView carries no storeId; scope through the owning product
+    const viewStoreScope = productStoreScopeStages(storeObjectId);
+
     // Platform usage
     const platformUsage = await ProductView.aggregate([
       {
@@ -355,6 +437,7 @@ export const getUserBehaviorAnalytics = async (req: Request, res: Response): Pro
           viewedAt: { $gte: startDate }
         }
       },
+      ...viewStoreScope,
       {
         $group: {
           _id: '$device.platform',
@@ -374,6 +457,7 @@ export const getUserBehaviorAnalytics = async (req: Request, res: Response): Pro
     const searchBehavior = await SearchHistory.aggregate([
       {
         $match: {
+          ...storeFilter,
           searchedAt: { $gte: startDate }
         }
       },
@@ -401,6 +485,7 @@ export const getUserBehaviorAnalytics = async (req: Request, res: Response): Pro
           user: { $exists: true }
         }
       },
+      ...viewStoreScope,
       {
         $group: {
           _id: '$user',
@@ -437,21 +522,26 @@ export const getUserBehaviorAnalytics = async (req: Request, res: Response): Pro
     ]);
 
     // Conversion funnel
-    const totalViews = await ProductView.countDocuments({
-      viewedAt: { $gte: startDate }
-    });
+    const totalViews = await countStoreScoped(
+      ProductView,
+      { viewedAt: { $gte: startDate } },
+      storeObjectId
+    );
 
-    const wishlistAdditions = await ProductView.countDocuments({
-      viewedAt: { $gte: startDate },
-      'interactions.addedToWishlist': true
-    });
+    const wishlistAdditions = await countStoreScoped(
+      ProductView,
+      { viewedAt: { $gte: startDate }, 'interactions.addedToWishlist': true },
+      storeObjectId
+    );
 
-    const cartAdditions = await ProductView.countDocuments({
-      viewedAt: { $gte: startDate },
-      'interactions.addedToCart': true
-    });
+    const cartAdditions = await countStoreScoped(
+      ProductView,
+      { viewedAt: { $gte: startDate }, 'interactions.addedToCart': true },
+      storeObjectId
+    );
 
     const orders = await Order.countDocuments({
+      ...storeFilter,
       placedAt: { $gte: startDate }
     });
 
@@ -499,10 +589,14 @@ export const getRevenueAnalytics = async (req: Request, res: Response): Promise<
     const days = parseInt(timeframe as string);
     const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
+    const storeObjectId = getValidatedStoreObjectId(req);
+    const storeFilter = storeObjectId ? { storeId: storeObjectId } : {};
+
     // Daily revenue trend
     const dailyRevenue = await Order.aggregate([
       {
         $match: {
+          ...storeFilter,
           placedAt: { $gte: startDate }
         }
       },
@@ -528,6 +622,7 @@ export const getRevenueAnalytics = async (req: Request, res: Response): Promise<
     const revenueBySource = await Order.aggregate([
       {
         $match: {
+          ...storeFilter,
           placedAt: { $gte: startDate }
         }
       },
@@ -551,6 +646,7 @@ export const getRevenueAnalytics = async (req: Request, res: Response): Promise<
     const topRevenueProducts = await Order.aggregate([
       {
         $match: {
+          ...storeFilter,
           placedAt: { $gte: startDate }
         }
       },
@@ -603,6 +699,7 @@ export const getRevenueAnalytics = async (req: Request, res: Response): Promise<
     const customerSegments = await Order.aggregate([
       {
         $match: {
+          ...storeFilter,
           placedAt: { $gte: startDate }
         }
       },
@@ -653,10 +750,14 @@ export const getRevenueAnalytics = async (req: Request, res: Response): Promise<
   }
 };
 
-export const getInventoryAnalytics = async (_req: Request, res: Response): Promise<void> => {
+export const getInventoryAnalytics = async (req: Request, res: Response): Promise<void> => {
   try {
+    const storeObjectId = getValidatedStoreObjectId(req);
+    const storeFilter = storeObjectId ? { storeId: storeObjectId } : {};
+
     // Low stock products
     const lowStockProducts = await Product.find({
+      ...storeFilter,
       'inventoryTracking.lowStockThreshold': { $exists: true },
       $expr: {
         $lte: [
@@ -671,6 +772,7 @@ export const getInventoryAnalytics = async (_req: Request, res: Response): Promi
 
     // Out of stock products
     const outOfStockProducts = await Product.find({
+      ...storeFilter,
       'inventoryTracking.totalQuantity': 0
     })
       .sort({ 'analytics.viewCount': -1 })
@@ -681,6 +783,7 @@ export const getInventoryAnalytics = async (_req: Request, res: Response): Promi
     const inventoryByCategory = await Product.aggregate([
       {
         $match: {
+          ...storeFilter,
           status: 'active'
         }
       },
@@ -730,6 +833,7 @@ export const getInventoryAnalytics = async (_req: Request, res: Response): Promi
     const fastMovingProducts = await Order.aggregate([
       {
         $match: {
+          ...storeFilter,
           placedAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) }
         }
       },
@@ -1184,7 +1288,10 @@ export const getHourlyActivity = async (req: Request, res: Response): Promise<vo
 export const getUserJourney = async (req: Request, res: Response): Promise<void> => {
   try {
     const { sessionId } = req.params;
-    const data = await appAnalyticsService.getUserJourney(sessionId);
+    // Scope the journey to the validated store so a merchant admin cannot
+    // read another store's session by guessing session IDs
+    const storeId = (req as any).storeId;
+    const data = await appAnalyticsService.getUserJourney(sessionId, storeId);
     res.json({ success: true, data });
   } catch (error) {
     console.error('Error getting user journey:', error);
@@ -1276,7 +1383,17 @@ export const recordSession = async (req: Request, res: Response): Promise<void> 
  */
 export const getAppEngagementMetrics = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { storeId } = req.params;
+    // Validated store context (requireOwnedStoreContext); the session
+    // tracking service has no platform-wide mode, so a super admin must
+    // name the target store explicitly
+    const storeId = (req as any).storeId as string | undefined;
+    if (!storeId) {
+      res.status(400).json({
+        success: false,
+        error: 'Store ID required for app engagement metrics',
+      });
+      return;
+    }
     const {
       startDate,
       endDate,
@@ -1324,7 +1441,15 @@ export const getAppEngagementMetrics = async (req: Request, res: Response): Prom
  */
 export const getAppQuickStats = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { storeId } = req.params;
+    // Validated store context; see getAppEngagementMetrics
+    const storeId = (req as any).storeId as string | undefined;
+    if (!storeId) {
+      res.status(400).json({
+        success: false,
+        error: 'Store ID required for app stats',
+      });
+      return;
+    }
 
     const stats = await sessionTrackingService.getQuickStats(storeId);
 

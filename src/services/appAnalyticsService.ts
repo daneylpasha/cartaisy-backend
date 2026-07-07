@@ -431,10 +431,17 @@ class AppAnalyticsService {
   }
 
   /**
-   * Get user journey for a specific session
+   * Get user journey for a specific session, scoped to the store when a
+   * validated store context is supplied (a merchant admin must never read
+   * another store's session journey by guessing session IDs)
    */
-  async getUserJourney(sessionId: string): Promise<any[]> {
-    const events = await AnalyticsEvent.find({ sessionId })
+  async getUserJourney(sessionId: string, storeId?: string): Promise<any[]> {
+    const query: any = { sessionId };
+    if (storeId) {
+      query.storeId = new mongoose.Types.ObjectId(storeId);
+    }
+
+    const events = await AnalyticsEvent.find(query)
       .sort({ timestamp: 1 })
       .select('eventType eventData timestamp duration')
       .lean();

@@ -1,8 +1,19 @@
 import { Router } from 'express';
-import { authenticate, authenticateAdmin } from '../middleware/auth';
+import { authenticateAdmin } from '../middleware/auth';
+import { requireOwnedStoreContext } from '../middleware/storeOwnership';
 import * as analyticsController from '../controllers/analyticsController';
 
 const router = Router();
+
+// Admin analytics must bind to a VALIDATED store context (issue #79):
+// requireOwnedStoreContext overwrites any untrusted req.storeId a raw
+// X-Store-ID header may have set. Store admins always resolve to their own
+// store (403 on any other supplied store); super admins may target a store
+// explicitly or, with no store supplied, get the platform-wide aggregate.
+const adminAnalytics = [
+  ...(authenticateAdmin as any[]),
+  requireOwnedStoreContext({ required: false }),
+] as any[];
 
 // ============================================
 // PUBLIC ROUTES (Mobile App Event Tracking)
@@ -19,31 +30,31 @@ router.post('/events/track-batch', analyticsController.trackEventsBatch);
 // ============================================
 
 // Combined dashboard (Shopify + App)
-router.get('/dashboard', authenticateAdmin as any, analyticsController.getCombinedDashboard);
+router.get('/dashboard', ...adminAnalytics, analyticsController.getCombinedDashboard);
 
 // Legacy dashboard (existing)
-router.get('/legacy-dashboard', authenticateAdmin as any, analyticsController.getDashboardAnalytics);
+router.get('/legacy-dashboard', ...adminAnalytics, analyticsController.getDashboardAnalytics);
 
 // ============================================
 // SHOPIFY ANALYTICS (Admin only)
 // ============================================
 
 // Sales
-router.get('/sales/overview', authenticateAdmin as any, analyticsController.getSalesOverview);
-router.get('/sales/top-products', authenticateAdmin as any, analyticsController.getTopSellingProducts);
-router.get('/sales/trends', authenticateAdmin as any, analyticsController.getSalesTrends);
-router.get('/sales/by-category', authenticateAdmin as any, analyticsController.getRevenueByCategory);
+router.get('/sales/overview', ...adminAnalytics, analyticsController.getSalesOverview);
+router.get('/sales/top-products', ...adminAnalytics, analyticsController.getTopSellingProducts);
+router.get('/sales/trends', ...adminAnalytics, analyticsController.getSalesTrends);
+router.get('/sales/by-category', ...adminAnalytics, analyticsController.getRevenueByCategory);
 
 // Customers
-router.get('/customers/metrics', authenticateAdmin as any, analyticsController.getCustomerMetrics);
+router.get('/customers/metrics', ...adminAnalytics, analyticsController.getCustomerMetrics);
 
 // Orders
-router.get('/orders/fulfillment', authenticateAdmin as any, analyticsController.getFulfillmentStats);
-router.get('/orders/recent', authenticateAdmin as any, analyticsController.getRecentOrders);
+router.get('/orders/fulfillment', ...adminAnalytics, analyticsController.getFulfillmentStats);
+router.get('/orders/recent', ...adminAnalytics, analyticsController.getRecentOrders);
 
 // Inventory
-router.get('/inventory/low-stock', authenticateAdmin as any, analyticsController.getLowStockProducts);
-router.get('/inventory/analytics', authenticateAdmin as any, analyticsController.getInventoryAnalytics);
+router.get('/inventory/low-stock', ...adminAnalytics, analyticsController.getLowStockProducts);
+router.get('/inventory/analytics', ...adminAnalytics, analyticsController.getInventoryAnalytics);
 
 // ============================================
 // SESSION TRACKING (DAU/MAU) - PUBLIC
@@ -58,24 +69,24 @@ router.post('/session', analyticsController.recordSession);
 // ============================================
 
 // DAU/MAU Engagement Metrics
-router.get('/app-engagement', authenticateAdmin as any, analyticsController.getAppEngagementMetrics);
-router.get('/app-stats', authenticateAdmin as any, analyticsController.getAppQuickStats);
+router.get('/app-engagement', ...adminAnalytics, analyticsController.getAppEngagementMetrics);
+router.get('/app-stats', ...adminAnalytics, analyticsController.getAppQuickStats);
 
 // Engagement
-router.get('/app/engagement', authenticateAdmin as any, analyticsController.getEngagementMetrics);
-router.get('/app/top-products', authenticateAdmin as any, analyticsController.getTopProductsByEngagement);
-router.get('/app/top-searches', authenticateAdmin as any, analyticsController.getTopSearches);
-router.get('/app/platforms', authenticateAdmin as any, analyticsController.getPlatformBreakdown);
-router.get('/app/funnel', authenticateAdmin as any, analyticsController.getFunnelAnalysis);
-router.get('/app/hourly-activity', authenticateAdmin as any, analyticsController.getHourlyActivity);
-router.get('/app/journey/:sessionId', authenticateAdmin as any, analyticsController.getUserJourney);
+router.get('/app/engagement', ...adminAnalytics, analyticsController.getEngagementMetrics);
+router.get('/app/top-products', ...adminAnalytics, analyticsController.getTopProductsByEngagement);
+router.get('/app/top-searches', ...adminAnalytics, analyticsController.getTopSearches);
+router.get('/app/platforms', ...adminAnalytics, analyticsController.getPlatformBreakdown);
+router.get('/app/funnel', ...adminAnalytics, analyticsController.getFunnelAnalysis);
+router.get('/app/hourly-activity', ...adminAnalytics, analyticsController.getHourlyActivity);
+router.get('/app/journey/:sessionId', ...adminAnalytics, analyticsController.getUserJourney);
 
 // ============================================
 // LEGACY ANALYTICS (Existing endpoints)
 // ============================================
 
-router.get('/products', authenticateAdmin as any, analyticsController.getProductAnalytics);
-router.get('/user-behavior', authenticateAdmin as any, analyticsController.getUserBehaviorAnalytics);
-router.get('/revenue', authenticateAdmin as any, analyticsController.getRevenueAnalytics);
+router.get('/products', ...adminAnalytics, analyticsController.getProductAnalytics);
+router.get('/user-behavior', ...adminAnalytics, analyticsController.getUserBehaviorAnalytics);
+router.get('/revenue', ...adminAnalytics, analyticsController.getRevenueAnalytics);
 
 export default router;
