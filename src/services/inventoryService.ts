@@ -267,13 +267,17 @@ export const updateInventoryLevels = async (productId?: string, storeId?: string
 };
 
 /**
- * Get products with low stock levels
+ * Get products with low stock levels. When a validated storeId is supplied
+ * (merchant admin analytics, issue #79), results are scoped to that store;
+ * without one the query stays platform-wide (background jobs, super admin).
  */
-export const getLowStockProducts = async (threshold?: number): Promise<IProduct[]> => {
+export const getLowStockProducts = async (threshold?: number, storeId?: string): Promise<IProduct[]> => {
   try {
     const pipeline = [
       {
         $match: {
+          // Aggregation $match does not auto-cast, so convert explicitly
+          ...(storeId ? { storeId: new mongoose.Types.ObjectId(storeId) } : {}),
           status: 'active',
           'inventoryTracking.tracked': true
         }

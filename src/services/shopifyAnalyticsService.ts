@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { tenantConfig } from '../config/tenant';
 import Order from '../models/Order';
 import Product from '../models/Product';
@@ -97,7 +98,8 @@ class ShopifyAnalyticsService {
     };
 
     if (storeId) {
-      matchStage.storeId = storeId;
+      // Aggregation $match does not auto-cast; a raw string matches nothing
+      matchStage.storeId = new mongoose.Types.ObjectId(storeId);
     }
 
     const result = await Order.aggregate([
@@ -142,7 +144,8 @@ class ShopifyAnalyticsService {
     };
 
     if (storeId) {
-      matchStage.storeId = storeId;
+      // Aggregation $match does not auto-cast; a raw string matches nothing
+      matchStage.storeId = new mongoose.Types.ObjectId(storeId);
     }
 
     const result = await Order.aggregate([
@@ -186,7 +189,8 @@ class ShopifyAnalyticsService {
     const matchStage: any = {};
 
     if (storeId) {
-      matchStage.storeId = storeId;
+      // Aggregation $match does not auto-cast; a raw string matches nothing
+      matchStage.storeId = new mongoose.Types.ObjectId(storeId);
     }
 
     // Total customers
@@ -207,7 +211,7 @@ class ShopifyAnalyticsService {
       placedAt: { $gte: range.startDate, $lte: range.endDate },
     };
     if (storeId) {
-      orderMatchStage.storeId = storeId;
+      orderMatchStage.storeId = new mongoose.Types.ObjectId(storeId);
     }
 
     const returningResult = await Order.aggregate([
@@ -250,7 +254,8 @@ class ShopifyAnalyticsService {
     };
 
     if (storeId) {
-      matchStage.storeId = storeId;
+      // Aggregation $match does not auto-cast; a raw string matches nothing
+      matchStage.storeId = new mongoose.Types.ObjectId(storeId);
     }
 
     const result = await Order.aggregate([
@@ -342,7 +347,8 @@ class ShopifyAnalyticsService {
     };
 
     if (storeId) {
-      matchStage.storeId = storeId;
+      // Aggregation $match does not auto-cast; a raw string matches nothing
+      matchStage.storeId = new mongoose.Types.ObjectId(storeId);
     }
 
     // First get product IDs from orders
@@ -396,7 +402,8 @@ class ShopifyAnalyticsService {
     };
 
     if (storeId) {
-      matchStage.storeId = storeId;
+      // Aggregation $match does not auto-cast; a raw string matches nothing
+      matchStage.storeId = new mongoose.Types.ObjectId(storeId);
     }
 
     const result = await Order.aggregate([
