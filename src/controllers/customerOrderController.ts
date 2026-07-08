@@ -501,13 +501,29 @@ export const cancelOrder = async (req: CustomerRequest, res: Response): Promise<
       return;
     }
 
-    // Restore inventory before marking the order cancelled so zero-match
-    // restores cannot produce a successful cancellation response.
+    const appliedRestores = [];
     for (const item of inventoryRestores) {
-      await Product.updateOne(
+      const restoreResult = await Product.updateOne(
         { _id: item.productId, storeId: item.storeId },
         { $inc: { 'inventoryTracking.totalQuantity': item.quantity } }
       );
+
+      if (restoreResult.matchedCount !== 1) {
+        for (const restoredItem of appliedRestores.reverse()) {
+          await Product.updateOne(
+            { _id: restoredItem.productId, storeId: restoredItem.storeId },
+            { $inc: { 'inventoryTracking.totalQuantity': -restoredItem.quantity } }
+          );
+        }
+
+        res.status(400).json({
+          status: 'error',
+          message: 'Unable to verify product ownership for inventory restore'
+        });
+        return;
+      }
+
+      appliedRestores.push(item);
     }
 
     // Save cancellation reason to dedicated field
