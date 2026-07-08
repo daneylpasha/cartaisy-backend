@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Delete, Put, Body, Path, Request, Route, Tags, Security, Response, SuccessResponse } from 'tsoa';
+import { Controller, Get, Post, Delete, Put, Body, Path, Request, Route, Tags, Security, Response, SuccessResponse } from '@tsoa/runtime';
 import { AuthenticatedRequest } from '../types';
 import User from '../models/User';
 import Customer from '../models/Customer';

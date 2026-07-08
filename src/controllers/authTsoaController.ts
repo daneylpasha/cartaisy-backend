@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Patch, Delete, Body, Request, Route, Tags, Response, Security, SuccessResponse } from 'tsoa';
+import { Controller, Post, Get, Patch, Delete, Body, Request, Route, Tags, Response, Security, SuccessResponse } from '@tsoa/runtime';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import User from '../models/User';

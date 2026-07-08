@@ -12,7 +12,7 @@ import {
   Tags,
   Response,
   SuccessResponse,
-} from 'tsoa';
+} from '@tsoa/runtime';
 import mongoose from 'mongoose';
 import Customer from '../models/Customer';
 import { IAddress } from '../types';

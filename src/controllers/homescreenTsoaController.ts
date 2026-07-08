@@ -7,7 +7,7 @@ import {
   Tags,
   Response,
   SuccessResponse,
-} from 'tsoa';
+} from '@tsoa/runtime';
 import { HomescreenController } from './homescreenController';
 
 /**

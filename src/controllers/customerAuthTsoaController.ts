@@ -12,7 +12,7 @@ import {
   Response,
   SuccessResponse,
   Header,
-} from 'tsoa';
+} from '@tsoa/runtime';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import Customer, { ICustomer } from '../models/Customer';

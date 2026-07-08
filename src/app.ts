@@ -35,6 +35,7 @@ import { queryProtection } from './middleware/queryInjectionProtection';
 import { auditLogger } from './middleware/auditLogger';
 import { loginLimiter } from './middleware/storeLimiter';
 import { shopifyWebhookBodyParser } from './middleware/shopifyWebhookAuth';
+import { assertTsoaRoutesMounted } from './utils/tsoaRouteReadiness';
 
 const app: Application = express();
 
@@ -298,14 +299,10 @@ app.use(`/api/${apiConfig.version}/notifications`, pushNotificationRoutes);
 app.use(`/api/${apiConfig.version}/customer/notifications`, pushNotificationRoutes);
 
 // tsoa generated routes (auto-generated, includes controllers with decorators)
-try {
-  const { RegisterRoutes } = require('./generated/routes');
-  RegisterRoutes(app);
-  console.log('✅ TSOA routes registered successfully');
-} catch (error: any) {
-  console.error('❌ Failed to load TSOA routes:', error.message);
-  console.error(error.stack);
-}
+const { RegisterRoutes } = require('./generated/routes');
+RegisterRoutes(app);
+assertTsoaRoutesMounted(app);
+console.log('✅ TSOA routes registered successfully');
 
 // OpenAPI/Swagger documentation
 try {

@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Path, Post, Put, Request, Route, Security, Tags, Response } from 'tsoa';
+import { Body, Controller, Delete, Get, Path, Post, Put, Request, Route, Security, Tags, Response } from '@tsoa/runtime';
 import User from '../models/User';
 import { IAddress } from '../types';
 
