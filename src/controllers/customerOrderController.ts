@@ -501,53 +501,58 @@ export const cancelOrder = async (req: CustomerRequest, res: Response): Promise<
       return;
     }
 
-    const appliedRestores = [];
-    for (const item of inventoryRestores) {
-      const restoreResult = await Product.updateOne(
-        { _id: item.productId, storeId: item.storeId },
-        { $inc: { 'inventoryTracking.totalQuantity': item.quantity } }
-      );
-
-      if (restoreResult.matchedCount !== 1) {
-        for (const restoredItem of appliedRestores.reverse()) {
-          await Product.updateOne(
-            { _id: restoredItem.productId, storeId: restoredItem.storeId },
-            { $inc: { 'inventoryTracking.totalQuantity': -restoredItem.quantity } }
+    const restoreFailureMessage = 'Unable to verify product ownership for inventory restore';
+    const session = await mongoose.startSession();
+    try {
+      await session.withTransaction(async () => {
+        for (const item of inventoryRestores) {
+          const restoreResult = await Product.updateOne(
+            { _id: item.productId, storeId: item.storeId },
+            { $inc: { 'inventoryTracking.totalQuantity': item.quantity } },
+            { session }
           );
+
+          if (restoreResult.matchedCount !== 1) {
+            throw new Error(restoreFailureMessage);
+          }
         }
 
+        order.$session(session);
+        (order as any).cancellationReason = reason || '';
+        (order as any).cancelledAt = new Date();
+
+        // Update order status
+        if (typeof order.updateMobileStatus === 'function') {
+          await order.updateMobileStatus('cancelled', reason);
+        } else {
+          // Fallback if method doesn't exist
+          order.mobileStatus = {
+            ...order.mobileStatus,
+            current: 'cancelled',
+            history: [
+              ...(order.mobileStatus?.history || []),
+              {
+                status: 'cancelled',
+                timestamp: new Date(),
+                note: reason
+              }
+            ]
+          };
+          await order.save();
+        }
+      });
+    } catch (error) {
+      if (error instanceof Error && error.message === restoreFailureMessage) {
         res.status(400).json({
           status: 'error',
-          message: 'Unable to verify product ownership for inventory restore'
+          message: restoreFailureMessage
         });
         return;
       }
-
-      appliedRestores.push(item);
-    }
-
-    // Save cancellation reason to dedicated field
-    (order as any).cancellationReason = reason || '';
-    (order as any).cancelledAt = new Date();
-
-    // Update order status
-    if (typeof order.updateMobileStatus === 'function') {
-      await order.updateMobileStatus('cancelled', reason);
-    } else {
-      // Fallback if method doesn't exist
-      order.mobileStatus = {
-        ...order.mobileStatus,
-        current: 'cancelled',
-        history: [
-          ...(order.mobileStatus?.history || []),
-          {
-            status: 'cancelled',
-            timestamp: new Date(),
-            note: reason
-          }
-        ]
-      };
-      await order.save();
+      throw error;
+    } finally {
+      order.$session(null);
+      await session.endSession();
     }
 
     // Send push notification (async, don't wait)

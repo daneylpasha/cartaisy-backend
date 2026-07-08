@@ -508,32 +508,38 @@ export const cancelOrder = async (req: AuthenticatedRequest, res: Response): Pro
       return;
     }
 
-    const appliedRestores = [];
-    for (const item of inventoryRestores) {
-      const restoreResult = await Product.updateOne(
-        { _id: item.productId, storeId: item.storeId },
-        { $inc: { 'inventoryTracking.totalQuantity': item.quantity } }
-      );
-
-      if (restoreResult.matchedCount !== 1) {
-        for (const restoredItem of appliedRestores.reverse()) {
-          await Product.updateOne(
-            { _id: restoredItem.productId, storeId: restoredItem.storeId },
-            { $inc: { 'inventoryTracking.totalQuantity': -restoredItem.quantity } }
+    const restoreFailureMessage = 'Unable to verify product ownership for inventory restore';
+    const session = await mongoose.startSession();
+    try {
+      await session.withTransaction(async () => {
+        for (const item of inventoryRestores) {
+          const restoreResult = await Product.updateOne(
+            { _id: item.productId, storeId: item.storeId },
+            { $inc: { 'inventoryTracking.totalQuantity': item.quantity } },
+            { session }
           );
+
+          if (restoreResult.matchedCount !== 1) {
+            throw new Error(restoreFailureMessage);
+          }
         }
 
+        order.$session(session);
+        await order.updateMobileStatus('cancelled', reason);
+      });
+    } catch (error) {
+      if (error instanceof Error && error.message === restoreFailureMessage) {
         res.status(400).json({
           success: false,
-          message: 'Unable to verify product ownership for inventory restore'
+          message: restoreFailureMessage
         });
         return;
       }
-
-      appliedRestores.push(item);
+      throw error;
+    } finally {
+      order.$session(null);
+      await session.endSession();
     }
-
-    await order.updateMobileStatus('cancelled', reason);
 
     // Send cancellation email via Resend (async, don't wait)
     setImmediate(() => {
