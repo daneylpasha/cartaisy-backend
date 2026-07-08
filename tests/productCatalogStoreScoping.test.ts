@@ -1,8 +1,10 @@
 import express from 'express';
+import mongoose from 'mongoose';
 import request from 'supertest';
 import Product from '../src/models/Product';
 import ProductCategory from '../src/models/ProductCategory';
 import ProductView from '../src/models/ProductView';
+import SearchHistory from '../src/models/SearchHistory';
 import Store from '../src/models/Store';
 import Customer from '../src/models/Customer';
 import productRoutes from '../src/routes/productRoutes';
@@ -56,8 +58,12 @@ const productFixture = (storeId: unknown, overrides: Record<string, unknown> = {
   ...overrides,
 });
 
-const productViewFixture = (customerId: string, productId: string) => ({
-  customer: customerId,
+const productViewFixture = (
+  ownerId: string,
+  productId: string,
+  ownerKey: 'customer' | 'user' = 'customer'
+) => ({
+  [ownerKey]: ownerId,
   product: productId,
   viewedAt: new Date(),
   session: {
@@ -220,6 +226,13 @@ describe('legacy local product catalog store scoping', () => {
       'Store A Search Shirt',
     ]);
     expect(searchResponse.body.data.pagination.totalProducts).toBe(2);
+    const searchRecord = await SearchHistory.findOne({ storeId: storeAId, searchType: 'text' }).lean();
+    expect(searchRecord).toMatchObject({
+      query: 'search shirt',
+      resultsCount: 2,
+      hasResults: true,
+    });
+    expect(searchRecord?.storeId?.toString()).toBe(storeAId);
 
     const featuredResponse = await request(app).get('/products/featured').set('X-Store-ID', storeAId);
     expect(featuredResponse.status).toBe(200);
@@ -314,6 +327,33 @@ describe('legacy local product catalog store scoping', () => {
   });
 
   it('store-scopes the legacy local product recommendation helper', async () => {
+    const userId = new mongoose.Types.ObjectId();
+    await ProductView.create([
+      productViewFixture(userId.toString(), productA._id.toString(), 'user'),
+      productViewFixture(userId.toString(), relatedA._id.toString(), 'user'),
+    ]);
+
+    const oddLimitRecommendations = await generateProductRecommendations(productA._id.toString(), userId.toString(), 5, storeAId);
+    expect(oddLimitRecommendations.length).toBeGreaterThan(0);
+    expect(oddLimitRecommendations.length).toBeLessThanOrEqual(5);
+    expect(oddLimitRecommendations.every(product => product.storeId.toString() === storeAId)).toBe(true);
+
+    const zeroLimitRecommendations = await generateProductRecommendations(productA._id.toString(), undefined, 0, storeAId);
+    expect(zeroLimitRecommendations).toHaveLength(1);
+    expect(zeroLimitRecommendations.every(product => product.storeId.toString() === storeAId)).toBe(true);
+
+    const uncategorizedProduct = await Product.create(productFixture(storeAId, {
+      title: 'Store A Uncategorized Shirt',
+      handle: 'store-a-uncategorized-shirt',
+      shopifyProductId: 'store-a-uncategorized-shirt',
+      seo: { title: 'Store A Uncategorized Shirt', slug: 'store-a-uncategorized-shirt', keywords: ['uncategorized'] },
+      vendor: 'Uncategorized Vendor',
+      tags: ['uncategorized'],
+    }));
+    const uncategorizedRecommendations = await generateProductRecommendations(uncategorizedProduct._id.toString(), undefined, 5, storeAId);
+    expect(uncategorizedRecommendations.length).toBeGreaterThan(0);
+    expect(uncategorizedRecommendations.every(product => product.storeId.toString() === storeAId)).toBe(true);
+
     const recommendations = await generateProductRecommendations(productA._id.toString(), undefined, 5, storeAId);
 
     expect(recommendations.map(product => product.title)).toEqual(['Store A Related Shirt']);

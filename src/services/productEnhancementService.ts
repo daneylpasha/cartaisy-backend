@@ -63,6 +63,20 @@ interface ProductAnalytics {
   bounceRate: number;
 }
 
+const DEFAULT_RECOMMENDATION_LIMIT = 8;
+
+const normalizeRecommendationLimit = (limit: number): number => {
+  if (!Number.isFinite(limit)) {
+    return DEFAULT_RECOMMENDATION_LIMIT;
+  }
+
+  return Math.max(1, Math.floor(limit));
+};
+
+const getProductCategoryId = (product: any): mongoose.Types.ObjectId | null => {
+  return product.category?._id || product.category || null;
+};
+
 /**
  * Enhance Shopify product data with mobile-specific features
  */
@@ -164,6 +178,7 @@ export const generateProductRecommendations = async (
     }
 
     const storeObjectId = new mongoose.Types.ObjectId(storeId);
+    const normalizedLimit = normalizeRecommendationLimit(limit);
 
     const baseProduct = await Product.findOne({ _id: productId, storeId: storeObjectId })
       .populate('category');
@@ -176,19 +191,24 @@ export const generateProductRecommendations = async (
 
     // 1. Collaborative Filtering (if user provided)
     if (userId) {
-      const userBasedRecs = await getUserBasedRecommendations(userId, productId, limit / 2, storeObjectId);
+      const userBasedLimit = Math.max(1, Math.floor(normalizedLimit / 2));
+      const userBasedRecs = await getUserBasedRecommendations(userId, productId, userBasedLimit, storeObjectId);
       recommendations.push(...userBasedRecs);
     }
 
     // 2. Content-Based Filtering
-    const contentBasedRecs = await getContentBasedRecommendations(baseProduct, limit - recommendations.length, storeObjectId);
-    recommendations.push(...contentBasedRecs);
+    const contentBasedLimit = normalizedLimit - recommendations.length;
+    if (contentBasedLimit > 0) {
+      const contentBasedRecs = await getContentBasedRecommendations(baseProduct, contentBasedLimit, storeObjectId);
+      recommendations.push(...contentBasedRecs);
+    }
 
     // 3. Popularity-Based Fallback
-    if (recommendations.length < limit) {
+    if (recommendations.length < normalizedLimit) {
+      const baseCategoryId = getProductCategoryId(baseProduct);
       const popularRecs = await getPopularityBasedRecommendations(
-        (baseProduct.category as any)?._id?.toString() || '',
-        limit - recommendations.length,
+        baseCategoryId?.toString() || null,
+        normalizedLimit - recommendations.length,
         [
           baseProduct._id.toString(),
           ...recommendations.map(r => r._id?.toString()).filter(Boolean)
@@ -201,7 +221,7 @@ export const generateProductRecommendations = async (
     // 4. Score and rank recommendations
     const scoredRecommendations = await scoreRecommendations(recommendations, baseProduct, userId);
 
-    return scoredRecommendations.slice(0, limit);
+    return scoredRecommendations.slice(0, normalizedLimit);
   } catch (error) {
     console.error('Error generating product recommendations:', error);
     throw error;
@@ -726,6 +746,10 @@ async function getUserBasedRecommendations(
   limit: number,
   storeId: mongoose.Types.ObjectId
 ): Promise<any[]> {
+  if (limit < 1) {
+    return [];
+  }
+
   // Find users who viewed/bought similar products
   const similarUsers = await ProductView.aggregate([
     { $match: { product: new mongoose.Types.ObjectId(productId) } },
@@ -757,27 +781,47 @@ async function getContentBasedRecommendations(
   limit: number,
   storeId: mongoose.Types.ObjectId
 ): Promise<any[]> {
+  if (limit < 1) {
+    return [];
+  }
+
+  const categoryId = getProductCategoryId(baseProduct);
+  const tags = baseProduct.tags || [];
+  const matchConditions: any[] = [];
+  const scoreTerms: any[] = [];
+
+  if (categoryId) {
+    matchConditions.push({ category: categoryId });
+    scoreTerms.push({ $cond: [{ $eq: ['$category', categoryId] }, 3, 0] });
+  }
+
+  if (baseProduct.vendor) {
+    matchConditions.push({ vendor: baseProduct.vendor });
+    scoreTerms.push({ $cond: [{ $eq: ['$vendor', baseProduct.vendor] }, 2, 0] });
+  }
+
+  if (tags.length > 0) {
+    matchConditions.push({ tags: { $in: tags } });
+    scoreTerms.push({ $size: { $setIntersection: ['$tags', tags] } });
+  }
+
+  if (matchConditions.length === 0) {
+    return [];
+  }
+
   const recommendations = await Product.aggregate([
     {
       $match: {
         _id: { $ne: baseProduct._id },
         storeId,
         status: 'active',
-        $or: [
-          { category: baseProduct.category._id },
-          { vendor: baseProduct.vendor },
-          { tags: { $in: baseProduct.tags || [] } }
-        ]
+        $or: matchConditions
       }
     },
     {
       $addFields: {
         similarityScore: {
-          $sum: [
-            { $cond: [{ $eq: ['$category', baseProduct.category._id] }, 3, 0] },
-            { $cond: [{ $eq: ['$vendor', baseProduct.vendor] }, 2, 0] },
-            { $size: { $setIntersection: ['$tags', baseProduct.tags || []] } }
-          ]
+          $sum: scoreTerms
         }
       }
     },
@@ -789,16 +833,27 @@ async function getContentBasedRecommendations(
 }
 
 async function getPopularityBasedRecommendations(
-  categoryId: string,
+  categoryId: string | null,
   limit: number,
   excludeIds: string[],
   storeId: mongoose.Types.ObjectId
 ): Promise<any[]> {
-  const recommendations = await Product.find({
+  if (limit < 1) {
+    return [];
+  }
+
+  const filter: any = {
     storeId,
-    category: categoryId,
     status: 'active',
     _id: { $nin: excludeIds.map(id => new mongoose.Types.ObjectId(id)) }
+  };
+
+  if (categoryId) {
+    filter.category = categoryId;
+  }
+
+  const recommendations = await Product.find({
+    ...filter
   })
     .sort({ 'analytics.viewCount': -1, 'reviews.averageRating': -1 })
     .limit(limit);

@@ -355,35 +355,33 @@ export const searchProducts = async (req: AuthenticatedRequest, res: Response): 
     // Save search history
     const userId = req.user?._id;
     const sessionId = req.sessionID || 'anonymous';
+    const searchHistorySortKey = (() => {
+      switch (sortBy) {
+        case 'price_low':
+        case 'price_high':
+          return 'PRICE';
+        case 'popular':
+          return 'BEST_SELLING';
+        default:
+          return 'RELEVANCE';
+      }
+    })();
     
     await SearchHistory.create({
       storeId,
-      user: userId,
+      userId: userId ? new mongoose.Types.ObjectId(userId.toString()) : undefined,
       sessionId,
       query: query as string,
-      normalizedQuery: (query as string).toLowerCase().trim(),
-      queryType: 'text',
-      source: 'search_bar',
+      searchType: 'text',
+      resultsCount: total,
+      hasResults: total > 0,
       filters: {
-        category,
-        priceMin: priceMin ? parseFloat(priceMin as string) : undefined,
-        priceMax: priceMax ? parseFloat(priceMax as string) : undefined,
-        brand,
-        rating: rating ? parseFloat(rating as string) : undefined,
-        inStock: inStock === 'true',
-        sortBy
+        sortKey: searchHistorySortKey,
+        minPrice: priceMin ? parseFloat(priceMin as string) : undefined,
+        maxPrice: priceMax ? parseFloat(priceMax as string) : undefined,
+        vendor: brand
       },
-      results: {
-        totalResults: total,
-        resultsShown: products.length,
-        hasResults: products.length > 0,
-        topResultId: products.length > 0 ? products[0]._id : undefined,
-        clickedResults: []
-      },
-      device: {
-        platform: req.headers['user-agent']?.includes('Mobile') ? 'mobile' : 'desktop',
-        isMobile: req.headers['user-agent']?.includes('Mobile') || false
-      }
+      userAgent: req.headers['user-agent']
     });
 
     return res.json({
