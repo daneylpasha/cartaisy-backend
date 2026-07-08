@@ -73,13 +73,42 @@ the script.
    Verify with `db.products.getIndexes()` that no single-field **unique** index remains on `shopifyProductId`, `handle`, or `seo.slug`. The non-unique single-field lookup indexes declared by the schema are expected and should stay.
 6. **Restart the app** (or run `Product.syncIndexes()`) so index state matches the schema.
 7. **Verify** (release-gate evidence — record the outputs):
-   - `db.products.countDocuments({ storeId: { $exists: false } })` returns `0`.
+   - Storeless product count returns `0`:
+     ```
+     db.products.countDocuments({ storeId: { $exists: false } })
+     ```
    - Per-store product counts match the dry-run before-picture (legacy count moved onto the target store, no other store's count changed):
      ```
-     db.products.aggregate([{ $group: { _id: "$storeId", count: { $sum: 1 } } }])
+     db.products.aggregate([
+       { $group: { _id: "$storeId", count: { $sum: 1 } } },
+       { $sort: { count: -1 } }
+     ])
      ```
      (also printed by the script as "Product counts by store" on any run, including `--dry-run`.)
-   - `db.products.getIndexes()` shows the three compound unique indexes — `{ storeId: 1, shopifyProductId: 1 }`, `{ storeId: 1, handle: 1 }`, `{ storeId: 1, "seo.slug": 1 }` — and no single-field unique index on those fields (the script prints this verdict too).
+   - Store-scoped compound unique product indexes are present:
+     ```
+     db.products.getIndexes().filter(index =>
+       index.unique === true &&
+       [
+         JSON.stringify({ storeId: 1, shopifyProductId: 1 }),
+         JSON.stringify({ storeId: 1, handle: 1 }),
+         JSON.stringify({ storeId: 1, "seo.slug": 1 })
+       ].includes(JSON.stringify(index.key))
+     )
+     ```
+     Expected: three indexes.
+   - Legacy global unique product indexes are absent:
+     ```
+     db.products.getIndexes().filter(index =>
+       index.unique === true &&
+       [
+         JSON.stringify({ shopifyProductId: 1 }),
+         JSON.stringify({ handle: 1 }),
+         JSON.stringify({ "seo.slug": 1 })
+       ].includes(JSON.stringify(index.key))
+     )
+     ```
+     Expected: `[]`. Non-unique single-field lookup indexes on those fields are expected and should stay.
    - A product webhook for the store updates the existing product rather than creating a duplicate.
 8. **Update the "Execution status" table** at the top of this document and check off the gates in `docs/RELEASE_CHECKLIST.md`.
 
