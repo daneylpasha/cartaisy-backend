@@ -414,6 +414,69 @@ describe('local cart and order product ownership checks', () => {
     expect(reloadedOrder?.mobileStatus.current).toBe('cancelled');
   });
 
+  it('rejects customer cancellation before status change when order store conflicts with product store', async () => {
+    await Product.updateOne(
+      { _id: productB._id },
+      { $set: { 'inventoryTracking.totalQuantity': 3 } }
+    );
+
+    const order = await Order.create({
+      storeId: storeAId,
+      orderNumber: `LEGACY-${Math.random().toString(36).slice(2)}`,
+      customer: customerA._id,
+      email: customerA.email,
+      lineItems: [{
+        productId: productB._id,
+        quantity: 2,
+        price: productB.price,
+        title: productB.title,
+        sku: '',
+      }],
+      subtotalPrice: productB.price * 2,
+      totalTax: 0,
+      totalPrice: productB.price * 2,
+      totalItems: 2,
+      currency: 'USD',
+      billingAddress: {
+        firstName: 'Test',
+        lastName: 'Customer',
+        address1: '123 Test St',
+        city: 'Test City',
+        province: 'CA',
+        country: 'US',
+        zip: '94105',
+      },
+      shippingAddress: {
+        firstName: 'Test',
+        lastName: 'Customer',
+        address1: '123 Test St',
+        city: 'Test City',
+        province: 'CA',
+        country: 'US',
+        zip: '94105',
+      },
+      shipping: { method: 'Standard', cost: 0 },
+    });
+
+    const response = await request(app)
+      .post(`/customer/orders/${order._id}/cancel`)
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send({ reason: 'Changed mind' });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toMatchObject({
+      status: 'error',
+      message: 'Unable to verify product ownership for inventory restore',
+    });
+
+    const [reloadedProductB, reloadedOrder] = await Promise.all([
+      Product.findById(productB._id).lean(),
+      Order.findById(order._id).lean(),
+    ]);
+    expect(reloadedProductB?.inventoryTracking.totalQuantity).toBe(3);
+    expect(reloadedOrder?.mobileStatus.current).not.toBe('cancelled');
+  });
+
   it('derives product store before legacy user-order cancellation inventory restore', async () => {
     await Product.updateOne(
       { _id: productA._id },
@@ -489,5 +552,80 @@ describe('local cart and order product ownership checks', () => {
     expect(reloadedProductA?.inventoryTracking.totalQuantity).toBe(5);
     expect(reloadedProductB?.inventoryTracking.totalQuantity).toBe(5);
     expect(reloadedOrder?.mobileStatus.current).toBe('cancelled');
+  });
+
+  it('rejects legacy user-order cancellation before status change when order store conflicts with product store', async () => {
+    await Product.updateOne(
+      { _id: productA._id },
+      { $set: { 'inventoryTracking.totalQuantity': 3 } }
+    );
+
+    const order = await Order.create({
+      storeId: storeBId,
+      orderNumber: `LEGACY-${Math.random().toString(36).slice(2)}`,
+      user: customerA._id,
+      email: customerA.email,
+      lineItems: [{
+        productId: productA._id,
+        quantity: 2,
+        price: productA.price,
+        title: productA.title,
+        sku: '',
+      }],
+      subtotalPrice: productA.price * 2,
+      totalTax: 0,
+      totalPrice: productA.price * 2,
+      totalItems: 2,
+      currency: 'USD',
+      billingAddress: {
+        firstName: 'Test',
+        lastName: 'Customer',
+        address1: '123 Test St',
+        city: 'Test City',
+        province: 'CA',
+        country: 'US',
+        zip: '94105',
+      },
+      shippingAddress: {
+        firstName: 'Test',
+        lastName: 'Customer',
+        address1: '123 Test St',
+        city: 'Test City',
+        province: 'CA',
+        country: 'US',
+        zip: '94105',
+      },
+      shipping: { method: 'Standard', cost: 0 },
+    });
+
+    const response: any = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn().mockReturnThis(),
+    };
+
+    await cancelLegacyOrder(
+      {
+        params: { orderId: order._id.toString() },
+        body: { reason: 'Changed mind' },
+        user: {
+          _id: customerA._id,
+          storeId: storeBId,
+        },
+      } as any,
+      response
+    );
+
+    expect(response.status).toHaveBeenCalledWith(400);
+    expect(response.json).toHaveBeenCalledWith({
+      success: false,
+      message: 'Unable to verify product ownership for inventory restore',
+    });
+
+    const [reloadedProductA, reloadedOrder] = await Promise.all([
+      Product.findById(productA._id).lean(),
+      Order.findById(order._id).lean(),
+    ]);
+    expect(reloadedProductA?.inventoryTracking.totalQuantity).toBe(3);
+    expect(reloadedOrder?.mobileStatus.current).not.toBe('cancelled');
   });
 });

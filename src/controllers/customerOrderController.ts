@@ -462,13 +462,18 @@ export const cancelOrder = async (req: CustomerRequest, res: Response): Promise<
         continue;
       }
 
-      let restoreStoreId = order.storeId;
-      if (!restoreStoreId) {
-        const product = await Product.findById(item.productId).select('storeId').lean();
-        restoreStoreId = product?.storeId;
-      }
+      const product = await Product.findById(item.productId).select('storeId').lean();
+      const restoreStoreId = product?.storeId;
 
       if (!restoreStoreId) {
+        res.status(400).json({
+          status: 'error',
+          message: 'Unable to verify product ownership for inventory restore'
+        });
+        return;
+      }
+
+      if (order.storeId && restoreStoreId.toString() !== order.storeId.toString()) {
         res.status(400).json({
           status: 'error',
           message: 'Unable to verify product ownership for inventory restore'
@@ -481,6 +486,23 @@ export const cancelOrder = async (req: CustomerRequest, res: Response): Promise<
         storeId: restoreStoreId,
         quantity: item.quantity
       });
+    }
+
+    // Restore inventory before marking the order cancelled so zero-match
+    // restores cannot produce a successful cancellation response.
+    for (const item of inventoryRestores) {
+      const result = await Product.updateOne(
+        { _id: item.productId, storeId: item.storeId },
+        { $inc: { 'inventoryTracking.totalQuantity': item.quantity } }
+      );
+
+      if (result.matchedCount !== 1) {
+        res.status(400).json({
+          status: 'error',
+          message: 'Unable to verify product ownership for inventory restore'
+        });
+        return;
+      }
     }
 
     // Save cancellation reason to dedicated field
@@ -505,14 +527,6 @@ export const cancelOrder = async (req: CustomerRequest, res: Response): Promise<
         ]
       };
       await order.save();
-    }
-
-    // Restore inventory
-    for (const item of inventoryRestores) {
-      await Product.updateOne(
-        { _id: item.productId, storeId: item.storeId },
-        { $inc: { 'inventoryTracking.totalQuantity': item.quantity } }
-      );
     }
 
     // Send push notification (async, don't wait)

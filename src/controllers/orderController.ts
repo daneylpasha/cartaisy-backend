@@ -469,13 +469,18 @@ export const cancelOrder = async (req: AuthenticatedRequest, res: Response): Pro
         continue;
       }
 
-      let restoreStoreId = order.storeId;
-      if (!restoreStoreId) {
-        const product = await Product.findById(item.productId).select('storeId').lean();
-        restoreStoreId = product?.storeId;
-      }
+      const product = await Product.findById(item.productId).select('storeId').lean();
+      const restoreStoreId = product?.storeId;
 
       if (!restoreStoreId) {
+        res.status(400).json({
+          success: false,
+          message: 'Unable to verify product ownership for inventory restore'
+        });
+        return;
+      }
+
+      if (order.storeId && restoreStoreId.toString() !== order.storeId.toString()) {
         res.status(400).json({
           success: false,
           message: 'Unable to verify product ownership for inventory restore'
@@ -490,15 +495,24 @@ export const cancelOrder = async (req: AuthenticatedRequest, res: Response): Pro
       });
     }
 
-    await order.updateMobileStatus('cancelled', reason);
-
-    // Restore inventory
+    // Restore inventory before marking the order cancelled so zero-match
+    // restores cannot produce a successful cancellation response.
     for (const item of inventoryRestores) {
-      await Product.updateOne(
+      const result = await Product.updateOne(
         { _id: item.productId, storeId: item.storeId },
         { $inc: { 'inventoryTracking.totalQuantity': item.quantity } }
       );
+
+      if (result.matchedCount !== 1) {
+        res.status(400).json({
+          success: false,
+          message: 'Unable to verify product ownership for inventory restore'
+        });
+        return;
+      }
     }
+
+    await order.updateMobileStatus('cancelled', reason);
 
     // Send cancellation email via Resend (async, don't wait)
     setImmediate(() => {
