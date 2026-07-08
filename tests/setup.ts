@@ -1,12 +1,14 @@
 import mongoose from 'mongoose';
-import { MongoMemoryServer } from 'mongodb-memory-server';
+import { MongoMemoryReplSet } from 'mongodb-memory-server';
 
-let mongod: MongoMemoryServer;
+let mongod: MongoMemoryReplSet;
 
 // Setup test database before all tests
 beforeAll(async () => {
-  // Start in-memory MongoDB instance for testing
-  mongod = await MongoMemoryServer.create();
+  // Start in-memory MongoDB replica set for transaction support
+  mongod = await MongoMemoryReplSet.create({
+    replSet: { count: 1, storageEngine: 'wiredTiger' }
+  });
   const uri = mongod.getUri();
   
   await mongoose.connect(uri, {

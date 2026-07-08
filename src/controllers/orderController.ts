@@ -6,6 +6,7 @@ import Product, { IProductDocument } from '../models/Product';
 import User from '../models/User';
 import { AuthenticatedRequest } from '../types';
 import { ShopifyOrderSyncService } from '../services/shopifyOrderSyncService';
+import { findStoreProductById } from '../utils/productOwnership';
 
 export const getUserOrders = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
@@ -239,9 +240,18 @@ export const createOrder = async (req: AuthenticatedRequest, res: Response): Pro
     // Validate and process line items
     const processedLineItems = [];
     let subtotalPrice = 0;
+    const storeId = req.storeId || req.user?.storeId;
+
+    if (!storeId) {
+      res.status(400).json({
+        success: false,
+        message: 'Store context is required'
+      });
+      return;
+    }
 
     for (const item of lineItems) {
-      const product = await Product.findById(item.productId) as IProductDocument;
+      const product = await findStoreProductById(item.productId, storeId.toString()) as IProductDocument;
       if (!product || product.status !== 'active') {
         res.status(400).json({
           success: false,
@@ -280,7 +290,7 @@ export const createOrder = async (req: AuthenticatedRequest, res: Response): Pro
 
     // Create order
     const order = new Order({
-      storeId: req.storeId || req.user?.storeId,
+      storeId,
       user: userId,
       email: req.user?.email,
       lineItems: processedLineItems,
@@ -308,9 +318,10 @@ export const createOrder = async (req: AuthenticatedRequest, res: Response): Pro
 
     // Update product inventory
     for (const item of processedLineItems) {
-      await Product.findByIdAndUpdate(item.productId, {
-        $inc: { 'inventoryTracking.totalQuantity': -item.quantity }
-      });
+      await Product.updateOne(
+        { _id: item.productId, storeId },
+        { $inc: { 'inventoryTracking.totalQuantity': -item.quantity } }
+      );
     }
 
     // Send order confirmation notification (legacy)
@@ -452,13 +463,82 @@ export const cancelOrder = async (req: AuthenticatedRequest, res: Response): Pro
       return;
     }
 
-    await order.updateMobileStatus('cancelled', reason);
-
-    // Restore inventory
+    const inventoryRestores = [];
     for (const item of order.lineItems) {
-      await Product.findByIdAndUpdate(item.productId, {
-        $inc: { 'inventoryTracking.totalQuantity': item.quantity }
+      if (!item.productId) {
+        continue;
+      }
+
+      const product = await Product.findById(item.productId).select('storeId').lean();
+      const restoreStoreId = product?.storeId;
+
+      if (!restoreStoreId) {
+        res.status(400).json({
+          success: false,
+          message: 'Unable to verify product ownership for inventory restore'
+        });
+        return;
+      }
+
+      if (order.storeId && restoreStoreId.toString() !== order.storeId.toString()) {
+        res.status(400).json({
+          success: false,
+          message: 'Unable to verify product ownership for inventory restore'
+        });
+        return;
+      }
+
+      inventoryRestores.push({
+        productId: item.productId,
+        storeId: restoreStoreId,
+        quantity: item.quantity
       });
+    }
+
+    const restoreTargetsExist = await Promise.all(
+      inventoryRestores.map(item =>
+        Product.exists({ _id: item.productId, storeId: item.storeId })
+      )
+    );
+    if (restoreTargetsExist.some(target => !target)) {
+      res.status(400).json({
+        success: false,
+        message: 'Unable to verify product ownership for inventory restore'
+      });
+      return;
+    }
+
+    const restoreFailureMessage = 'Unable to verify product ownership for inventory restore';
+    const session = await mongoose.startSession();
+    try {
+      await session.withTransaction(async () => {
+        for (const item of inventoryRestores) {
+          const restoreResult = await Product.updateOne(
+            { _id: item.productId, storeId: item.storeId },
+            { $inc: { 'inventoryTracking.totalQuantity': item.quantity } },
+            { session }
+          );
+
+          if (restoreResult.matchedCount !== 1) {
+            throw new Error(restoreFailureMessage);
+          }
+        }
+
+        order.$session(session);
+        await order.updateMobileStatus('cancelled', reason);
+      });
+    } catch (error) {
+      if (error instanceof Error && error.message === restoreFailureMessage) {
+        res.status(400).json({
+          success: false,
+          message: restoreFailureMessage
+        });
+        return;
+      }
+      throw error;
+    } finally {
+      order.$session(null);
+      await session.endSession();
     }
 
     // Send cancellation email via Resend (async, don't wait)

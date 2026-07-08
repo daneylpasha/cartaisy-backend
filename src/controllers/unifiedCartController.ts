@@ -2,8 +2,8 @@ import { Request, Response } from 'express';
 import mongoose, { ObjectId } from 'mongoose';
 import Customer from '../models/Customer';
 import GuestSession from '../models/GuestSession';
-import Product from '../models/Product';
 import { UnifiedCartUser } from '../middleware/unifiedCartAuth';
+import { findStoreProductById } from '../utils/productOwnership';
 
 // Type augmentation for Express Request (to complement express.d.ts)
 declare module 'express-serve-static-core' {
@@ -70,6 +70,7 @@ async function getCartForUser(
     // Guest user
     const session = await GuestSession.findOne({
       sessionId: cartUser.userId,
+      storeId: cartUser.storeId,
     }).populate({
       path: 'cart.items.product',
       select: 'title price images handle variants status',
@@ -155,8 +156,8 @@ export const addToCart = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // Validate product exists
-    const product = await Product.findById(productId);
+    // Validate product exists in the trusted cart store context.
+    const product = await findStoreProductById(productId, cartUser.storeId);
     if (!product) {
       res.status(404).json({
         status: 'error',
@@ -224,6 +225,7 @@ export const addToCart = async (req: Request, res: Response): Promise<void> => {
       // Guest cart
       const session = await GuestSession.findOne({
         sessionId: cartUser.userId,
+        storeId: cartUser.storeId,
       });
 
       if (!session) {
@@ -343,6 +345,7 @@ export const updateCartItem = async (
     } else {
       const session = await GuestSession.findOne({
         sessionId: cartUser.userId,
+        storeId: cartUser.storeId,
       });
 
       if (!session) {
@@ -450,6 +453,7 @@ export const removeFromCart = async (
     } else {
       const session = await GuestSession.findOne({
         sessionId: cartUser.userId,
+        storeId: cartUser.storeId,
       });
 
       if (!session) {
@@ -532,6 +536,7 @@ export const clearCart = async (req: Request, res: Response): Promise<void> => {
     } else {
       const session = await GuestSession.findOne({
         sessionId: cartUser.userId,
+        storeId: cartUser.storeId,
       });
 
       if (!session) {
@@ -617,6 +622,7 @@ export const saveGuestCheckoutInfo = async (
 
     const session = await GuestSession.findOne({
       sessionId: cartUser.userId,
+      storeId: cartUser.storeId,
     });
 
     if (!session) {

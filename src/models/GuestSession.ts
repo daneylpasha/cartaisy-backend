@@ -221,6 +221,11 @@ GuestSessionSchema.statics.findOrCreateSession = async function (
       await existingSession.save();
       return { session: existingSession, isNew: false };
     }
+
+    const sessionInAnotherStore = await this.exists({ sessionId });
+    if (sessionInAnotherStore) {
+      sessionId = undefined;
+    }
   }
 
   // Create new session
