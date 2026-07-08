@@ -41,22 +41,27 @@ Known gap: tests exist, but they do not prove every tenant, Shopify, checkout, w
 
 ## CI behavior if known
 
-Current state: `.github/workflows/ci.yml` runs on pushes and pull requests targeting `main` and `develop`.
+Current state: `.github/workflows/ci.yml` runs on pushes and pull requests targeting `main` and `develop`, and can also be run manually with `workflow_dispatch`.
 
-The workflow includes:
+The required backend validation path includes:
 
-- `npm ci`
-- `npm run type-check`
-- `npm audit --audit-level=moderate` with `continue-on-error: true`
-- Jest tests with MongoDB and Redis services, excluding `tests/shopify.integration.test.ts`
-- coverage upload to Codecov
-- `npm run build` on Node 18 and Node 20
-- Docker image build and a health endpoint check
-- Trivy and Snyk security scans
-- API contract testing with Newman, marked `continue-on-error: true`
-- dependency and license checks
+- `npm ci` before package-script checks.
+- `npm run type-check`.
+- `npm test -- --runInBand --watchman=false --testPathIgnorePatterns tests/shopify.integration.test.ts`.
+- `npm run test:coverage -- --runInBand --watchman=false --testPathIgnorePatterns tests/shopify.integration.test.ts`.
+- `npm run build` on Node 18 and Node 20.
 
-Known gap: the existence of workflow files does not guarantee all external services, secrets, artifacts, or checks are currently healthy.
+The workflow also includes Docker image build verification, Gitleaks/Trivy/Snyk security scanning, best-effort Codecov upload, best-effort Newman API contract testing, and dependency/license reporting. Checks marked `continue-on-error: true` are advisory and should not be treated as proof that the related area is healthy.
+
+Startup reliability expectations:
+
+- Service container images use literal tags such as `mongo:7.0` and `redis:7-alpine`; GitHub Actions does not allow the `env` context in those `image` fields.
+- Current maintained action majors are used for checkout, Node setup, artifact upload, CodeQL SARIF upload, Codecov, Docker Buildx/build-push, and Gitleaks. Retired or obsolete action majors such as `actions/upload-artifact@v3`, `actions/upload-artifact@v4`, `github/codeql-action/upload-sarif@v2`, and `github/codeql-action/upload-sarif@v3` must not be used.
+- The MongoDB service health check must authenticate with the test credentials and avoid fragile nested shell quoting.
+- The Docker build job sets `load: true` so the image tagged `cartaisy/backend:test` is available to the following smoke-test `docker run`.
+- Credential-required Shopify live integration tests remain excluded from the default CI Jest command unless they are explicitly configured in a separate opt-in workflow.
+
+Current CI evidence: the issue #86 pull request CI run on 2026-07-08 completed successfully after the workflow startup fixes. The latest observed main-branch CI run before issue #86 still failed at workflow startup before any jobs were scheduled; post-merge main CI should be checked after the PR merges.
 
 ## Tenant-safety tests that should exist or be added
 

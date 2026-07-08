@@ -1,6 +1,6 @@
 # Backend Status
 
-Last updated: 2026-07-03.
+Last updated: 2026-07-08.
 
 This file is a human/agent-maintained snapshot, not an automatically guaranteed source of truth. Verify current behavior in code, tests, CI, and deployed environments before making implementation decisions.
 
@@ -28,7 +28,7 @@ Known gap: status categories below are based on repo inspection and existing doc
 | Orders/customer account | Partial | Customer auth/account, addresses, wishlists, reviews, orders, order management, and customer management code exists. Tenant ownership and Shopify order sync paths need careful verification. |
 | Dashboard APIs | Partial | Admin, store settings, branding, customer management, order management, email, security, compliance, abandoned cart, notification, and Shopify connection/sync routes exist. Authorization consistency must be verified. |
 | Webhooks/sync | Partial | Shopify webhook HMAC verification (raw-body, timing-safe) and shop-domain-to-Store tenant mapping are enforced before webhook handlers run (issue #63); handlers fail closed without a trusted `storeId`. Product and inventory webhook writes and product sync are store-scoped (issue #65). Order webhook writes are store-scoped and reconcile checkout handoffs idempotently (issue #76); Shopify order IDs and order numbers are unique per store, not globally. Customer webhook matching and the `syncCustomers`/`syncOrders` jobs are store-scoped, and sync-created users/orders carry `storeId` (issue #77; legacy-data backfill documented in `docs/SHOPIFY_ADMIN_WEBHOOK_TENANT_AUDIT.md`). Webhook retry behavior remains follow-up work. |
-| Testing/CI | Partial | Jest tests, tenant-scoped Storefront tests, type-check script, build script, and CI workflow exist. Test coverage is not proof that all tenant/security/checkout risks are covered. |
+| Testing/CI | Partial | Jest tests, tenant-scoped Storefront tests, type-check script, build script, and CI workflow exist. Issue #86 updates CI startup reliability by replacing retired and obsolete action majors, removing unsupported `env` context usage from service image fields, hardening the MongoDB service health check, loading the Docker build before its smoke test, and documenting the required type-check/test/build path. The issue #86 PR CI run on 2026-07-08 completed successfully, including type-check, tests, build, Docker, security, dependency, API contract, and aggregate checks; post-merge main CI still needs to be observed after merge. Test coverage is not proof that all tenant/security/checkout risks are covered. |
 | Release readiness | Partial | CI/CD workflow files and deployment scripts exist. Deployed infrastructure, secrets, rollback behavior, and first-merchant readiness must be verified with humans before release. |
 
 ## What appears complete
@@ -36,7 +36,7 @@ Known gap: status categories below are based on repo inspection and existing doc
 - Backend context entrypoint and shared SaaS context docs now exist.
 - Repository workflow rules and PR template exist.
 - Package scripts exist for type checking, tests, builds, OpenAPI generation, and coverage.
-- CI workflow includes type checking, tests, coverage, build, Docker build, security scanning, API contract testing, and dependency checks.
+- CI workflow includes type checking, tests, coverage, build, Docker build, security scanning, API contract testing, and dependency checks. Issue #86 fixed startup-blocking workflow configuration, and the issue #86 PR CI run completed successfully on GitHub.
 - Tests exist for several tenant-scoped Storefront paths and CI workflow script references.
 
 ## What appears partial
@@ -56,6 +56,7 @@ Known gap: status categories below are based on repo inspection and existing doc
 - Automated mobile app build or app-store submission readiness.
 - Complete checkout strategy documentation and production validation.
 - Complete tenant-safety coverage for every route, job, webhook, and Shopify call.
+- A post-merge main-branch CI run after the issue #86 workflow startup fix.
 
 ## Current priority areas
 
