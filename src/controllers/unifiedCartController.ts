@@ -70,6 +70,7 @@ async function getCartForUser(
     // Guest user
     const session = await GuestSession.findOne({
       sessionId: cartUser.userId,
+      storeId: cartUser.storeId,
     }).populate({
       path: 'cart.items.product',
       select: 'title price images handle variants status',
@@ -224,6 +225,7 @@ export const addToCart = async (req: Request, res: Response): Promise<void> => {
       // Guest cart
       const session = await GuestSession.findOne({
         sessionId: cartUser.userId,
+        storeId: cartUser.storeId,
       });
 
       if (!session) {
@@ -343,6 +345,7 @@ export const updateCartItem = async (
     } else {
       const session = await GuestSession.findOne({
         sessionId: cartUser.userId,
+        storeId: cartUser.storeId,
       });
 
       if (!session) {
@@ -450,6 +453,7 @@ export const removeFromCart = async (
     } else {
       const session = await GuestSession.findOne({
         sessionId: cartUser.userId,
+        storeId: cartUser.storeId,
       });
 
       if (!session) {
@@ -532,6 +536,7 @@ export const clearCart = async (req: Request, res: Response): Promise<void> => {
     } else {
       const session = await GuestSession.findOne({
         sessionId: cartUser.userId,
+        storeId: cartUser.storeId,
       });
 
       if (!session) {
@@ -617,6 +622,7 @@ export const saveGuestCheckoutInfo = async (
 
     const session = await GuestSession.findOne({
       sessionId: cartUser.userId,
+      storeId: cartUser.storeId,
     });
 
     if (!session) {

@@ -62,6 +62,7 @@ async function mergeGuestCartToCustomer(
       sessionId,
       storeId,
       expiresAt: { $gt: new Date() },
+      convertedToCustomerId: { $exists: false },
     });
 
     if (!guestSession || guestSession.cart.items.length === 0) {
@@ -118,6 +119,8 @@ async function mergeGuestCartToCustomer(
     await customer.save();
 
     // Mark session as converted
+    guestSession.cart.items = [];
+    guestSession.cart.updatedAt = new Date();
     guestSession.convertedToCustomerId = customer._id as mongoose.Types.ObjectId;
     guestSession.convertedAt = new Date();
     await guestSession.save();

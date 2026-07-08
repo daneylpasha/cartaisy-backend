@@ -463,12 +463,21 @@ export const cancelOrder = async (req: AuthenticatedRequest, res: Response): Pro
       return;
     }
 
+    const restoreStoreId = order.storeId || req.storeId || req.user?.storeId;
+    if (!restoreStoreId) {
+      res.status(400).json({
+        success: false,
+        message: 'Store context is required'
+      });
+      return;
+    }
+
     await order.updateMobileStatus('cancelled', reason);
 
     // Restore inventory
     for (const item of order.lineItems) {
       await Product.updateOne(
-        { _id: item.productId, storeId: order.storeId },
+        { _id: item.productId, storeId: restoreStoreId },
         { $inc: { 'inventoryTracking.totalQuantity': item.quantity } }
       );
     }

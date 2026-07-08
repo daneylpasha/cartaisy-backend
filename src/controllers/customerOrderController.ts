@@ -39,6 +39,14 @@ const canReturnOrder = (status: string): boolean => {
   return status === 'delivered';
 };
 
+const customerOwnedOrderFilter = (customerId: string, storeId: string, extra: Record<string, unknown> = {}) => ({
+  ...extra,
+  $and: [
+    { $or: [{ customer: customerId }, { user: customerId }] },
+    { $or: [{ storeId }, { storeId: { $exists: false } }, { storeId: null }] }
+  ]
+});
+
 // =============================================================================
 // CONTROLLER FUNCTIONS
 // =============================================================================
@@ -62,10 +70,7 @@ export const getOrders = async (req: CustomerRequest, res: Response): Promise<vo
     const skip = (pageNum - 1) * limitNum;
 
     // Build filter - query by either customer or user field for backwards compatibility
-    const filter: any = {
-      storeId: req.customer.storeId,
-      $or: [{ customer: customerId }, { user: customerId }]
-    };
+    const filter: any = customerOwnedOrderFilter(customerId, req.customer.storeId);
 
     // Map status parameter to database status values
     if (status) {
@@ -356,11 +361,9 @@ export const getOrder = async (req: CustomerRequest, res: Response): Promise<voi
     const { orderId } = req.params;
 
     // Fetch order and verify ownership
-    const order = await Order.findOne({
-      _id: orderId,
-      storeId: req.customer.storeId,
-      $or: [{ customer: customerId }, { user: customerId }]
-    }).lean();
+    const order = await Order.findOne(
+      customerOwnedOrderFilter(customerId, req.customer.storeId, { _id: orderId })
+    ).lean();
 
     if (!order) {
       res.status(404).json({
@@ -432,11 +435,9 @@ export const cancelOrder = async (req: CustomerRequest, res: Response): Promise<
     const { orderId } = req.params;
     const { reason } = req.body;
 
-    const order = await Order.findOne({
-      _id: orderId,
-      storeId: req.customer.storeId,
-      $or: [{ customer: customerId }, { user: customerId }]
-    });
+    const order = await Order.findOne(
+      customerOwnedOrderFilter(customerId, req.customer.storeId, { _id: orderId })
+    );
 
     if (!order) {
       res.status(404).json({
