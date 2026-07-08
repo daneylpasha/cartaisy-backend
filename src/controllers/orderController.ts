@@ -495,21 +495,26 @@ export const cancelOrder = async (req: AuthenticatedRequest, res: Response): Pro
       });
     }
 
+    const restoreTargetsExist = await Promise.all(
+      inventoryRestores.map(item =>
+        Product.exists({ _id: item.productId, storeId: item.storeId })
+      )
+    );
+    if (restoreTargetsExist.some(target => !target)) {
+      res.status(400).json({
+        success: false,
+        message: 'Unable to verify product ownership for inventory restore'
+      });
+      return;
+    }
+
     // Restore inventory before marking the order cancelled so zero-match
     // restores cannot produce a successful cancellation response.
     for (const item of inventoryRestores) {
-      const result = await Product.updateOne(
+      await Product.updateOne(
         { _id: item.productId, storeId: item.storeId },
         { $inc: { 'inventoryTracking.totalQuantity': item.quantity } }
       );
-
-      if (result.matchedCount !== 1) {
-        res.status(400).json({
-          success: false,
-          message: 'Unable to verify product ownership for inventory restore'
-        });
-        return;
-      }
     }
 
     await order.updateMobileStatus('cancelled', reason);
