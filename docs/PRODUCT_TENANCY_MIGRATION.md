@@ -75,7 +75,9 @@ the script.
 7. **Verify** (release-gate evidence — record the outputs):
    - Storeless product count returns `0`:
      ```
-     db.products.countDocuments({ storeId: { $exists: false } })
+     db.products.countDocuments({
+       $or: [{ storeId: { $exists: false } }, { storeId: null }]
+     })
      ```
    - Per-store product counts match the dry-run before-picture (legacy count moved onto the target store, no other store's count changed):
      ```

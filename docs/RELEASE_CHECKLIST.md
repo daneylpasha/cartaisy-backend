@@ -79,7 +79,9 @@ steps must be executed by the project owner/operator with a database backup
 Exact Mongo verification commands to record after each environment run:
 
 ```javascript
-db.products.countDocuments({ storeId: { $exists: false } })
+db.products.countDocuments({
+  $or: [{ storeId: { $exists: false } }, { storeId: null }]
+})
 
 db.products.aggregate([
   { $group: { _id: "$storeId", count: { $sum: 1 } } },
@@ -132,38 +134,55 @@ legacy storeless documents and their owning store.
 - [ ] Backup/snapshot recorded before customer/order backfill.
 - [ ] Dry-run counts recorded and reviewed:
   ```javascript
-  db.customers.countDocuments({ storeId: { $exists: false } })
-  db.users.countDocuments({ storeId: { $exists: false }, role: "customer", shopifyCustomerId: { $exists: true } })
-  db.orders.countDocuments({ storeId: { $exists: false }, shopifyOrderId: { $exists: true } })
+  const storelessStoreId = { $or: [{ storeId: { $exists: false } }, { storeId: null }] }
+
+  db.customers.countDocuments(storelessStoreId)
+  db.users.countDocuments({ ...storelessStoreId, role: "customer", shopifyCustomerId: { $exists: true } })
+  db.orders.countDocuments({ ...storelessStoreId, shopifyOrderId: { $exists: true } })
   db.customers.find(
-    { storeId: { $exists: false } },
+    storelessStoreId,
     { _id: 1, email: 1 }
   ).limit(20)
   db.users.find(
-    { storeId: { $exists: false }, role: "customer", shopifyCustomerId: { $exists: true } },
+    { ...storelessStoreId, role: "customer", shopifyCustomerId: { $exists: true } },
     { _id: 1, email: 1, shopifyCustomerId: 1 }
   ).limit(20)
   db.orders.find(
-    { storeId: { $exists: false }, shopifyOrderId: { $exists: true } },
+    { ...storelessStoreId, shopifyOrderId: { $exists: true } },
     { _id: 1, orderNumber: 1, shopifyOrderId: 1, email: 1, "guestContact.email": 1 }
   ).limit(20)
   ```
-- [ ] Real customer/order backfill completed by the operator:
+- [ ] Exact records to backfill recorded before the real run:
+  ```javascript
+  const storelessStoreId = { $or: [{ storeId: { $exists: false } }, { storeId: null }] }
+  const userBackfillIds = db.users
+    .find({ ...storelessStoreId, role: "customer", shopifyCustomerId: { $exists: true } }, { _id: 1 })
+    .map(doc => doc._id)
+  const orderBackfillIds = db.orders
+    .find({ ...storelessStoreId, shopifyOrderId: { $exists: true } }, { _id: 1 })
+    .map(doc => doc._id)
+
+  userBackfillIds
+  orderBackfillIds
+  ```
+- [ ] Real customer/order backfill completed by the operator using the recorded IDs:
   ```javascript
   db.users.updateMany(
-    { storeId: { $exists: false }, role: "customer", shopifyCustomerId: { $exists: true } },
+    { _id: { $in: userBackfillIds } },
     { $set: { storeId: ObjectId("<storeId>") } }
   )
   db.orders.updateMany(
-    { storeId: { $exists: false }, shopifyOrderId: { $exists: true } },
+    { _id: { $in: orderBackfillIds } },
     { $set: { storeId: ObjectId("<storeId>") } }
   )
   ```
 - [ ] Storeless Customer/User/Order counts verified as `0`:
   ```javascript
-  db.customers.countDocuments({ storeId: { $exists: false } })
-  db.users.countDocuments({ storeId: { $exists: false }, role: "customer", shopifyCustomerId: { $exists: true } })
-  db.orders.countDocuments({ storeId: { $exists: false }, shopifyOrderId: { $exists: true } })
+  const storelessStoreId = { $or: [{ storeId: { $exists: false } }, { storeId: null }] }
+
+  db.customers.countDocuments(storelessStoreId)
+  db.users.countDocuments({ ...storelessStoreId, role: "customer", shopifyCustomerId: { $exists: true } })
+  db.orders.countDocuments({ ...storelessStoreId, shopifyOrderId: { $exists: true } })
   ```
 - [ ] Store-scoped customer/order indexes verified:
   ```javascript
@@ -210,14 +229,14 @@ legacy storeless documents and their owning store.
   )
   ```
   Expected: each query returns `[]`.
-- [ ] Rollback notes recorded: restore the backup, or if the backfill target was wrong and no later writes depend on it, unset only the records changed in this gate:
+- [ ] Rollback notes recorded: restore the backup, or if the backfill target was wrong and no later writes depend on it, unset only the recorded IDs changed in this gate:
   ```javascript
   db.users.updateMany(
-    { storeId: ObjectId("<storeId>"), role: "customer", shopifyCustomerId: { $exists: true } },
+    { _id: { $in: userBackfillIds }, storeId: ObjectId("<storeId>") },
     { $unset: { storeId: "" } }
   )
   db.orders.updateMany(
-    { storeId: ObjectId("<storeId>"), shopifyOrderId: { $exists: true } },
+    { _id: { $in: orderBackfillIds }, storeId: ObjectId("<storeId>") },
     { $unset: { storeId: "" } }
   )
   ```
