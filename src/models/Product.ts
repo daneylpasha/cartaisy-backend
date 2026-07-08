@@ -167,6 +167,15 @@ const ProductSchema = new Schema<IProduct>({
     type: [String],
     default: []
   },
+  category: {
+    type: Schema.Types.ObjectId,
+    ref: 'ProductCategory',
+    index: true
+  },
+  relatedProducts: [{
+    type: Schema.Types.ObjectId,
+    ref: 'Product'
+  }],
   status: {
     type: String,
     enum: {

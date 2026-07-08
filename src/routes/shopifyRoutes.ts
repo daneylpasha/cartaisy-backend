@@ -247,8 +247,10 @@ router.get('/products/:productId/recommendations', async (req: Request, res: Res
     const { productId } = req.params;
     const userId = req.query.userId as string;
     const limit = req.query.limit ? parseInt(req.query.limit as string) : 8;
+    const storeId = getRequestStoreId(req);
+    if (!storeId) return missingStoreResponse(res);
     
-    const recommendations = await generateProductRecommendations(productId, userId, limit);
+    const recommendations = await generateProductRecommendations(productId, userId, limit, storeId);
     
     res.json({
       success: true,

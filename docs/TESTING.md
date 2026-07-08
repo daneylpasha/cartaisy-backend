@@ -65,6 +65,7 @@ Known gap: the latest observed main-branch CI run before issue #86 failed at wor
 
 ## Tenant-safety tests that should exist or be added
 
+- Legacy local product catalog list/search/featured/category/related/recommendation reads must prove Store A cannot receive Store B products (`tests/productCatalogStoreScoping.test.ts`).
 - Customer token with mismatched supplied store ID still accesses only the authenticated customer's store.
 - Customer token cannot read or write another store's customer-owned data by changing header, query, or body store ID.
 - Admin user cannot operate on another store's `:storeId` route without explicit approved super-admin behavior.

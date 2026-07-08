@@ -155,10 +155,17 @@ export const enhanceProductData = async (shopifyProduct: IShopifyProduct): Promi
 export const generateProductRecommendations = async (
   productId: string,
   userId?: string,
-  limit: number = 8
+  limit: number = 8,
+  storeId?: string
 ): Promise<any[]> => {
   try {
-    const baseProduct = await Product.findById(productId)
+    if (!storeId || !mongoose.Types.ObjectId.isValid(storeId)) {
+      throw new ApiError('Store context is required for product recommendations', 400, true, undefined, true);
+    }
+
+    const storeObjectId = new mongoose.Types.ObjectId(storeId);
+
+    const baseProduct = await Product.findOne({ _id: productId, storeId: storeObjectId })
       .populate('category');
 
     if (!baseProduct) {
@@ -169,12 +176,12 @@ export const generateProductRecommendations = async (
 
     // 1. Collaborative Filtering (if user provided)
     if (userId) {
-      const userBasedRecs = await getUserBasedRecommendations(userId, productId, limit / 2);
+      const userBasedRecs = await getUserBasedRecommendations(userId, productId, limit / 2, storeObjectId);
       recommendations.push(...userBasedRecs);
     }
 
     // 2. Content-Based Filtering
-    const contentBasedRecs = await getContentBasedRecommendations(baseProduct, limit - recommendations.length);
+    const contentBasedRecs = await getContentBasedRecommendations(baseProduct, limit - recommendations.length, storeObjectId);
     recommendations.push(...contentBasedRecs);
 
     // 3. Popularity-Based Fallback
@@ -182,7 +189,11 @@ export const generateProductRecommendations = async (
       const popularRecs = await getPopularityBasedRecommendations(
         (baseProduct.category as any)?._id?.toString() || '',
         limit - recommendations.length,
-        recommendations.map(r => r._id?.toString())
+        [
+          baseProduct._id.toString(),
+          ...recommendations.map(r => r._id?.toString()).filter(Boolean)
+        ],
+        storeObjectId
       );
       recommendations.push(...popularRecs);
     }
@@ -709,7 +720,12 @@ function generateAffinityTags(shopifyProduct: any): string[] {
 
 // Recommendation helper functions
 
-async function getUserBasedRecommendations(userId: string, productId: string, limit: number): Promise<any[]> {
+async function getUserBasedRecommendations(
+  userId: string,
+  productId: string,
+  limit: number,
+  storeId: mongoose.Types.ObjectId
+): Promise<any[]> {
   // Find users who viewed/bought similar products
   const similarUsers = await ProductView.aggregate([
     { $match: { product: new mongoose.Types.ObjectId(productId) } },
@@ -729,17 +745,23 @@ async function getUserBasedRecommendations(userId: string, productId: string, li
     { $limit: limit },
     { $lookup: { from: 'products', localField: '_id', foreignField: '_id', as: 'product' } },
     { $unwind: '$product' },
+    { $match: { 'product.storeId': storeId, 'product.status': 'active' } },
     { $replaceRoot: { newRoot: '$product' } }
   ]);
 
   return recommendations;
 }
 
-async function getContentBasedRecommendations(baseProduct: any, limit: number): Promise<any[]> {
+async function getContentBasedRecommendations(
+  baseProduct: any,
+  limit: number,
+  storeId: mongoose.Types.ObjectId
+): Promise<any[]> {
   const recommendations = await Product.aggregate([
     {
       $match: {
         _id: { $ne: baseProduct._id },
+        storeId,
         status: 'active',
         $or: [
           { category: baseProduct.category._id },
@@ -766,8 +788,14 @@ async function getContentBasedRecommendations(baseProduct: any, limit: number): 
   return recommendations;
 }
 
-async function getPopularityBasedRecommendations(categoryId: string, limit: number, excludeIds: string[]): Promise<any[]> {
+async function getPopularityBasedRecommendations(
+  categoryId: string,
+  limit: number,
+  excludeIds: string[],
+  storeId: mongoose.Types.ObjectId
+): Promise<any[]> {
   const recommendations = await Product.find({
+    storeId,
     category: categoryId,
     status: 'active',
     _id: { $nin: excludeIds.map(id => new mongoose.Types.ObjectId(id)) }
@@ -780,10 +808,14 @@ async function getPopularityBasedRecommendations(categoryId: string, limit: numb
 
 async function scoreRecommendations(recommendations: any[], baseProduct: any, userId?: string): Promise<any[]> {
   // Add scoring logic based on various factors
-  return recommendations.map(rec => ({
-    ...rec,
-    recommendationScore: calculateRecommendationScore(rec, baseProduct, userId)
-  })).sort((a, b) => b.recommendationScore - a.recommendationScore);
+  return recommendations.map(rec => {
+    const product = typeof rec.toObject === 'function' ? rec.toObject() : rec;
+
+    return {
+      ...product,
+      recommendationScore: calculateRecommendationScore(product, baseProduct, userId)
+    };
+  }).sort((a, b) => b.recommendationScore - a.recommendationScore);
 }
 
 function calculateRecommendationScore(product: any, baseProduct: any, userId?: string): number {

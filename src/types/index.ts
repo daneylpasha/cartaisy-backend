@@ -268,6 +268,7 @@ export interface IProduct extends Document {
   reviews: IProductReviews;
   seo: IProductSEO;
   category?: ObjectId | IProductCategory; // Reference to product category
+  relatedProducts?: ObjectId[] | IProduct[];
   sku?: string;
   weight?: number;
   createdAt: Date;

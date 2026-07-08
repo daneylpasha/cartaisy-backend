@@ -160,6 +160,9 @@ describe('ProductDetailController tenant-scoped Storefront access', () => {
 
     expect(mockedShopifyStorefront.getProductByIdForStore).toHaveBeenCalledWith(storeId, '123', 'US');
     expect(mockedShopifyStorefront.getProductById).not.toHaveBeenCalled();
+    expect(mockedProduct.findOne).toHaveBeenCalledWith(expect.objectContaining({ shopifyProductId: '123' }));
+    const productQuery = mockedProduct.findOne.mock.calls[0][0] as any;
+    expect(productQuery.storeId.toString()).toBe(storeId);
     expect(response).toEqual({
       success: true,
       data: {
