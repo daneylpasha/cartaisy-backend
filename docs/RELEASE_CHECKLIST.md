@@ -76,6 +76,177 @@ steps must be executed by the project owner/operator with a database backup
 - [ ] Legacy global unique indexes (`shopifyProductId_1`, `handle_1`, `seo.slug_1`) checked and dropped where present (`--drop-legacy-indexes`); `db.products.getIndexes()` shows no single-field unique index on those fields.
 - [ ] Store-scoped compound unique indexes verified present (`{ storeId, shopifyProductId }`, `{ storeId, handle }`, `{ storeId, "seo.slug" }`) — the script prints this verdict on every run.
 
+Exact Mongo verification commands to record after each environment run:
+
+```javascript
+db.products.countDocuments({
+  $or: [{ storeId: { $exists: false } }, { storeId: null }]
+})
+
+db.products.aggregate([
+  { $group: { _id: "$storeId", count: { $sum: 1 } } },
+  { $sort: { count: -1 } }
+])
+
+db.products.getIndexes().filter(index =>
+  index.unique === true &&
+  [
+    JSON.stringify({ storeId: 1, shopifyProductId: 1 }),
+    JSON.stringify({ storeId: 1, handle: 1 }),
+    JSON.stringify({ storeId: 1, "seo.slug": 1 })
+  ].includes(JSON.stringify(index.key))
+)
+
+db.products.getIndexes().filter(index =>
+  index.unique === true &&
+  [
+    JSON.stringify({ shopifyProductId: 1 }),
+    JSON.stringify({ handle: 1 }),
+    JSON.stringify({ "seo.slug": 1 })
+  ].includes(JSON.stringify(index.key))
+)
+```
+
+Expected: storeless product count is `0`, per-store counts match the dry-run
+record, three store-scoped compound unique indexes are present, and the legacy
+global unique index query returns `[]`.
+
+### Customer/order legacy storeId backfill gates (issue #89) — operator work
+
+Blockers before onboarding a second store, and before any release that depends
+on customer/order sync or webhook matching being tenant-safe. These gates cover
+legacy Shopify-created customer `User` records and legacy Shopify-synced
+`Order` records that predate store-scoped customer/order sync. All steps must be
+executed by the project owner/operator with a database backup — never by AI
+agents against shared environments.
+
+These commands assume a single-store legacy deployment where every storeless
+Shopify customer `User` or `Order` record belongs to the target store. If more
+than one store may already own storeless legacy records, stop and partition
+records per merchant first (for example by matching Shopify exports), then run
+one scoped update per store. Do not stamp one store ID across mixed-tenant data.
+The separate `customers` collection already requires `storeId`; verify it has no
+storeless records, but do not backfill it unless a human review identifies
+legacy storeless documents and their owning store.
+
+#### Staging
+
+- [ ] Backup/snapshot recorded before customer/order backfill.
+- [ ] Dry-run counts recorded and reviewed:
+  ```javascript
+  const storelessStoreId = { $or: [{ storeId: { $exists: false } }, { storeId: null }] }
+
+  db.customers.countDocuments(storelessStoreId)
+  db.users.countDocuments({ ...storelessStoreId, role: "customer", shopifyCustomerId: { $exists: true } })
+  db.orders.countDocuments({ ...storelessStoreId, shopifyOrderId: { $exists: true } })
+  db.customers.find(
+    storelessStoreId,
+    { _id: 1, email: 1 }
+  ).limit(20)
+  db.users.find(
+    { ...storelessStoreId, role: "customer", shopifyCustomerId: { $exists: true } },
+    { _id: 1, email: 1, shopifyCustomerId: 1 }
+  ).limit(20)
+  db.orders.find(
+    { ...storelessStoreId, shopifyOrderId: { $exists: true } },
+    { _id: 1, orderNumber: 1, shopifyOrderId: 1, email: 1, "guestContact.email": 1 }
+  ).limit(20)
+  ```
+- [ ] Exact records to backfill recorded before the real run:
+  ```javascript
+  const storelessStoreId = { $or: [{ storeId: { $exists: false } }, { storeId: null }] }
+  const userBackfillIds = db.users
+    .find({ ...storelessStoreId, role: "customer", shopifyCustomerId: { $exists: true } }, { _id: 1 })
+    .map(doc => doc._id)
+  const orderBackfillIds = db.orders
+    .find({ ...storelessStoreId, shopifyOrderId: { $exists: true } }, { _id: 1 })
+    .map(doc => doc._id)
+
+  userBackfillIds
+  orderBackfillIds
+  ```
+- [ ] Real customer/order backfill completed by the operator using the recorded IDs:
+  ```javascript
+  db.users.updateMany(
+    { _id: { $in: userBackfillIds } },
+    { $set: { storeId: ObjectId("<storeId>") } }
+  )
+  db.orders.updateMany(
+    { _id: { $in: orderBackfillIds } },
+    { $set: { storeId: ObjectId("<storeId>") } }
+  )
+  ```
+- [ ] Storeless Customer/User/Order counts verified as `0`:
+  ```javascript
+  const storelessStoreId = { $or: [{ storeId: { $exists: false } }, { storeId: null }] }
+
+  db.customers.countDocuments(storelessStoreId)
+  db.users.countDocuments({ ...storelessStoreId, role: "customer", shopifyCustomerId: { $exists: true } })
+  db.orders.countDocuments({ ...storelessStoreId, shopifyOrderId: { $exists: true } })
+  ```
+- [ ] Store-scoped customer/order indexes verified:
+  ```javascript
+  db.customers.getIndexes().filter(index =>
+    index.unique === true &&
+    JSON.stringify(index.key) === JSON.stringify({ storeId: 1, email: 1 })
+  )
+  db.users.getIndexes().filter(index =>
+    [
+      JSON.stringify({ storeId: 1, email: 1 }),
+      JSON.stringify({ storeId: 1, shopifyCustomerId: 1 })
+    ].includes(JSON.stringify(index.key))
+  )
+  db.orders.getIndexes().filter(index =>
+    index.unique === true &&
+    [
+      JSON.stringify({ storeId: 1, shopifyOrderId: 1 }),
+      JSON.stringify({ storeId: 1, orderNumber: 1 })
+    ].includes(JSON.stringify(index.key))
+  )
+  ```
+  Expected: the customer `{ storeId: 1, email: 1 }` unique index is present,
+  both user indexes are present, both order compound unique indexes are present,
+  and the `{ storeId: 1, email: 1 }` user index is unique.
+- [ ] Legacy global unique customer/user/order indexes verified absent:
+  ```javascript
+  db.customers.getIndexes().filter(index =>
+    index.unique === true &&
+    JSON.stringify(index.key) === JSON.stringify({ email: 1 })
+  )
+  db.users.getIndexes().filter(index =>
+    index.unique === true &&
+    [
+      JSON.stringify({ email: 1 }),
+      JSON.stringify({ shopifyCustomerId: 1 })
+    ].includes(JSON.stringify(index.key))
+  )
+  db.orders.getIndexes().filter(index =>
+    index.unique === true &&
+    [
+      JSON.stringify({ shopifyOrderId: 1 }),
+      JSON.stringify({ orderNumber: 1 })
+    ].includes(JSON.stringify(index.key))
+  )
+  ```
+  Expected: each query returns `[]`.
+- [ ] Rollback notes recorded: restore the backup, or if the backfill target was wrong and no later writes depend on it, unset only the recorded IDs changed in this gate:
+  ```javascript
+  db.users.updateMany(
+    { _id: { $in: userBackfillIds }, storeId: ObjectId("<storeId>") },
+    { $unset: { storeId: "" } }
+  )
+  db.orders.updateMany(
+    { _id: { $in: orderBackfillIds }, storeId: ObjectId("<storeId>") },
+    { $unset: { storeId: "" } }
+  )
+  ```
+
+#### Production
+
+- [ ] Repeat the staging gates against production only after staging evidence is approved.
+- [ ] Production backup/snapshot recorded before customer/order backfill.
+- [ ] Production dry-run counts, real-run update results, verification outputs, and rollback notes recorded.
+
 ## Webhook and sync checks
 
 - Confirm webhook signature validation and event-to-store mapping.
