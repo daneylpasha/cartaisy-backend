@@ -27,6 +27,7 @@ Target state: every backend behavior PR should run the smallest relevant command
 - Docs-only PRs: inspect markdown, run `git diff --check`, and confirm no runtime files changed.
 - Type-only or route/controller/service changes: run `npm run type-check` and targeted Jest tests.
 - API contract or generated route changes: run the relevant `npm run generate*` command and verify generated artifacts intentionally.
+- TSOA route registration changes: run `npm test -- --runInBand --watchman=false tests/tsoaRouteRegistration.test.ts` to prove representative generated search, product detail, cart, checkout, and favorites routes mount.
 - Broad backend changes: run `npm test`, `npm run type-check`, and `npm run build` when practical.
 - High-risk tenant, auth, Shopify, checkout, webhook, or migration changes: add targeted regression tests and get human review.
 
@@ -87,6 +88,7 @@ Known gap: the latest observed main-branch CI run before issue #86 failed at wor
 - Confirm changed files are scoped to the issue.
 - Run `git diff --check`.
 - Run commands appropriate to the change type.
+- For TSOA registration changes, include the focused generated-route mount test and note any required local npm cache override if the user-level npm cache is not writable.
 - For docs-only changes, state that no runtime code changed.
 - For skipped checks, explain why they were skipped.
 

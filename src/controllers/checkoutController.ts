@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Header, Middlewares, Path, Post, Query, Request, Route, Security, Tags, Response } from 'tsoa';
+import { Body, Controller, Delete, Get, Header, Middlewares, Path, Post, Query, Request, Route, Security, Tags, Response } from '@tsoa/runtime';
 import { optionalCustomerAuth } from '../middleware/customerAuth';
 import CheckoutSession, { ICheckoutSessionDocument } from '../models/CheckoutSession';
 import User from '../models/User';

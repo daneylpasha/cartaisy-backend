@@ -1,5 +1,4 @@
-import { Get, Post, Route, Tags, Response, Path, Body, Query } from 'tsoa';
-import { Controller } from '@tsoa/runtime';
+import { Get, Post, Route, Tags, Response, Path, Body, Query, Controller } from '@tsoa/runtime';
 import { getProductRecommendations, getCartRecommendations } from '../services/recommendationsService';
 import {
   ProductRecommendationsResponse,

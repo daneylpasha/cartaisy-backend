@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Header, Post, Query, Request, Route, Security, Tags, Response as TsoaResponse } from 'tsoa';
+import { Body, Controller, Get, Header, Post, Query, Request, Route, Security, Tags, Response as TsoaResponse } from '@tsoa/runtime';
 import mongoose from 'mongoose';
 import SearchHistory from '../models/SearchHistory';
 import ProductView from '../models/ProductView';
