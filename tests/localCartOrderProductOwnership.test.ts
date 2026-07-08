@@ -5,6 +5,7 @@ import GuestSession from '../src/models/GuestSession';
 import Order from '../src/models/Order';
 import Product from '../src/models/Product';
 import Store from '../src/models/Store';
+import { cancelOrder as cancelLegacyOrder } from '../src/controllers/orderController';
 import customerRoutes from '../src/routes/customerRoutes';
 import unifiedCartRoutes from '../src/routes/unifiedCartRoutes';
 import { generateToken } from '../src/utils/jwt';
@@ -12,6 +13,12 @@ import { generateToken } from '../src/utils/jwt';
 jest.mock('../src/services/firebaseNotificationService', () => ({
   FirebaseNotificationService: {
     sendOrderNotification: jest.fn().mockResolvedValue(undefined),
+  },
+}));
+
+jest.mock('../src/services/emailService', () => ({
+  EmailService: {
+    sendOrderCancellation: jest.fn().mockResolvedValue(undefined),
   },
 }));
 
@@ -346,5 +353,82 @@ describe('local cart and order product ownership checks', () => {
     expect(response.status).toBe(200);
     const reloadedProductA = await Product.findById(productA._id).lean();
     expect(reloadedProductA?.inventoryTracking.totalQuantity).toBe(5);
+  });
+
+  it('derives product store before legacy user-order cancellation inventory restore', async () => {
+    await Product.updateOne(
+      { _id: productA._id },
+      { $set: { 'inventoryTracking.totalQuantity': 3 } }
+    );
+
+    const order = await Order.create({
+      orderNumber: `LEGACY-${Math.random().toString(36).slice(2)}`,
+      user: customerA._id,
+      email: customerA.email,
+      lineItems: [{
+        productId: productA._id,
+        quantity: 2,
+        price: productA.price,
+        title: productA.title,
+        sku: '',
+      }],
+      subtotalPrice: productA.price * 2,
+      totalTax: 0,
+      totalPrice: productA.price * 2,
+      totalItems: 2,
+      currency: 'USD',
+      billingAddress: {
+        firstName: 'Test',
+        lastName: 'Customer',
+        address1: '123 Test St',
+        city: 'Test City',
+        province: 'CA',
+        country: 'US',
+        zip: '94105',
+      },
+      shippingAddress: {
+        firstName: 'Test',
+        lastName: 'Customer',
+        address1: '123 Test St',
+        city: 'Test City',
+        province: 'CA',
+        country: 'US',
+        zip: '94105',
+      },
+      shipping: { method: 'Standard', cost: 0 },
+    });
+
+    const response: any = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn().mockReturnThis(),
+    };
+
+    await cancelLegacyOrder(
+      {
+        params: { orderId: order._id.toString() },
+        body: { reason: 'Changed mind' },
+        storeId: storeBId,
+        user: {
+          _id: customerA._id,
+          storeId: storeBId,
+        },
+      } as any,
+      response
+    );
+
+    expect(response.status).not.toHaveBeenCalledWith(400);
+    expect(response.json).toHaveBeenCalledWith({
+      success: true,
+      message: 'Order cancelled successfully',
+    });
+
+    const [reloadedProductA, reloadedProductB, reloadedOrder] = await Promise.all([
+      Product.findById(productA._id).lean(),
+      Product.findById(productB._id).lean(),
+      Order.findById(order._id).lean(),
+    ]);
+    expect(reloadedProductA?.inventoryTracking.totalQuantity).toBe(5);
+    expect(reloadedProductB?.inventoryTracking.totalQuantity).toBe(5);
+    expect(reloadedOrder?.mobileStatus.current).toBe('cancelled');
   });
 });

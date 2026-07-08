@@ -463,21 +463,39 @@ export const cancelOrder = async (req: AuthenticatedRequest, res: Response): Pro
       return;
     }
 
-    const restoreStoreId = order.storeId || req.storeId || req.user?.storeId;
-    if (!restoreStoreId) {
-      res.status(400).json({
-        success: false,
-        message: 'Store context is required'
+    const inventoryRestores = [];
+    for (const item of order.lineItems) {
+      if (!item.productId) {
+        continue;
+      }
+
+      let restoreStoreId = order.storeId;
+      if (!restoreStoreId) {
+        const product = await Product.findById(item.productId).select('storeId').lean();
+        restoreStoreId = product?.storeId;
+      }
+
+      if (!restoreStoreId) {
+        res.status(400).json({
+          success: false,
+          message: 'Unable to verify product ownership for inventory restore'
+        });
+        return;
+      }
+
+      inventoryRestores.push({
+        productId: item.productId,
+        storeId: restoreStoreId,
+        quantity: item.quantity
       });
-      return;
     }
 
     await order.updateMobileStatus('cancelled', reason);
 
     // Restore inventory
-    for (const item of order.lineItems) {
+    for (const item of inventoryRestores) {
       await Product.updateOne(
-        { _id: item.productId, storeId: restoreStoreId },
+        { _id: item.productId, storeId: item.storeId },
         { $inc: { 'inventoryTracking.totalQuantity': item.quantity } }
       );
     }
