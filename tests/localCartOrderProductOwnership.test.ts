@@ -355,6 +355,65 @@ describe('local cart and order product ownership checks', () => {
     expect(reloadedProductA?.inventoryTracking.totalQuantity).toBe(5);
   });
 
+  it('derives product store before customer legacy order cancellation inventory restore', async () => {
+    await Product.updateOne(
+      { _id: productB._id },
+      { $set: { 'inventoryTracking.totalQuantity': 3 } }
+    );
+
+    const order = await Order.create({
+      orderNumber: `LEGACY-${Math.random().toString(36).slice(2)}`,
+      customer: customerA._id,
+      email: customerA.email,
+      lineItems: [{
+        productId: productB._id,
+        quantity: 2,
+        price: productB.price,
+        title: productB.title,
+        sku: '',
+      }],
+      subtotalPrice: productB.price * 2,
+      totalTax: 0,
+      totalPrice: productB.price * 2,
+      totalItems: 2,
+      currency: 'USD',
+      billingAddress: {
+        firstName: 'Test',
+        lastName: 'Customer',
+        address1: '123 Test St',
+        city: 'Test City',
+        province: 'CA',
+        country: 'US',
+        zip: '94105',
+      },
+      shippingAddress: {
+        firstName: 'Test',
+        lastName: 'Customer',
+        address1: '123 Test St',
+        city: 'Test City',
+        province: 'CA',
+        country: 'US',
+        zip: '94105',
+      },
+      shipping: { method: 'Standard', cost: 0 },
+    });
+
+    const response = await request(app)
+      .post(`/customer/orders/${order._id}/cancel`)
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send({ reason: 'Changed mind' });
+
+    expect(response.status).toBe(200);
+    const [reloadedProductA, reloadedProductB, reloadedOrder] = await Promise.all([
+      Product.findById(productA._id).lean(),
+      Product.findById(productB._id).lean(),
+      Order.findById(order._id).lean(),
+    ]);
+    expect(reloadedProductA?.inventoryTracking.totalQuantity).toBe(5);
+    expect(reloadedProductB?.inventoryTracking.totalQuantity).toBe(5);
+    expect(reloadedOrder?.mobileStatus.current).toBe('cancelled');
+  });
+
   it('derives product store before legacy user-order cancellation inventory restore', async () => {
     await Product.updateOne(
       { _id: productA._id },

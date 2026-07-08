@@ -456,6 +456,33 @@ export const cancelOrder = async (req: CustomerRequest, res: Response): Promise<
       return;
     }
 
+    const inventoryRestores = [];
+    for (const item of order.lineItems || []) {
+      if (!item.productId) {
+        continue;
+      }
+
+      let restoreStoreId = order.storeId;
+      if (!restoreStoreId) {
+        const product = await Product.findById(item.productId).select('storeId').lean();
+        restoreStoreId = product?.storeId;
+      }
+
+      if (!restoreStoreId) {
+        res.status(400).json({
+          status: 'error',
+          message: 'Unable to verify product ownership for inventory restore'
+        });
+        return;
+      }
+
+      inventoryRestores.push({
+        productId: item.productId,
+        storeId: restoreStoreId,
+        quantity: item.quantity
+      });
+    }
+
     // Save cancellation reason to dedicated field
     (order as any).cancellationReason = reason || '';
     (order as any).cancelledAt = new Date();
@@ -481,13 +508,11 @@ export const cancelOrder = async (req: CustomerRequest, res: Response): Promise<
     }
 
     // Restore inventory
-    for (const item of order.lineItems || []) {
-      if (item.productId) {
-        await Product.updateOne(
-          { _id: item.productId, storeId: req.customer.storeId },
-          { $inc: { 'inventoryTracking.totalQuantity': item.quantity } }
-        );
-      }
+    for (const item of inventoryRestores) {
+      await Product.updateOne(
+        { _id: item.productId, storeId: item.storeId },
+        { $inc: { 'inventoryTracking.totalQuantity': item.quantity } }
+      );
     }
 
     // Send push notification (async, don't wait)
