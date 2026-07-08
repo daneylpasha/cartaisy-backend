@@ -282,9 +282,18 @@ jobs:
 
       - name: Run API tests with Newman
         run: |
+          COLLECTION="tests/postman/cartaisy-api.postman_collection.json"
+          ENVIRONMENT="tests/postman/ci-environment.postman_environment.json"
+
+          if [ ! -f "$COLLECTION" ] || [ ! -f "$ENVIRONMENT" ]; then
+            echo "::notice::Skipping Newman API contract tests because tests/postman collection files are not present in this repository."
+            printf '{"status":"skipped","reason":"tests/postman collection files are not present"}\n' > newman-results.json
+            exit 0
+          fi
+
           npm install -g newman
-          newman run tests/postman/cartaisy-api.postman_collection.json \
-            --environment tests/postman/ci-environment.postman_environment.json \
+          newman run "$COLLECTION" \
+            --environment "$ENVIRONMENT" \
             --reporters cli,json \
             --reporter-json-export newman-results.json
         continue-on-error: true
@@ -343,4 +352,4 @@ jobs:
       - name: All checks passed
         run: |
           echo "✅ All CI checks passed successfully!"
-          echo "Ready for deployment"
+          echo "Ready for human release review; deployment readiness still requires operator verification."
