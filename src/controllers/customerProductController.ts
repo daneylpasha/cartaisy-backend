@@ -15,19 +15,45 @@ interface CustomerRequest extends Request {
 // HELPER FUNCTIONS
 // =============================================================================
 
+const getCustomerStoreObjectId = (req: CustomerRequest, res: Response): mongoose.Types.ObjectId | null => {
+  const storeId = req.customer?.storeId;
+
+  if (!storeId) {
+    res.status(400).json({
+      status: 'error',
+      message: 'Store ID is required'
+    });
+    return null;
+  }
+
+  if (!mongoose.Types.ObjectId.isValid(storeId)) {
+    res.status(400).json({
+      status: 'error',
+      message: 'Invalid Store ID format'
+    });
+    return null;
+  }
+
+  return new mongoose.Types.ObjectId(storeId);
+};
+
 /**
  * Get customer's viewed product categories and tags for recommendations
  */
-const getCustomerPreferences = async (customerId: string) => {
+const getCustomerPreferences = async (customerId: string, storeId: mongoose.Types.ObjectId) => {
   // Get recent views
   const recentViews = await ProductView.find({ customer: customerId })
     .sort({ viewedAt: -1 })
     .limit(50)
-    .populate('product', 'category vendor tags')
+    .populate({
+      path: 'product',
+      match: { storeId },
+      select: 'category vendor tags'
+    })
     .lean();
 
   // Get purchase history
-  const orders = await Order.find({ customer: customerId })
+  const orders = await Order.find({ customer: customerId, storeId })
     .select('lineItems')
     .limit(20)
     .lean();
@@ -78,6 +104,11 @@ const getCustomerPreferences = async (customerId: string) => {
  */
 export const getRecommendations = async (req: CustomerRequest, res: Response): Promise<void> => {
   try {
+    const storeId = getCustomerStoreObjectId(req, res);
+    if (!storeId) {
+      return;
+    }
+
     const customerId = req.customer.id;
     const {
       limit = '10',
@@ -87,7 +118,7 @@ export const getRecommendations = async (req: CustomerRequest, res: Response): P
     const limitNum = Math.min(parseInt(limit as string) || 10, 50);
 
     // Get customer preferences
-    const preferences = await getCustomerPreferences(customerId);
+    const preferences = await getCustomerPreferences(customerId, storeId);
     const excludeProductIds = [
       ...preferences.viewedProductIds.slice(0, 20), // Exclude recently viewed
       ...preferences.purchasedProductIds // Exclude already purchased
@@ -99,12 +130,13 @@ export const getRecommendations = async (req: CustomerRequest, res: Response): P
     if (type === 'trending') {
       // Get trending products
       products = await Product.find({
+        storeId,
         status: 'active',
         _id: { $nin: excludeProductIds.map(id => new mongoose.Types.ObjectId(id)) }
       })
         .sort({ 'analytics.viewCount': -1, 'analytics.orderCount': -1 })
         .limit(limitNum)
-        .populate('category', 'name slug')
+        .populate('category', 'name slug path')
         .select('title handle price images mobileDisplay vendor analytics.averageRating analytics.reviewCount')
         .lean();
     } else if (type === 'for_you' || type === 'general') {
@@ -114,19 +146,21 @@ export const getRecommendations = async (req: CustomerRequest, res: Response): P
         : {};
 
       products = await Product.find({
+        storeId,
         status: 'active',
         _id: { $nin: excludeProductIds.map(id => new mongoose.Types.ObjectId(id)) },
         ...categoryFilter
       })
         .sort({ 'analytics.averageRating': -1, 'analytics.orderCount': -1 })
         .limit(limitNum)
-        .populate('category', 'name slug')
+        .populate('category', 'name slug path')
         .select('title handle price images mobileDisplay vendor analytics.averageRating analytics.reviewCount')
         .lean();
 
       // If not enough personalized results, fill with popular products
       if (products.length < limitNum) {
         const additionalProducts = await Product.find({
+          storeId,
           status: 'active',
           _id: {
             $nin: [
@@ -137,7 +171,7 @@ export const getRecommendations = async (req: CustomerRequest, res: Response): P
         })
           .sort({ 'analytics.viewCount': -1 })
           .limit(limitNum - products.length)
-          .populate('category', 'name slug')
+          .populate('category', 'name slug path')
           .select('title handle price images mobileDisplay vendor analytics.averageRating analytics.reviewCount')
           .lean();
 
@@ -152,6 +186,7 @@ export const getRecommendations = async (req: CustomerRequest, res: Response): P
       if (recentViewedIds.length > 0) {
         // Get categories of recently viewed products
         const recentProducts = await Product.find({
+          storeId,
           _id: { $in: recentViewedIds.map(id => new mongoose.Types.ObjectId(id)) }
         }).select('category vendor tags').lean();
 
@@ -160,13 +195,14 @@ export const getRecommendations = async (req: CustomerRequest, res: Response): P
           .map(p => p.category);
 
         products = await Product.find({
+          storeId,
           status: 'active',
           _id: { $nin: excludeProductIds.map(id => new mongoose.Types.ObjectId(id)) },
           category: { $in: categories }
         })
           .sort({ 'analytics.averageRating': -1 })
           .limit(limitNum)
-          .populate('category', 'name slug')
+          .populate('category', 'name slug path')
           .select('title handle price images mobileDisplay vendor analytics.averageRating analytics.reviewCount')
           .lean();
       }
@@ -174,12 +210,13 @@ export const getRecommendations = async (req: CustomerRequest, res: Response): P
       // Fallback to trending if no similar products
       if (products.length === 0) {
         products = await Product.find({
+          storeId,
           status: 'active',
           _id: { $nin: excludeProductIds.map(id => new mongoose.Types.ObjectId(id)) }
         })
           .sort({ 'analytics.viewCount': -1 })
           .limit(limitNum)
-          .populate('category', 'name slug')
+          .populate('category', 'name slug path')
           .select('title handle price images mobileDisplay vendor analytics.averageRating analytics.reviewCount')
           .lean();
         recommendationType = 'trending';
@@ -220,6 +257,11 @@ export const getRecommendations = async (req: CustomerRequest, res: Response): P
  */
 export const trackProductView = async (req: CustomerRequest, res: Response): Promise<void> => {
   try {
+    const storeId = getCustomerStoreObjectId(req, res);
+    if (!storeId) {
+      return;
+    }
+
     const customerId = req.customer.id;
     const { productId } = req.params;
     const {
@@ -231,7 +273,7 @@ export const trackProductView = async (req: CustomerRequest, res: Response): Pro
     } = req.body;
 
     // Verify product exists
-    const product = await Product.findById(productId).select('handle');
+    const product = await Product.findOne({ _id: productId, storeId }).select('handle');
     if (!product) {
       res.status(404).json({
         status: 'error',
@@ -296,6 +338,11 @@ export const trackProductView = async (req: CustomerRequest, res: Response): Pro
  */
 export const getRecentlyViewed = async (req: CustomerRequest, res: Response): Promise<void> => {
   try {
+    const storeId = getCustomerStoreObjectId(req, res);
+    if (!storeId) {
+      return;
+    }
+
     const customerId = req.customer.id;
     const { limit = '10' } = req.query;
     const limitNum = Math.min(parseInt(limit as string) || 10, 50);
@@ -319,10 +366,11 @@ export const getRecentlyViewed = async (req: CustomerRequest, res: Response): Pr
 
     // Get product details
     const products = await Product.find({
+      storeId,
       _id: { $in: productIds },
       status: 'active'
     })
-      .populate('category', 'name slug')
+      .populate('category', 'name slug path')
       .select('title handle price images mobileDisplay vendor analytics.averageRating analytics.reviewCount')
       .lean();
 

@@ -6,9 +6,49 @@ import ProductReview from '../models/ProductReview';
 import ProductCategory from '../models/ProductCategory';
 import SearchHistory from '../models/SearchHistory';
 import { AuthenticatedRequest } from '../types';
+import { getStoreIdFromRequest } from '../middleware/storeAuth';
+
+const getEffectiveStoreId = (req: AuthenticatedRequest): string | null => {
+  const userStoreId = req.user?.storeId;
+  if (userStoreId) {
+    return userStoreId.toString();
+  }
+
+  return getStoreIdFromRequest(req);
+};
+
+const getStoreObjectIdOrResponse = (
+  req: AuthenticatedRequest,
+  res: Response
+): mongoose.Types.ObjectId | null => {
+  const storeId = getEffectiveStoreId(req);
+
+  if (!storeId) {
+    res.status(400).json({
+      success: false,
+      message: 'Store ID is required'
+    });
+    return null;
+  }
+
+  if (!mongoose.Types.ObjectId.isValid(storeId)) {
+    res.status(400).json({
+      success: false,
+      message: 'Invalid Store ID format'
+    });
+    return null;
+  }
+
+  return new mongoose.Types.ObjectId(storeId);
+};
 
 export const getProducts = async (req: AuthenticatedRequest, res: Response): Promise<Response> => {
   try {
+    const storeId = getStoreObjectIdOrResponse(req, res);
+    if (!storeId) {
+      return res;
+    }
+
     const {
       page = 1,
       limit = 20,
@@ -29,7 +69,7 @@ export const getProducts = async (req: AuthenticatedRequest, res: Response): Pro
     const skip = (pageNum - 1) * limitNum;
 
     // Build filter object
-    const filter: any = { status: 'active' };
+    const filter: any = { storeId, status: 'active' };
 
     if (category) {
       filter.category = category;
@@ -98,7 +138,7 @@ export const getProducts = async (req: AuthenticatedRequest, res: Response): Pro
       .sort(sort)
       .skip(skip)
       .limit(limitNum)
-      .populate('category', 'name slug')
+      .populate('category', 'name slug path')
       .select('-seo -inventoryTracking.history -analytics.conversionEvents');
 
     const total = await Product.countDocuments(filter);
@@ -126,12 +166,21 @@ export const getProducts = async (req: AuthenticatedRequest, res: Response): Pro
 
 export const getProduct = async (req: AuthenticatedRequest, res: Response): Promise<Response> => {
   try {
+    const storeId = getStoreObjectIdOrResponse(req, res);
+    if (!storeId) {
+      return res;
+    }
+
     const { id } = req.params as any;
     const userId = req.user?._id;
 
-    const product = await Product.findById(id)
-      .populate('category', 'name slug fullPath')
-      .populate('relatedProducts', 'title handle price images mobileDisplay.thumbnailUrl');
+    const product = await Product.findOne({ _id: id, storeId })
+      .populate('category', 'name slug path fullPath')
+      .populate({
+        path: 'relatedProducts',
+        match: { storeId },
+        select: 'title handle price images mobileDisplay.thumbnailUrl'
+      });
 
     if (!product) {
       return res.status(404).json({
@@ -182,6 +231,11 @@ export const getProduct = async (req: AuthenticatedRequest, res: Response): Prom
 
 export const searchProducts = async (req: AuthenticatedRequest, res: Response): Promise<Response> => {
   try {
+    const storeId = getStoreObjectIdOrResponse(req, res);
+    if (!storeId) {
+      return res;
+    }
+
     const {
       q: query,
       page = 1,
@@ -206,13 +260,16 @@ export const searchProducts = async (req: AuthenticatedRequest, res: Response): 
     const limitNum = parseInt(limit as string);
     const skip = (pageNum - 1) * limitNum;
 
+    const searchMatch = {
+      $text: { $search: query as string },
+      status: 'active',
+      storeId
+    };
+
     // Build search pipeline
     const pipeline: any[] = [
       {
-        $match: {
-          $text: { $search: query as string },
-          status: 'active'
-        }
+        $match: searchMatch
       },
       {
         $addFields: {
@@ -245,6 +302,8 @@ export const searchProducts = async (req: AuthenticatedRequest, res: Response): 
     if (Object.keys(additionalFilters).length > 0) {
       pipeline.push({ $match: additionalFilters });
     }
+
+    const countPipeline = [...pipeline, { $count: 'total' }];
 
     // Add sorting
     let sortStage: any = {};
@@ -290,42 +349,39 @@ export const searchProducts = async (req: AuthenticatedRequest, res: Response): 
     const products = await Product.aggregate(pipeline);
     
     // Get total count for pagination
-    const countPipeline = pipeline.slice(0, -3); // Remove skip, limit, and lookup
-    countPipeline.push({ $count: 'total' });
     const countResult = await Product.aggregate(countPipeline);
     const total = countResult.length > 0 ? countResult[0].total : 0;
 
     // Save search history
     const userId = req.user?._id;
     const sessionId = req.sessionID || 'anonymous';
+    const searchHistorySortKey = (() => {
+      switch (sortBy) {
+        case 'price_low':
+        case 'price_high':
+          return 'PRICE';
+        case 'popular':
+          return 'BEST_SELLING';
+        default:
+          return 'RELEVANCE';
+      }
+    })();
     
     await SearchHistory.create({
-      user: userId,
+      storeId,
+      userId: userId ? new mongoose.Types.ObjectId(userId.toString()) : undefined,
       sessionId,
       query: query as string,
-      normalizedQuery: (query as string).toLowerCase().trim(),
-      queryType: 'text',
-      source: 'search_bar',
+      searchType: 'text',
+      resultsCount: total,
+      hasResults: total > 0,
       filters: {
-        category,
-        priceMin: priceMin ? parseFloat(priceMin as string) : undefined,
-        priceMax: priceMax ? parseFloat(priceMax as string) : undefined,
-        brand,
-        rating: rating ? parseFloat(rating as string) : undefined,
-        inStock: inStock === 'true',
-        sortBy
+        sortKey: searchHistorySortKey,
+        minPrice: priceMin ? parseFloat(priceMin as string) : undefined,
+        maxPrice: priceMax ? parseFloat(priceMax as string) : undefined,
+        vendor: brand
       },
-      results: {
-        totalResults: total,
-        resultsShown: products.length,
-        hasResults: products.length > 0,
-        topResultId: products.length > 0 ? products[0]._id : undefined,
-        clickedResults: []
-      },
-      device: {
-        platform: req.headers['user-agent']?.includes('Mobile') ? 'mobile' : 'desktop',
-        isMobile: req.headers['user-agent']?.includes('Mobile') || false
-      }
+      userAgent: req.headers['user-agent']
     });
 
     return res.json({
@@ -352,11 +408,17 @@ export const searchProducts = async (req: AuthenticatedRequest, res: Response): 
 
 export const getFeaturedProducts = async (req: AuthenticatedRequest, res: Response): Promise<Response> => {
   try {
+    const storeId = getStoreObjectIdOrResponse(req, res);
+    if (!storeId) {
+      return res;
+    }
+
     const { limit = 10, category } = req.query as any;
     const userId = req.user?._id;
     const limitNum = parseInt(limit as string);
 
     const filter: any = {
+      storeId,
       status: 'active',
       'mobileDisplay.isFeatured': true
     };
@@ -368,7 +430,7 @@ export const getFeaturedProducts = async (req: AuthenticatedRequest, res: Respon
     let products = await Product.find(filter)
       .sort({ 'mobileDisplay.priority': -1, 'analytics.viewCount': -1 })
       .limit(limitNum)
-      .populate('category', 'name slug')
+      .populate('category', 'name slug path')
       .select('title handle price images mobileDisplay vendor reviews analytics');
 
     // Personalization based on user behavior
@@ -378,7 +440,11 @@ export const getFeaturedProducts = async (req: AuthenticatedRequest, res: Respon
         const recentViews = await ProductView.find({ user: userId })
           .sort({ viewedAt: -1 })
           .limit(20)
-          .populate('product', 'category vendor');
+          .populate({
+            path: 'product',
+            match: { storeId },
+            select: 'category vendor'
+          });
 
         if (recentViews.length > 0) {
           const viewedCategories = recentViews
@@ -427,6 +493,11 @@ export const getFeaturedProducts = async (req: AuthenticatedRequest, res: Respon
 
 export const getProductsByCategory = async (req: AuthenticatedRequest, res: Response): Promise<Response> => {
   try {
+    const storeId = getStoreObjectIdOrResponse(req, res);
+    if (!storeId) {
+      return res;
+    }
+
     const { categoryId } = req.params as any;
     const {
       page = 1,
@@ -456,6 +527,7 @@ export const getProductsByCategory = async (req: AuthenticatedRequest, res: Resp
 
     // Build filter
     const filter: any = {
+      storeId,
       status: 'active',
       category: { $in: categoryIds }
     };
@@ -502,7 +574,7 @@ export const getProductsByCategory = async (req: AuthenticatedRequest, res: Resp
       .sort(sort)
       .skip(skip)
       .limit(limitNum)
-      .populate('category', 'name slug')
+      .populate('category', 'name slug path')
       .select('-seo -inventoryTracking.history');
 
     const total = await Product.countDocuments(filter);
@@ -537,16 +609,21 @@ export const getProductsByCategory = async (req: AuthenticatedRequest, res: Resp
 
 export const getRecommendations = async (req: AuthenticatedRequest, res: Response): Promise<Response> => {
   try {
+    const storeId = getStoreObjectIdOrResponse(req, res);
+    if (!storeId) {
+      return res;
+    }
+
     const { limit = 10, type = 'general' } = req.query as any;
     const userId = req.user?._id;
     const limitNum = parseInt(limit as string);
 
     if (!userId) {
       // Return popular products for anonymous users
-      const products = await Product.find({ status: 'active' })
+      const products = await Product.find({ storeId, status: 'active' })
         .sort({ 'analytics.viewCount': -1, 'reviews.averageRating': -1 })
         .limit(limitNum)
-        .populate('category', 'name slug')
+        .populate('category', 'name slug path')
         .select('title handle price images mobileDisplay vendor reviews');
 
       return res.json({
@@ -563,18 +640,29 @@ export const getRecommendations = async (req: AuthenticatedRequest, res: Respons
     const recentViews = await ProductView.find({ user: userId })
       .sort({ viewedAt: -1 })
       .limit(50)
-      .populate('product', 'category vendor tags');
+      .populate({
+        path: 'product',
+        match: { storeId },
+        select: 'category vendor tags'
+      });
 
-    const viewedProducts = recentViews.map(view => view.product._id);
+    const viewedProducts = recentViews
+      .map(view => view.product)
+      .filter(Boolean)
+      .map(product => (product as any)._id);
 
     if (recentViews.length === 0) {
       // New user - return trending products
-      const trendingProducts = await (ProductView as any).getTrendingProducts(limitNum);
+      const trendingProducts = await Product.find({ storeId, status: 'active' })
+        .sort({ 'analytics.viewCount': -1, 'reviews.averageRating': -1 })
+        .limit(limitNum)
+        .populate('category', 'name slug path')
+        .select('title handle price images mobileDisplay vendor reviews');
       
       return res.json({
         success: true,
         data: {
-          products: trendingProducts.map(item => item.product),
+          products: trendingProducts,
           type: 'trending',
           personalized: false
         }
@@ -588,6 +676,9 @@ export const getRecommendations = async (req: AuthenticatedRequest, res: Respons
 
     recentViews.forEach(view => {
       const product = view.product as any;
+      if (!product) {
+        return;
+      }
       
       // Category preferences
       if (product.category) {
@@ -626,6 +717,7 @@ export const getRecommendations = async (req: AuthenticatedRequest, res: Respons
 
     // Build recommendation query
     const recommendationFilter: any = {
+      storeId,
       status: 'active',
       _id: { $nin: viewedProducts }, // Exclude already viewed products
       $or: []
@@ -649,7 +741,7 @@ export const getRecommendations = async (req: AuthenticatedRequest, res: Respons
     const recommendedProducts = await Product.find(recommendationFilter)
       .sort({ 'reviews.averageRating': -1, 'analytics.viewCount': -1 })
       .limit(limitNum)
-      .populate('category', 'name slug')
+      .populate('category', 'name slug path')
       .select('title handle price images mobileDisplay vendor reviews');
 
     return res.json({
@@ -705,7 +797,12 @@ export const trackProductView = async (productId: string, userId: string, req: a
 
 export const getProductReviews = async (req: AuthenticatedRequest, res: Response): Promise<Response> => {
   try {
-    const { productId } = req.params as any;
+    const storeId = getStoreObjectIdOrResponse(req, res);
+    if (!storeId) {
+      return res;
+    }
+
+    const productId = (req.params as any).productId || (req.params as any).id;
     const {
       page = 1,
       limit = 10,
@@ -717,6 +814,14 @@ export const getProductReviews = async (req: AuthenticatedRequest, res: Response
     const pageNum = parseInt(page as string);
     const limitNum = parseInt(limit as string);
     const skip = (pageNum - 1) * limitNum;
+
+    const product = await Product.findOne({ _id: productId, storeId }).select('_id').lean();
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: 'Product not found'
+      });
+    }
 
     const filter: any = {
       product: productId,
@@ -791,11 +896,16 @@ export const getProductReviews = async (req: AuthenticatedRequest, res: Response
 
 export const getRelatedProducts = async (req: AuthenticatedRequest, res: Response): Promise<Response> => {
   try {
-    const { productId } = req.params as any;
+    const storeId = getStoreObjectIdOrResponse(req, res);
+    if (!storeId) {
+      return res;
+    }
+
+    const productId = (req.params as any).productId || (req.params as any).id;
     const { limit = 8 } = req.query as any;
     const limitNum = parseInt(limit as string);
 
-    const product = await Product.findById(productId)
+    const product = await Product.findOne({ _id: productId, storeId })
       .populate('category')
       .select('category vendor tags');
 
@@ -806,14 +916,17 @@ export const getRelatedProducts = async (req: AuthenticatedRequest, res: Respons
       });
     }
 
+    const categoryId = (product as any).category?._id || (product as any).category;
+
     // Find related products based on category, vendor, and tags
     const relatedProducts = await Product.aggregate([
       {
         $match: {
           _id: { $ne: new mongoose.Types.ObjectId(productId) },
+          storeId,
           status: 'active',
           $or: [
-            { category: (product as any).category },
+            { category: categoryId },
             { vendor: (product as any).vendor },
             { tags: { $in: (product as any).tags || [] } }
           ]
@@ -823,7 +936,7 @@ export const getRelatedProducts = async (req: AuthenticatedRequest, res: Respons
         $addFields: {
           relevanceScore: {
             $sum: [
-              { $cond: [{ $eq: ['$category', (product as any).category] }, 3, 0] },
+              { $cond: [{ $eq: ['$category', categoryId] }, 3, 0] },
               { $cond: [{ $eq: ['$vendor', (product as any).vendor] }, 2, 0] },
               {
                 $size: {

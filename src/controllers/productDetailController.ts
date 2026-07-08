@@ -64,7 +64,7 @@ export class ProductDetailController extends Controller {
       // Fetch MongoDB enrichment data and Admin API metafields in parallel
       const [productMetrics, productData, metafieldsResponse] = await Promise.all([
         ProductMetrics.findOne({ productId: numericProductId }).lean(),
-        Product.findOne({ productId: numericProductId }).lean(),
+        Product.findOne({ storeId: new mongoose.Types.ObjectId(storeId), shopifyProductId: numericProductId }).lean(),
         // Avoid the process-wide Admin API client in tenant-scoped mobile reads.
         // Store-scoped metafield hydration should be added with a tenant-specific Admin client.
         Promise.resolve({ data: { product: { metafields: { edges: [] } } } }),
