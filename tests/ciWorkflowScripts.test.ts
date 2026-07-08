@@ -4,6 +4,7 @@ import path from 'path';
 describe('CI workflow scripts', () => {
   const packageJsonPath = path.join(__dirname, '..', 'package.json');
   const workflowPath = path.join(__dirname, '..', '.github', 'workflows', 'ci.yml');
+  const cdWorkflowPath = path.join(__dirname, '..', '.github', 'workflows', 'cd.yml');
 
   it('only references package.json scripts that exist', () => {
     const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
@@ -68,5 +69,22 @@ describe('CI workflow scripts', () => {
     ].forEach((actionRef) => {
       expect(workflow).not.toContain(actionRef);
     });
+  });
+
+  it('explains optional local API contract and E2E suite references', () => {
+    const workflow = fs.readFileSync(workflowPath, 'utf8');
+    const cdWorkflow = fs.readFileSync(cdWorkflowPath, 'utf8');
+
+    expect(workflow).toContain('Ready for human release review; deployment readiness still requires operator verification.');
+    expect(workflow).not.toContain('Ready for deployment');
+
+    expect(workflow).toContain('Skipping Newman API contract tests because tests/postman collection files are not present');
+    expect(workflow).toContain('tests/postman/cartaisy-api.postman_collection.json');
+    expect(workflow).toContain('tests/postman/ci-environment.postman_environment.json');
+
+    expect(cdWorkflow).toContain('deployment_path');
+    expect(cdWorkflow).toContain('aws-ecs-unverified');
+    expect(cdWorkflow).toContain('Skipping staging E2E tests because tests/e2e is not present');
+    expect(cdWorkflow).toContain('No backend deployment path is currently marked authoritative');
   });
 });

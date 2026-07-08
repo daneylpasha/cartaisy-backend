@@ -8,11 +8,34 @@ Do not assume this exists unless verified in code, CI, deployment configuration,
 
 Current state: the repo contains CI/CD workflow files, Docker configuration, deployment docs, scripts for backup/restore and final deployment checks, migrations folder, generated API docs, and runtime health endpoints.
 
-Known gap: this docs pass did not verify that deployed infrastructure, required secrets, external services, rollback procedures, or production environments are currently operational.
+Known gap: this docs pass did not verify that deployed infrastructure, required secrets, external services, rollback procedures, or production environments are currently operational. Release readiness is not proven by the presence of workflow files.
 
 ## Target state
 
 Target state: release readiness should be verified across code, configuration, tenant isolation, Shopify credentials, mobile/dashboard API compatibility, database safety, webhooks, observability, and rollback.
+
+## Implemented vs future checks
+
+Implemented local/repo checks:
+
+- Type checking, Jest tests, coverage, build, Docker image build verification, security scans, dependency reporting, and best-effort Codecov upload are represented in `.github/workflows/ci.yml`.
+- Newman API contract validation runs only when the local `tests/postman` collection and environment files exist. Those files are not currently present, so this check is an explicit skip.
+- Staging E2E validation in `.github/workflows/cd.yml` runs only when a local `tests/e2e` suite exists. That suite is not currently present, so this check is an explicit skip.
+- Runtime health endpoints `/api/health` and `/api/ready` exist in the backend, but external release smoke checks must still be verified against the chosen environment.
+
+Future/operator verification:
+
+- Confirm the authoritative deployment path before release. Current status: not yet decided.
+- Confirm whether Railway, AWS/ECS, Docker/manual deployment, or another path owns staging and production.
+- Confirm required secrets, registry credentials, domains, TLS, database connectivity, Redis/cache needs, webhooks, rollback procedures, and observability in the target environment.
+- Confirm release smoke checks against the deployed URL after an operator has chosen and provisioned the deployment path.
+
+## Deployment path status
+
+- Railway: `railway.json` exists and points Railway at the repository `Dockerfile` with `/api/health` as the health check. This does not prove a live Railway service, environment variables, domains, or production readiness.
+- AWS/ECS: `.github/workflows/cd.yml` contains AWS/ECS staging, production, backup, blue-green, CloudWatch, Slack, and rollback steps. This path is unverified and now requires manual `workflow_dispatch` with `deployment_path=aws-ecs-unverified`; it must not be treated as the authoritative path until an operator verifies infrastructure and secrets.
+- Docker/manual: `Dockerfile`, Docker Compose files, and `docs/DEPLOYMENT.md` exist. They are deployment documentation/options, not proof of an operational production path.
+- Authoritative path: not yet decided.
 
 ## Pre-release checks
 

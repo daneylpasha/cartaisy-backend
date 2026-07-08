@@ -37,7 +37,9 @@ Known gap: tests exist, but they do not prove every tenant, Shopify, checkout, w
 - CI ignores `tests/shopify.integration.test.ts` in the main Jest command.
 - Shopify integration tests may require credentials, network access, or explicit local setup. Do not run or rely on them without confirming requirements.
 - No package-level lint script is available at the time of this docs update.
-- CI/CD workflow files may reference infrastructure, secrets, or test collections that need separate verification.
+- The API contract job in `.github/workflows/ci.yml` is best-effort: it runs Newman only when `tests/postman/cartaisy-api.postman_collection.json` and `tests/postman/ci-environment.postman_environment.json` exist. Those files are not currently present, so the job writes a skipped result instead of implying Postman coverage exists.
+- The staging E2E job in `.github/workflows/cd.yml` is also best-effort: it runs only when a `tests/e2e/package.json` suite exists. That suite is not currently present, so the job records a skipped result rather than implying E2E coverage exists.
+- CI/CD workflow files reference infrastructure, secrets, or external services that need separate operator verification before release decisions.
 
 ## CI behavior if known
 
@@ -51,7 +53,7 @@ The required backend validation path includes:
 - `npm run test:coverage -- --runInBand --watchman=false --testPathIgnorePatterns tests/shopify.integration.test.ts`.
 - `npm run build` on Node 18 and Node 20.
 
-The workflow also includes Docker image build verification, Gitleaks/Trivy/Snyk security scanning, best-effort Codecov upload, best-effort Newman API contract testing, and dependency/license reporting. Checks marked `continue-on-error: true` are advisory and should not be treated as proof that the related area is healthy.
+The workflow also includes Docker image build verification, Gitleaks/Trivy/Snyk security scanning, best-effort Codecov upload, optional Newman API contract testing when local Postman files exist, and dependency/license reporting. Checks marked `continue-on-error: true` are advisory and should not be treated as proof that the related area is healthy.
 
 Startup reliability expectations:
 
@@ -60,6 +62,7 @@ Startup reliability expectations:
 - The MongoDB service health check must authenticate with the test credentials and avoid fragile nested shell quoting.
 - The Docker build job sets `load: true` so the image tagged `cartaisy/backend:test` is available to the following smoke-test `docker run`.
 - Credential-required Shopify live integration tests remain excluded from the default CI Jest command unless they are explicitly configured in a separate opt-in workflow.
+- Missing Postman and E2E suites are explicit skips, not successful release validation.
 
 Known gap: the latest observed main-branch CI run before issue #86 failed at workflow startup before any jobs were scheduled. The issue #86 fix updates the startup-blocking workflow configuration; the next pull request or main CI run is the source of truth for whether GitHub now schedules and completes the checks.
 

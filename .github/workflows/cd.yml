@@ -15,6 +15,14 @@ on:
         options:
           - staging
           - production
+      deployment_path:
+        description: 'Deployment path to execute'
+        required: true
+        default: 'validation-only'
+        type: choice
+        options:
+          - validation-only
+          - aws-ecs-unverified
 
 env:
   DOCKER_REGISTRY: docker.io
@@ -22,10 +30,21 @@ env:
   NODE_VERSION: '18'
 
 jobs:
+  deployment-authority:
+    name: Deployment Authority Notice
+    runs-on: ubuntu-latest
+    steps:
+      - name: Document deployment status
+        run: |
+          echo "No backend deployment path is currently marked authoritative in repo docs."
+          echo "Railway config, Docker/manual docs, and AWS/ECS workflow steps exist, but live infrastructure readiness is unverified."
+          echo "Use workflow_dispatch with deployment_path=aws-ecs-unverified only after an operator confirms the required infrastructure and secrets."
+
   # Build and push Docker image
   build-and-push:
     name: Build & Push Docker Image
     runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.deployment_path == 'aws-ecs-unverified'
     outputs:
       image-tag: ${{ steps.meta.outputs.tags }}
       image-digest: ${{ steps.build.outputs.digest }}
@@ -90,7 +109,7 @@ jobs:
     name: Deploy to Staging
     runs-on: ubuntu-latest
     needs: build-and-push
-    if: github.ref == 'refs/heads/develop' || github.event.inputs.environment == 'staging'
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.deployment_path == 'aws-ecs-unverified' && (github.event.inputs.environment == 'staging' || github.event.inputs.environment == 'production')
     environment:
       name: staging
       url: https://staging-api.cartaisy.com
@@ -169,11 +188,25 @@ jobs:
 
       - name: Install test dependencies
         run: |
+          if [ ! -f tests/e2e/package.json ]; then
+            echo "::notice::Skipping staging E2E dependency installation because tests/e2e is not present in this repository."
+            mkdir -p tests/e2e/results
+            printf 'Skipped: tests/e2e is not present in this repository.\n' > tests/e2e/results/skip.txt
+            exit 0
+          fi
+
           cd tests/e2e
           npm ci
 
       - name: Run E2E tests
         run: |
+          if [ ! -f tests/e2e/package.json ]; then
+            echo "::notice::Skipping staging E2E tests because tests/e2e is not present in this repository."
+            mkdir -p tests/e2e/results
+            printf 'Skipped: tests/e2e is not present in this repository.\n' > tests/e2e/results/skip.txt
+            exit 0
+          fi
+
           cd tests/e2e
           npm run test:e2e
         env:
@@ -193,7 +226,7 @@ jobs:
     name: Deploy to Production
     runs-on: ubuntu-latest
     needs: [build-and-push, e2e-tests]
-    if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.environment == 'production'
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.deployment_path == 'aws-ecs-unverified' && github.event.inputs.environment == 'production'
     environment:
       name: production
       url: https://api.cartaisy.com
@@ -308,7 +341,7 @@ jobs:
   rollback:
     name: Rollback Deployment
     runs-on: ubuntu-latest
-    if: failure()
+    if: failure() && github.event_name == 'workflow_dispatch' && github.event.inputs.deployment_path == 'aws-ecs-unverified'
     needs: [deploy-staging, deploy-production]
     
     steps:
