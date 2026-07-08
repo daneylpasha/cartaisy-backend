@@ -5,6 +5,7 @@ import OrderTracking from '../models/OrderTracking';
 import Product, { IProductDocument } from '../models/Product';
 import Customer from '../models/Customer';
 import { CustomerInfo } from '../middleware/customerAuth';
+import { findStoreProductById } from '../utils/productOwnership';
 
 // Extend Request to include customer info from authenticateCustomer middleware
 interface CustomerRequest extends Request {
@@ -61,7 +62,10 @@ export const getOrders = async (req: CustomerRequest, res: Response): Promise<vo
     const skip = (pageNum - 1) * limitNum;
 
     // Build filter - query by either customer or user field for backwards compatibility
-    const filter: any = { $or: [{ customer: customerId }, { user: customerId }] };
+    const filter: any = {
+      storeId: req.customer.storeId,
+      $or: [{ customer: customerId }, { user: customerId }]
+    };
 
     // Map status parameter to database status values
     if (status) {
@@ -103,7 +107,7 @@ export const getOrders = async (req: CustomerRequest, res: Response): Promise<vo
     let productsMap: any = {};
     if (productIds.length > 0) {
       try {
-        const products = await Product.find({ _id: { $in: productIds } })
+        const products = await Product.find({ _id: { $in: productIds }, storeId: req.customer.storeId })
           .select('title handle images')
           .lean();
         productsMap = products.reduce((acc: any, p: any) => {
@@ -181,7 +185,7 @@ export const createOrder = async (req: CustomerRequest, res: Response): Promise<
     }
 
     // Get customer and validate addresses
-    const customer = await Customer.findById(customerId).select('addresses email name');
+    const customer = await Customer.findById(customerId).select('addresses email name storeId');
     if (!customer) {
       res.status(404).json({
         status: 'error',
@@ -206,9 +210,10 @@ export const createOrder = async (req: CustomerRequest, res: Response): Promise<
     // Validate and process line items
     const processedLineItems = [];
     let subtotalPrice = 0;
+    const storeId = customer.storeId.toString();
 
     for (const item of lineItems) {
-      const product = await Product.findById(item.productId) as IProductDocument;
+      const product = await findStoreProductById(item.productId, storeId) as IProductDocument;
       if (!product || product.status !== 'active') {
         res.status(400).json({
           status: 'error',
@@ -264,6 +269,7 @@ export const createOrder = async (req: CustomerRequest, res: Response): Promise<
 
     // Create order
     const order = new Order({
+      storeId,
       customer: customerId,
       email: customer.email,
       lineItems: processedLineItems,
@@ -294,9 +300,10 @@ export const createOrder = async (req: CustomerRequest, res: Response): Promise<
 
     // Update product inventory
     for (const item of processedLineItems) {
-      await Product.findByIdAndUpdate(item.productId, {
-        $inc: { 'inventoryTracking.totalQuantity': -item.quantity }
-      });
+      await Product.updateOne(
+        { _id: item.productId, storeId },
+        { $inc: { 'inventoryTracking.totalQuantity': -item.quantity } }
+      );
     }
 
     // Update customer segmentation data
@@ -349,7 +356,11 @@ export const getOrder = async (req: CustomerRequest, res: Response): Promise<voi
     const { orderId } = req.params;
 
     // Fetch order and verify ownership
-    const order = await Order.findOne({ _id: orderId, $or: [{ customer: customerId }, { user: customerId }] }).lean();
+    const order = await Order.findOne({
+      _id: orderId,
+      storeId: req.customer.storeId,
+      $or: [{ customer: customerId }, { user: customerId }]
+    }).lean();
 
     if (!order) {
       res.status(404).json({
@@ -367,7 +378,7 @@ export const getOrder = async (req: CustomerRequest, res: Response): Promise<voi
     let productsMap: any = {};
     if (productIds.length > 0) {
       try {
-        const products = await Product.find({ _id: { $in: productIds } })
+        const products = await Product.find({ _id: { $in: productIds }, storeId: req.customer.storeId })
           .select('title handle images price')
           .lean();
         productsMap = products.reduce((acc: any, p: any) => {
@@ -421,7 +432,11 @@ export const cancelOrder = async (req: CustomerRequest, res: Response): Promise<
     const { orderId } = req.params;
     const { reason } = req.body;
 
-    const order = await Order.findOne({ _id: orderId, $or: [{ customer: customerId }, { user: customerId }] });
+    const order = await Order.findOne({
+      _id: orderId,
+      storeId: req.customer.storeId,
+      $or: [{ customer: customerId }, { user: customerId }]
+    });
 
     if (!order) {
       res.status(404).json({
@@ -467,9 +482,10 @@ export const cancelOrder = async (req: CustomerRequest, res: Response): Promise<
     // Restore inventory
     for (const item of order.lineItems || []) {
       if (item.productId) {
-        await Product.findByIdAndUpdate(item.productId, {
-          $inc: { 'inventoryTracking.totalQuantity': item.quantity }
-        });
+        await Product.updateOne(
+          { _id: item.productId, storeId: req.customer.storeId },
+          { $inc: { 'inventoryTracking.totalQuantity': item.quantity } }
+        );
       }
     }
 

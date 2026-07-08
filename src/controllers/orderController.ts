@@ -6,6 +6,7 @@ import Product, { IProductDocument } from '../models/Product';
 import User from '../models/User';
 import { AuthenticatedRequest } from '../types';
 import { ShopifyOrderSyncService } from '../services/shopifyOrderSyncService';
+import { findStoreProductById } from '../utils/productOwnership';
 
 export const getUserOrders = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
@@ -239,9 +240,18 @@ export const createOrder = async (req: AuthenticatedRequest, res: Response): Pro
     // Validate and process line items
     const processedLineItems = [];
     let subtotalPrice = 0;
+    const storeId = req.storeId || req.user?.storeId;
+
+    if (!storeId) {
+      res.status(400).json({
+        success: false,
+        message: 'Store context is required'
+      });
+      return;
+    }
 
     for (const item of lineItems) {
-      const product = await Product.findById(item.productId) as IProductDocument;
+      const product = await findStoreProductById(item.productId, storeId.toString()) as IProductDocument;
       if (!product || product.status !== 'active') {
         res.status(400).json({
           success: false,
@@ -280,7 +290,7 @@ export const createOrder = async (req: AuthenticatedRequest, res: Response): Pro
 
     // Create order
     const order = new Order({
-      storeId: req.storeId || req.user?.storeId,
+      storeId,
       user: userId,
       email: req.user?.email,
       lineItems: processedLineItems,
@@ -308,9 +318,10 @@ export const createOrder = async (req: AuthenticatedRequest, res: Response): Pro
 
     // Update product inventory
     for (const item of processedLineItems) {
-      await Product.findByIdAndUpdate(item.productId, {
-        $inc: { 'inventoryTracking.totalQuantity': -item.quantity }
-      });
+      await Product.updateOne(
+        { _id: item.productId, storeId },
+        { $inc: { 'inventoryTracking.totalQuantity': -item.quantity } }
+      );
     }
 
     // Send order confirmation notification (legacy)
@@ -456,9 +467,10 @@ export const cancelOrder = async (req: AuthenticatedRequest, res: Response): Pro
 
     // Restore inventory
     for (const item of order.lineItems) {
-      await Product.findByIdAndUpdate(item.productId, {
-        $inc: { 'inventoryTracking.totalQuantity': item.quantity }
-      });
+      await Product.updateOne(
+        { _id: item.productId, storeId: order.storeId },
+        { $inc: { 'inventoryTracking.totalQuantity': item.quantity } }
+      );
     }
 
     // Send cancellation email via Resend (async, don't wait)

@@ -3,6 +3,7 @@ import mongoose, { ObjectId } from 'mongoose';
 import { verifyToken } from '../utils/jwt';
 import Customer from '../models/Customer';
 import GuestSession, { IGuestSession } from '../models/GuestSession';
+import { findStoreProductById } from '../utils/productOwnership';
 
 // Type augmentation for Express Request (to complement express.d.ts)
 declare module 'express-serve-static-core' {
@@ -72,6 +73,14 @@ async function mergeGuestCartToCustomer(
 
     // Merge cart items
     for (const guestItem of guestSession.cart.items) {
+      const product = await findStoreProductById(
+        guestItem.product.toString(),
+        customer.storeId.toString()
+      );
+      if (!product) {
+        continue;
+      }
+
       const existingItemIndex = customer.cart.items.findIndex(
         (item) =>
           item.productId.toString() === guestItem.product.toString() &&
@@ -213,7 +222,7 @@ export const authenticateCart = async (
           await mergeGuestCartToCustomer(
             sessionId,
             customer._id.toString(),
-            storeId
+            customer.storeId.toString()
           );
         }
 
@@ -327,7 +336,7 @@ export const optionalCartAuth = async (
               await mergeGuestCartToCustomer(
                 sessionId,
                 customer._id.toString(),
-                storeId
+                customer.storeId.toString()
               );
             }
           }
