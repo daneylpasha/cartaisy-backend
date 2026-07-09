@@ -31,6 +31,14 @@ Known gap: status categories below are based on repo inspection and existing doc
 | Testing/CI | Partial | Jest tests, tenant-scoped Storefront tests, type-check script, build script, and CI workflow exist. Issue #85 makes generated TSOA route registration fail fast at app startup and adds focused coverage proving representative search, product detail, cart, checkout, and favorites spec routes mount. Issue #86 updates CI startup reliability by replacing retired and obsolete action majors, removing unsupported `env` context usage from service image fields, hardening the MongoDB service health check, loading the Docker build before its smoke test, and documenting the required type-check/test/build path. The latest observed main CI run before this fix failed at workflow startup before jobs were scheduled; the next PR/main run must verify the updated workflow in GitHub. Test coverage is not proof that all tenant/security/checkout risks are covered. |
 | Release readiness | Partial | CI/CD workflow files and deployment scripts exist. Railway is now the authoritative staging deployment path (issue #97), but no Railway staging service, API URL, environment variables, MongoDB connection, Shopify dev-store credentials, webhook secret, or `/api/health` and `/api/ready` staging evidence has been recorded in this repo. AWS/ECS remains an unverified manual workflow path; Docker/manual remains a fallback/reference option. Production path is still undecided. |
 
+First-merchant checkout smoke status (issue #99): a repeatable Shopify-hosted
+checkout/order webhook smoke runbook now exists at
+`docs/FIRST_MERCHANT_SHOPIFY_CHECKOUT_WEBHOOK_SMOKE_RUNBOOK.md`. No Shopify
+development-store checkout, webhook delivery, staging deployment, database
+verification, or live credential action was run by this docs update. Successful
+`checkoutUrl` generation and order webhook reconciliation remain pending
+operator execution and evidence recording.
+
 ## What appears complete
 
 - Backend context entrypoint and shared SaaS context docs now exist.
@@ -55,6 +63,8 @@ Known gap: status categories below are based on repo inspection and existing doc
 - End-to-end first merchant onboarding readiness.
 - Automated mobile app build or app-store submission readiness.
 - Complete checkout strategy documentation and production validation.
+- First-merchant Shopify-hosted checkout/order webhook smoke execution against
+  an approved development or generated-test-data store.
 - Complete tenant-safety coverage for every route, job, webhook, and Shopify call.
 - A green GitHub CI run on the issue #86 PR or a later main-branch run after the workflow startup fix.
 - Provisioned Railway staging URL and recorded `/api/health` plus `/api/ready` evidence.

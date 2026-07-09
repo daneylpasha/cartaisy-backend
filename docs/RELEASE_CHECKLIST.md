@@ -332,6 +332,32 @@ and rollback notes from the staging database.
 - Confirm sync jobs use store-scoped credentials and do not overwrite another merchant's data.
 - Verify webhook URLs and secrets in the target environment.
 
+## First-merchant checkout webhook smoke
+
+Before private beta, an operator must run
+`docs/FIRST_MERCHANT_SHOPIFY_CHECKOUT_WEBHOOK_SMOKE_RUNBOOK.md` against an
+approved Shopify development or generated-test-data store and a reachable
+backend environment.
+
+Current status (issue #99): runbook prepared; smoke execution is pending
+operator context. This docs update did not run staging database reads/writes,
+Shopify checkout, webhook delivery tests, production/staging deployments, or
+live credential actions.
+
+- [ ] Backend commit, environment, and store description recorded without secrets.
+- [ ] Store record exists and is active/connected for the test store.
+- [ ] Storefront credentials are confirmed store-scoped.
+- [ ] `SHOPIFY_WEBHOOK_SECRET` is configured in the target environment without recording the value.
+- [ ] Shopify order webhook delivery reaches the backend URL.
+- [ ] `POST /api/v1/checkout/handoff` returns a `checkoutUrl`.
+- [ ] Shopify test checkout completes without a real payment transaction.
+- [ ] Order webhook is accepted after HMAC verification and shop-domain mapping.
+- [ ] Matching `CheckoutHandoff` is reconciled.
+- [ ] Local `Order` is created or updated with the correct `storeId`.
+- [ ] Guest attribution is tested or explicitly marked not practical.
+- [ ] Customer attribution is tested or explicitly marked not practical.
+- [ ] Failures are classified as backend, mobile/API client, Shopify config, or environment follow-ups.
+
 ## Rollback notes
 
 - Identify the previous deployable version or Docker image.
