@@ -168,10 +168,14 @@ curl -sS -X POST "$API_BASE_URL/api/v1/checkout/handoff" \
   -H "Content-Type: application/json" \
   -H "X-Store-ID: <storeId>" \
   -d '{
-    "cartId": "<shopifyCartId>",
-    "guestSessionId": "<guestSessionId-if-guest>"
+    "cartId": "<shopifyCartId>"
   }'
 ```
+
+Do not send `guestSessionId` in the handoff request body. The handoff API body
+accepts only `cartId` and optional `country`; guest identity must already be
+carried by request middleware from the cart flow, such as the guest session
+context associated with `X-Session-ID`.
 
 For an authenticated customer test, include the approved customer
 authentication header instead of relying on guest attribution.
