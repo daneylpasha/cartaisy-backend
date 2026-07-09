@@ -1,6 +1,6 @@
 # Backend Status
 
-Last updated: 2026-07-08.
+Last updated: 2026-07-09.
 
 This file is a human/agent-maintained snapshot, not an automatically guaranteed source of truth. Verify current behavior in code, tests, CI, and deployed environments before making implementation decisions.
 
@@ -29,7 +29,7 @@ Known gap: status categories below are based on repo inspection and existing doc
 | Dashboard APIs | Partial | Admin, store settings, branding, customer management, order management, email, security, compliance, abandoned cart, notification, and Shopify connection/sync routes exist. Authorization consistency must be verified. |
 | Webhooks/sync | Partial | Shopify webhook HMAC verification (raw-body, timing-safe) and shop-domain-to-Store tenant mapping are enforced before webhook handlers run (issue #63); handlers fail closed without a trusted `storeId`. Product and inventory webhook writes and product sync are store-scoped (issue #65). Order webhook writes are store-scoped and reconcile checkout handoffs idempotently (issue #76); Shopify order IDs and order numbers are unique per store, not globally. Customer webhook matching and the `syncCustomers`/`syncOrders` jobs are store-scoped, and sync-created users/orders carry `storeId` (issue #77; legacy-data backfill documented in `docs/SHOPIFY_ADMIN_WEBHOOK_TENANT_AUDIT.md`, with release gates in `docs/RELEASE_CHECKLIST.md`). Webhook retry behavior remains follow-up work. |
 | Testing/CI | Partial | Jest tests, tenant-scoped Storefront tests, type-check script, build script, and CI workflow exist. Issue #85 makes generated TSOA route registration fail fast at app startup and adds focused coverage proving representative search, product detail, cart, checkout, and favorites spec routes mount. Issue #86 updates CI startup reliability by replacing retired and obsolete action majors, removing unsupported `env` context usage from service image fields, hardening the MongoDB service health check, loading the Docker build before its smoke test, and documenting the required type-check/test/build path. The latest observed main CI run before this fix failed at workflow startup before jobs were scheduled; the next PR/main run must verify the updated workflow in GitHub. Test coverage is not proof that all tenant/security/checkout risks are covered. |
-| Release readiness | Partial | CI/CD workflow files and deployment scripts exist. Deployed infrastructure, secrets, rollback behavior, and first-merchant readiness must be verified with humans before release. |
+| Release readiness | Partial | CI/CD workflow files and deployment scripts exist. Railway is now the authoritative staging deployment path (issue #97), but no Railway staging service, API URL, environment variables, MongoDB connection, Shopify dev-store credentials, webhook secret, or `/api/health` and `/api/ready` staging evidence has been recorded in this repo. AWS/ECS remains an unverified manual workflow path; Docker/manual remains a fallback/reference option. Production path is still undecided. |
 
 ## What appears complete
 
@@ -57,6 +57,7 @@ Known gap: status categories below are based on repo inspection and existing doc
 - Complete checkout strategy documentation and production validation.
 - Complete tenant-safety coverage for every route, job, webhook, and Shopify call.
 - A green GitHub CI run on the issue #86 PR or a later main-branch run after the workflow startup fix.
+- Provisioned Railway staging URL and recorded `/api/health` plus `/api/ready` evidence.
 
 ## Current priority areas
 
@@ -66,6 +67,7 @@ Known gap: status categories below are based on repo inspection and existing doc
 4. Dashboard/mobile API contract validation.
 5. Home module validation and Shopify ID ownership checks.
 6. Release readiness and rollback verification.
+7. Railway staging provisioning and smoke-test evidence.
 
 ## Related docs/issues
 
