@@ -1,5 +1,10 @@
 import { Response } from 'express';
 import CollectionDisplay from '../models/CollectionDisplay';
+import {
+  HomeModuleShopifyValidationError,
+  singleCollectionReference,
+  validateHomeModuleCollectionReferences
+} from '../services/homeModuleShopifyValidationService';
 import { AuthenticatedRequest } from '../types';
 
 export const collectionDisplayController = {
@@ -63,6 +68,14 @@ export const collectionDisplayController = {
         }
       }
 
+      await validateHomeModuleCollectionReferences(
+        req.storeId,
+        displays.map((display: any, index: number) => ({
+          collectionId: display.collectionId,
+          field: `collectionDisplays[${index}].collectionId`
+        }))
+      );
+
       const validatedDisplays = displays.map((display: any) => ({
         storeId: req.storeId,
         ...display
@@ -77,6 +90,12 @@ export const collectionDisplayController = {
       });
     } catch (error: any) {
       console.error('Error creating collection displays:', error);
+      if (error instanceof HomeModuleShopifyValidationError) {
+        return res.status(error.statusCode).json({
+          success: false,
+          error: error.message
+        });
+      }
       res.status(500).json({
         success: false,
         error: error.message || 'Failed to create collection displays'
@@ -103,6 +122,14 @@ export const collectionDisplayController = {
         });
       }
 
+      await validateHomeModuleCollectionReferences(
+        req.storeId,
+        displays.map((display: any, index: number) => ({
+          collectionId: display.collectionId,
+          field: `collectionDisplays[${index}].collectionId`
+        }))
+      );
+
       const validatedDisplays = displays.map((display: any) => ({
         storeId: req.storeId,
         ...display
@@ -118,6 +145,12 @@ export const collectionDisplayController = {
       });
     } catch (error: any) {
       console.error('Error updating collection displays:', error);
+      if (error instanceof HomeModuleShopifyValidationError) {
+        return res.status(error.statusCode).json({
+          success: false,
+          error: error.message
+        });
+      }
       res.status(500).json({
         success: false,
         error: error.message || 'Failed to update collection displays'
@@ -172,6 +205,24 @@ export const collectionDisplayController = {
       const id = (req.params as any)?.id as string;
       const isActive = (req.body as any)?.isActive;
 
+      if (isActive === true) {
+        const display = await CollectionDisplay.findOne({ _id: id, storeId: req.storeId })
+          .select('collectionId')
+          .lean();
+
+        if (!display) {
+          return res.status(404).json({
+            success: false,
+            error: 'Collection display not found'
+          });
+        }
+
+        await validateHomeModuleCollectionReferences(
+          req.storeId,
+          singleCollectionReference(display.collectionId, 'collectionId')
+        );
+      }
+
       const updatedDisplay = await CollectionDisplay.findOneAndUpdate(
         { _id: id, storeId: req.storeId },
         { isActive },
@@ -192,6 +243,12 @@ export const collectionDisplayController = {
       });
     } catch (error: any) {
       console.error('Error updating collection display status:', error);
+      if (error instanceof HomeModuleShopifyValidationError) {
+        return res.status(error.statusCode).json({
+          success: false,
+          error: error.message
+        });
+      }
       res.status(500).json({
         success: false,
         error: error.message || 'Failed to update collection display status'

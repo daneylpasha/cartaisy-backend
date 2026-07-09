@@ -1,5 +1,10 @@
 import { Response } from 'express';
 import PromoBanner from '../models/PromoBanner';
+import {
+  HomeModuleShopifyValidationError,
+  singleCollectionReference,
+  validateHomeModuleCollectionReferences
+} from '../services/homeModuleShopifyValidationService';
 import { AuthenticatedRequest } from '../types';
 
 export const promoBannerController = {
@@ -35,6 +40,14 @@ export const promoBannerController = {
         buttonColor: item.buttonColor || '#007bff'
       }));
 
+      await validateHomeModuleCollectionReferences(
+        req.storeId,
+        items.map((item: any, index: number) => ({
+          collectionId: item.collectionId,
+          field: `[${index}].collectionId`
+        }))
+      );
+
       await PromoBanner.deleteMany({ storeId: req.storeId });
 
       const createdItems = await PromoBanner.insertMany(validatedItems);
@@ -45,6 +58,12 @@ export const promoBannerController = {
         data: createdItems
       });
     } catch (error: any) {
+      if (error instanceof HomeModuleShopifyValidationError) {
+        return res.status(error.statusCode).json({
+          success: false,
+          error: error.message
+        });
+      }
       res.status(500).json({
         success: false,
         error: error.message || 'Failed to create promo banners'
@@ -84,6 +103,14 @@ export const promoBannerController = {
         buttonColor: item.buttonColor || '#007bff'
       }));
 
+      await validateHomeModuleCollectionReferences(
+        req.storeId,
+        items.map((item: any, index: number) => ({
+          collectionId: item.collectionId,
+          field: `[${index}].collectionId`
+        }))
+      );
+
       await PromoBanner.deleteMany({ storeId: req.storeId });
 
       const updatedItems = await PromoBanner.insertMany(validatedItems);
@@ -94,6 +121,12 @@ export const promoBannerController = {
         data: updatedItems
       });
     } catch (error: any) {
+      if (error instanceof HomeModuleShopifyValidationError) {
+        return res.status(error.statusCode).json({
+          success: false,
+          error: error.message
+        });
+      }
       res.status(500).json({
         success: false,
         error: error.message || 'Failed to update promo banners'
@@ -178,6 +211,24 @@ export const promoBannerController = {
       const id = (req.params as any)?.id as string;
       const isActive = (req.body as any)?.isActive;
 
+      if (isActive === true) {
+        const item = await PromoBanner.findOne({ _id: id, storeId: req.storeId })
+          .select('collectionId')
+          .lean();
+
+        if (!item) {
+          return res.status(404).json({
+            success: false,
+            error: 'Promo banner not found'
+          });
+        }
+
+        await validateHomeModuleCollectionReferences(
+          req.storeId,
+          singleCollectionReference(item.collectionId, 'collectionId')
+        );
+      }
+
       const updatedItem = await PromoBanner.findOneAndUpdate(
         { _id: id, storeId: req.storeId },
         { isActive },
@@ -197,6 +248,12 @@ export const promoBannerController = {
         data: updatedItem
       });
     } catch (error: any) {
+      if (error instanceof HomeModuleShopifyValidationError) {
+        return res.status(error.statusCode).json({
+          success: false,
+          error: error.message
+        });
+      }
       res.status(500).json({
         success: false,
         error: error.message || 'Failed to update promo banner status'

@@ -1,5 +1,10 @@
 import { Response } from 'express';
 import CollectionShowcase from '../models/CollectionShowcase';
+import {
+  HomeModuleShopifyValidationError,
+  collectionArrayReferences,
+  validateHomeModuleCollectionReferences
+} from '../services/homeModuleShopifyValidationService';
 import { AuthenticatedRequest } from '../types';
 
 export const collectionShowcaseController = {
@@ -31,6 +36,14 @@ export const collectionShowcaseController = {
         isActive: item.isActive !== undefined ? item.isActive : true
       }));
 
+      await validateHomeModuleCollectionReferences(
+        req.storeId,
+        items.reduce((references: any[], item: any, index: number) => [
+          ...references,
+          ...collectionArrayReferences(item.collections, `[${index}].collections`)
+        ], [])
+      );
+
       await CollectionShowcase.deleteMany({ storeId: req.storeId });
 
       const createdItems = await CollectionShowcase.insertMany(validatedItems);
@@ -41,6 +54,12 @@ export const collectionShowcaseController = {
         data: createdItems
       });
     } catch (error: any) {
+      if (error instanceof HomeModuleShopifyValidationError) {
+        return res.status(error.statusCode).json({
+          success: false,
+          error: error.message
+        });
+      }
       res.status(500).json({
         success: false,
         error: error.message || 'Failed to create collection showcases'
@@ -76,6 +95,14 @@ export const collectionShowcaseController = {
         isActive: item.isActive !== undefined ? item.isActive : true
       }));
 
+      await validateHomeModuleCollectionReferences(
+        req.storeId,
+        items.reduce((references: any[], item: any, index: number) => [
+          ...references,
+          ...collectionArrayReferences(item.collections, `[${index}].collections`)
+        ], [])
+      );
+
       await CollectionShowcase.deleteMany({ storeId: req.storeId });
 
       const updatedItems = await CollectionShowcase.insertMany(validatedItems);
@@ -86,6 +113,12 @@ export const collectionShowcaseController = {
         data: updatedItems
       });
     } catch (error: any) {
+      if (error instanceof HomeModuleShopifyValidationError) {
+        return res.status(error.statusCode).json({
+          success: false,
+          error: error.message
+        });
+      }
       res.status(500).json({
         success: false,
         error: error.message || 'Failed to update collection showcases'
@@ -170,6 +203,24 @@ export const collectionShowcaseController = {
       const id = (req.params as any)?.id as string;
       const isActive = (req.body as any)?.isActive;
 
+      if (isActive === true) {
+        const item = await CollectionShowcase.findOne({ _id: id, storeId: req.storeId })
+          .select('collections')
+          .lean();
+
+        if (!item) {
+          return res.status(404).json({
+            success: false,
+            error: 'Collection showcase not found'
+          });
+        }
+
+        await validateHomeModuleCollectionReferences(
+          req.storeId,
+          collectionArrayReferences(item.collections, 'collections')
+        );
+      }
+
       const updatedItem = await CollectionShowcase.findOneAndUpdate(
         { _id: id, storeId: req.storeId },
         { isActive },
@@ -189,6 +240,12 @@ export const collectionShowcaseController = {
         data: updatedItem
       });
     } catch (error: any) {
+      if (error instanceof HomeModuleShopifyValidationError) {
+        return res.status(error.statusCode).json({
+          success: false,
+          error: error.message
+        });
+      }
       res.status(500).json({
         success: false,
         error: error.message || 'Failed to update collection showcase status'

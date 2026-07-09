@@ -4,6 +4,17 @@
 
 This audit covers the current backend configuration used to assemble the mobile home screen. It is intentionally documentation-only and does not change API behavior.
 
+> Update (2026-07-09, issue #100): home module Shopify collection ID
+> ownership validation is implemented for admin create/update and activation
+> paths. Carousel, promo banner, category grid, collection display, category
+> collection grid, collection showcase, and collection-action callout banner
+> payloads validate configured collection IDs through the owning store's
+> Storefront credentials before saving or publishing active content. Invalid,
+> missing, unresolvable, or cross-store collection IDs are rejected with
+> controlled 400 responses before replacement-style controllers delete existing
+> records. No current home module model stores a Shopify product ID, so product
+> ID validation remains future work for any later product-linked module.
+
 Reviewed areas:
 
 - Home screen response assembly in `src/controllers/homescreenController.ts`.
@@ -59,13 +70,23 @@ The current response includes these module buckets:
 - Admin create/update endpoints require store authentication through `req.storeId` before mutating module records.
 - Bulk endpoints check that the request body or named wrapper array is a non-empty array before replacing a module set.
 - Some controllers perform light required-field checks, such as `collectionId` and `order` for collection displays.
+- Home module create/update endpoints validate configured Shopify collection IDs
+  through the current store's tenant-scoped Storefront client before saving.
+  This covers `CarouselItem.collectionId`, `PromoBanner.collectionId`,
+  `CategoryGrid.collectionId`, `CollectionDisplay.collectionId`,
+  `CalloutBanner.action.collectionId` for collection actions,
+  `CategoryCollectionGrid.collections[].collectionId`, and
+  `CollectionShowcase.collections[].collectionId`.
+- Status/activation endpoints validate the saved Shopify collection IDs before
+  setting a module active, so legacy or draft records with invalid/cross-store
+  IDs cannot be published without correction.
 - Delete and status-update endpoints include both `_id` and `storeId` in mutation filters, which prevents cross-store writes for those operations.
 
 ### Validation gaps and operational risks
 
 - Most create/update controllers map request bodies directly into models and rely on Mongoose for required-field validation. That means invalid payloads generally surface as `500` responses instead of consistent `400` validation errors.
 - Public list endpoints for individual modules only filter by `storeId` when `req.storeId` is present. They can become unscoped if mounted without middleware that always resolves a store ID. The aggregate home screen endpoint is stricter and rejects missing store IDs.
-- Shopify `collectionId` values are manually entered strings in most modules. There is no backend pre-save validation that the ID exists in Shopify, belongs to the current store, or matches the expected Storefront/Admin GraphQL ID shape.
+- Shopify `collectionId` values are still manually entered strings in most modules, but backend save/publish paths now verify that each ID resolves through the current store's Storefront credentials before persistence. There is still no dashboard collection picker or canonical ID-format enforcement beyond Storefront lookup.
 - `collectionDisplays` are the only module type enriched against Shopify at home screen read time. If Shopify Storefront is not configured, the entire `collectionDisplays` bucket is returned as an empty array even when matching records exist in MongoDB. If Shopify is configured but an individual collection lookup fails or returns no collection, that specific display is logged and omitted from the response. Other modules can return stale or incorrect IDs directly to clients.
 - No current home module stores a product ID. Product picker support would require new schema fields and validation rules if future modules deep-link to products.
 - Image fields are plain strings. There is no central validation for URL format, allowed asset host, image dimensions, or whether an image has been uploaded through the approved image pipeline.
@@ -94,7 +115,7 @@ No home module model reviewed in this audit requires or stores a Shopify product
 
 1. Add shared server-side validators for home module payloads that return `400` responses before Mongoose save/insert calls. These validators should enforce required fields, enum values, string trimming, URL formats, boolean types, and non-negative integer positions/orders.
 2. Add a collection picker endpoint for the dashboard that lists Shopify collections from the authenticated store. Persist the selected Shopify collection ID plus useful display metadata, such as title/image snapshot, to reduce manual copy/paste.
-3. Validate collection references against store-specific Shopify credentials before publishing active modules. For draft workflows, allow unresolved IDs only in draft state and block publish until validation passes.
+3. Keep collection reference validation on store-specific Shopify credentials for save and publish paths. For future draft workflows, explicitly decide whether unresolved IDs may be stored inactive; current replacement-style create/update paths reject unresolved IDs before saving.
 4. Store IDs in a consistent format, preferably Shopify GraphQL global IDs if Storefront queries require them, and document conversion rules if Admin REST numeric IDs are accepted anywhere.
 5. Add a future product picker only when a module type needs product-level links. It should mirror collection picker behavior by using store-specific Shopify credentials and validating selected product IDs before publish.
 6. Normalize `position`/`order` values during replace/update operations and consider a per-store uniqueness rule for each module bucket to prevent ambiguous layout order.
@@ -125,6 +146,6 @@ Recommended save flow:
 4. Backend stores the ID and optional display snapshot.
 5. Mobile continues to receive the current home module response shape.
 
-## No behavior changes
+## Behavior changes
 
-This audit intentionally adds only documentation. It does not modify controllers, models, routes, generated API files, checkout, auth, Shopify client behavior, or mobile response shapes.
+Issue #100 adds backend validation to home module admin save and activation paths only. It does not modify models, routes, generated API files, checkout, auth, mobile rendering, or mobile response shapes.
