@@ -6,9 +6,9 @@ Do not assume this exists unless verified in code, CI, deployment configuration,
 
 ## Current state
 
-Current state: the repo contains CI/CD workflow files, Docker configuration, deployment docs, scripts for backup/restore and final deployment checks, migrations folder, generated API docs, and runtime health endpoints.
+Current state: the repo contains CI/CD workflow files, Railway and Docker configuration, deployment docs, scripts for backup/restore and final deployment checks, migrations folder, generated API docs, and runtime health endpoints.
 
-Known gap: this docs pass did not verify that deployed infrastructure, required secrets, external services, rollback procedures, or production environments are currently operational. Release readiness is not proven by the presence of workflow files.
+Known gap: Railway is now the chosen authoritative staging path, but this docs pass did not provision a Railway service, set environment variables, verify MongoDB connectivity, configure Shopify dev-store credentials, or run staging smoke checks. Release readiness is not proven until an operator records that evidence.
 
 ## Target state
 
@@ -25,17 +25,35 @@ Implemented local/repo checks:
 
 Future/operator verification:
 
-- Confirm the authoritative deployment path before release. Current status: not yet decided.
-- Confirm whether Railway, AWS/ECS, Docker/manual deployment, or another path owns staging and production.
+- Provision and verify the authoritative staging deployment path before release. Current staging path: Railway, chosen 2026-07-09 in `docs/DECISIONS.md`.
+- Confirm whether Railway also owns production, or whether production uses a separately approved path.
 - Confirm required secrets, registry credentials, domains, TLS, database connectivity, Redis/cache needs, webhooks, rollback procedures, and observability in the target environment.
 - Confirm release smoke checks against the deployed URL after an operator has chosen and provisioned the deployment path.
 
 ## Deployment path status
 
-- Railway: `railway.json` exists and points Railway at the repository `Dockerfile` with `/api/health` as the health check. This does not prove a live Railway service, environment variables, domains, or production readiness.
+- Authoritative staging path: Railway. `railway.json` points Railway at the repository `Dockerfile` with `/api/health` as the platform health check. This is the selected staging path, but it does not prove a live Railway service, environment variables, domains, MongoDB readiness, Shopify dev-store configuration, or production readiness.
 - AWS/ECS: `.github/workflows/cd.yml` contains AWS/ECS staging, production, backup, blue-green, CloudWatch, Slack, and rollback steps. This path is unverified and now requires manual `workflow_dispatch` with `deployment_path=aws-ecs-unverified`; it must not be treated as the authoritative path until an operator verifies infrastructure and secrets.
 - Docker/manual: `Dockerfile`, Docker Compose files, and `docs/DEPLOYMENT.md` exist. They are deployment documentation/options, not proof of an operational production path.
-- Authoritative path: not yet decided.
+- Production path: not decided by issue #97.
+
+## Railway staging prerequisites
+
+Exact prerequisites to record before treating staging as release-ready:
+
+- API URL: record the Railway-provided or custom staging URL in the release evidence. Do not invent one before provisioning.
+- Build/deploy source: Railway service connected to this repository and branch, using `railway.json` and the repository `Dockerfile`.
+- Runtime health endpoints: `/api/health` must return HTTP 200; `/api/ready` must return HTTP 200 with `{"ready":true}` after MongoDB connects. A 503 from `/api/ready` means the process is up but database readiness is not proven.
+- MongoDB: dedicated staging MongoDB only, never production. Required variable name: `MONGODB_URI`.
+- Core runtime env vars by name: `NODE_ENV`, `PORT`, `API_BASE_URL`, `FRONTEND_URL`, `JWT_SECRET`, `STORE_NAME`, `STORE_DOMAIN`, `STORE_CURRENCY`, `STORE_TIMEZONE`, `STORE_COUNTRY`, `EMAIL_FROM_ADDRESS`.
+- CORS/rate-limit env vars by name: `CORS_ORIGINS` or `ALLOWED_ORIGINS`, `RATE_LIMIT_WINDOW_MS`, `RATE_LIMIT_MAX_REQUESTS`.
+- Shopify app/dev-store env vars by name only: `SHOPIFY_STORE_URL`, `SHOPIFY_API_KEY`, `SHOPIFY_API_SECRET`, `SHOPIFY_ACCESS_TOKEN`, `SHOPIFY_STOREFRONT_ACCESS_TOKEN`, `SHOPIFY_SHOP_DOMAIN`, `SHOPIFY_SCOPES`, `SHOPIFY_API_VERSION`, `SHOPIFY_WEBHOOK_URL`.
+- Webhook secret env var by name only: `SHOPIFY_WEBHOOK_SECRET`.
+- SaaS safety flags by name: `SAAS_MODE` or `MULTI_TENANT_MODE` should be set for staging SaaS verification so legacy global Storefront fallbacks remain blocked.
+- Optional service env vars by name, when the corresponding staging feature is enabled: `REDIS_ENABLED`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`, `REDIS_DATABASE`, `EMAIL_SERVICE_TYPE`, `RESEND_API_KEY`, `EMAIL_SMTP_HOST`, `EMAIL_SMTP_PORT`, `EMAIL_SMTP_USER`, `EMAIL_SMTP_PASS`, `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`, `FIREBASE_SERVICE_ACCOUNT`, `SENTRY_DSN`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`.
+- Operator evidence to record: Railway project/service identifier, deployment timestamp or commit SHA, staging API URL, `/api/health` response, `/api/ready` response, MongoDB staging database name/cluster label without credentials, and Shopify dev-store domain without tokens.
+
+Current blocker status: Railway staging is selected but not provisioned or verified in this repository. Do not run migration gates, Shopify webhook tests, mobile/backend smoke tests, or first-merchant checkout validation until the operator records the staging URL and both health checks.
 
 ## Pre-release checks
 

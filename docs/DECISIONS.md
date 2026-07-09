@@ -130,6 +130,15 @@ Known gap: exact original decision dates are not known for most entries. Use "Da
 - Impact: Backend docs should summarize local details and link to shared policy rather than duplicating large sections.
 - Related docs: `CARTAISY_CONTEXT.md`, `docs/cartaisy/README.md`.
 
+### Railway is the authoritative staging deployment path
+
+- Date: 2026-07-09.
+- Decision: Use Railway as the authoritative staging deployment path for `cartaisy-backend`.
+- Reason: The repository already contains `railway.json` configured to build from the Dockerfile and use `/api/health` as the platform health check. The AWS/ECS workflow and Docker/manual files remain useful references, but their live infrastructure, secrets, domains, rollback behavior, and readiness are unverified.
+- Impact: Staging release work should provision and verify Railway first, then record the resulting staging API URL and health/readiness evidence. AWS/ECS must stay behind its explicit unverified/manual path until an operator separately proves that infrastructure. Docker/manual remains a local or fallback deployment option, not the authoritative staging path.
+- Operator status: not yet provisioned or verified in this repository. Required follow-up is to create/connect the Railway staging service, attach a dedicated staging MongoDB, set required environment variables by name only, configure Shopify dev-store credentials and webhook secret in Railway, and verify `/api/health` and `/api/ready` against the staging URL.
+- Related docs: `railway.json`, `Dockerfile`, `.github/workflows/cd.yml`, `docs/RELEASE_CHECKLIST.md`, `docs/STATUS.md`. GitHub issue: #97.
+
 ## Related docs/issues
 
 - GitHub issue: #52.
