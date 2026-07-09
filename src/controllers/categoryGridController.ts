@@ -1,5 +1,10 @@
 import { Response } from 'express';
 import CategoryGrid from '../models/CategoryGrid';
+import {
+  HomeModuleShopifyValidationError,
+  singleCollectionReference,
+  validateHomeModuleCollectionReferences
+} from '../services/homeModuleShopifyValidationService';
 import { AuthenticatedRequest } from '../types';
 
 export const categoryGridController = {
@@ -30,6 +35,14 @@ export const categoryGridController = {
         isActive: item.isActive !== undefined ? item.isActive : true
       }));
 
+      await validateHomeModuleCollectionReferences(
+        req.storeId,
+        items.map((item: any, index: number) => ({
+          collectionId: item.collectionId,
+          field: `[${index}].collectionId`
+        }))
+      );
+
       await CategoryGrid.deleteMany({ storeId: req.storeId });
 
       const createdItems = await CategoryGrid.insertMany(validatedItems);
@@ -40,6 +53,12 @@ export const categoryGridController = {
         data: createdItems
       });
     } catch (error: any) {
+      if (error instanceof HomeModuleShopifyValidationError) {
+        return res.status(error.statusCode).json({
+          success: false,
+          error: error.message
+        });
+      }
       res.status(500).json({
         success: false,
         error: error.message || 'Failed to create category grid items'
@@ -74,6 +93,14 @@ export const categoryGridController = {
         isActive: item.isActive !== undefined ? item.isActive : true
       }));
 
+      await validateHomeModuleCollectionReferences(
+        req.storeId,
+        items.map((item: any, index: number) => ({
+          collectionId: item.collectionId,
+          field: `[${index}].collectionId`
+        }))
+      );
+
       await CategoryGrid.deleteMany({ storeId: req.storeId });
 
       const updatedItems = await CategoryGrid.insertMany(validatedItems);
@@ -84,6 +111,12 @@ export const categoryGridController = {
         data: updatedItems
       });
     } catch (error: any) {
+      if (error instanceof HomeModuleShopifyValidationError) {
+        return res.status(error.statusCode).json({
+          success: false,
+          error: error.message
+        });
+      }
       res.status(500).json({
         success: false,
         error: error.message || 'Failed to update category grid items'
@@ -168,6 +201,24 @@ export const categoryGridController = {
       const id = (req.params as any)?.id as string;
       const isActive = (req.body as any)?.isActive;
 
+      if (isActive === true) {
+        const item = await CategoryGrid.findOne({ _id: id, storeId: req.storeId })
+          .select('collectionId')
+          .lean();
+
+        if (!item) {
+          return res.status(404).json({
+            success: false,
+            error: 'Category grid item not found'
+          });
+        }
+
+        await validateHomeModuleCollectionReferences(
+          req.storeId,
+          singleCollectionReference(item.collectionId, 'collectionId')
+        );
+      }
+
       const updatedItem = await CategoryGrid.findOneAndUpdate(
         { _id: id, storeId: req.storeId },
         { isActive },
@@ -187,6 +238,12 @@ export const categoryGridController = {
         data: updatedItem
       });
     } catch (error: any) {
+      if (error instanceof HomeModuleShopifyValidationError) {
+        return res.status(error.statusCode).json({
+          success: false,
+          error: error.message
+        });
+      }
       res.status(500).json({
         success: false,
         error: error.message || 'Failed to update category grid item status'

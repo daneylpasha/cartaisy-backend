@@ -1,5 +1,10 @@
 import { Response } from 'express';
 import CalloutBanner from '../models/CalloutBanner';
+import {
+  HomeModuleShopifyValidationError,
+  singleCollectionReference,
+  validateHomeModuleCollectionReferences
+} from '../services/homeModuleShopifyValidationService';
 import { AuthenticatedRequest } from '../types';
 
 export const calloutBannerController = {
@@ -35,6 +40,17 @@ export const calloutBannerController = {
         buttonColor: item.buttonColor || '#007bff'
       }));
 
+      await validateHomeModuleCollectionReferences(
+        req.storeId,
+        items
+          .map((item: any, index: number) => ({
+            collectionId: item.action?.collectionId,
+            field: `[${index}].action.collectionId`,
+            type: item.action?.type
+          }))
+          .filter((reference: any) => reference.type === 'collection')
+      );
+
       await CalloutBanner.deleteMany({ storeId: req.storeId });
 
       const createdItems = await CalloutBanner.insertMany(validatedItems);
@@ -45,6 +61,12 @@ export const calloutBannerController = {
         data: createdItems
       });
     } catch (error: any) {
+      if (error instanceof HomeModuleShopifyValidationError) {
+        return res.status(error.statusCode).json({
+          success: false,
+          error: error.message
+        });
+      }
       res.status(500).json({
         success: false,
         error: error.message || 'Failed to create callout banners'
@@ -84,6 +106,17 @@ export const calloutBannerController = {
         buttonColor: item.buttonColor || '#007bff'
       }));
 
+      await validateHomeModuleCollectionReferences(
+        req.storeId,
+        items
+          .map((item: any, index: number) => ({
+            collectionId: item.action?.collectionId,
+            field: `[${index}].action.collectionId`,
+            type: item.action?.type
+          }))
+          .filter((reference: any) => reference.type === 'collection')
+      );
+
       await CalloutBanner.deleteMany({ storeId: req.storeId });
 
       const updatedItems = await CalloutBanner.insertMany(validatedItems);
@@ -94,6 +127,12 @@ export const calloutBannerController = {
         data: updatedItems
       });
     } catch (error: any) {
+      if (error instanceof HomeModuleShopifyValidationError) {
+        return res.status(error.statusCode).json({
+          success: false,
+          error: error.message
+        });
+      }
       res.status(500).json({
         success: false,
         error: error.message || 'Failed to update callout banners'
@@ -178,6 +217,26 @@ export const calloutBannerController = {
       const id = (req.params as any)?.id as string;
       const isActive = (req.body as any)?.isActive;
 
+      if (isActive === true) {
+        const item = await CalloutBanner.findOne({ _id: id, storeId: req.storeId })
+          .select('action')
+          .lean();
+
+        if (!item) {
+          return res.status(404).json({
+            success: false,
+            error: 'Callout banner not found'
+          });
+        }
+
+        if (item.action?.type === 'collection') {
+          await validateHomeModuleCollectionReferences(
+            req.storeId,
+            singleCollectionReference(item.action.collectionId, 'action.collectionId')
+          );
+        }
+      }
+
       const updatedItem = await CalloutBanner.findOneAndUpdate(
         { _id: id, storeId: req.storeId },
         { isActive },
@@ -197,6 +256,12 @@ export const calloutBannerController = {
         data: updatedItem
       });
     } catch (error: any) {
+      if (error instanceof HomeModuleShopifyValidationError) {
+        return res.status(error.statusCode).json({
+          success: false,
+          error: error.message
+        });
+      }
       res.status(500).json({
         success: false,
         error: error.message || 'Failed to update callout banner status'

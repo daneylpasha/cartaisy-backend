@@ -1,5 +1,10 @@
 import { Response } from 'express';
 import CarouselItem from '../models/CarouselItem';
+import {
+  HomeModuleShopifyValidationError,
+  singleCollectionReference,
+  validateHomeModuleCollectionReferences
+} from '../services/homeModuleShopifyValidationService';
 import { AuthenticatedRequest } from '../types';
 
 export const carouselController = {
@@ -22,6 +27,11 @@ export const carouselController = {
           error: 'Request body must be a carousel item object'
         });
       }
+
+      await validateHomeModuleCollectionReferences(
+        req.storeId,
+        singleCollectionReference(item.collectionId, 'collectionId')
+      );
 
       // Get current max position for this store
       const maxPositionItem = await CarouselItem.findOne({ storeId: req.storeId })
@@ -53,6 +63,12 @@ export const carouselController = {
       });
     } catch (error: any) {
       console.error('Create carousel item error:', error);
+      if (error instanceof HomeModuleShopifyValidationError) {
+        return res.status(error.statusCode).json({
+          success: false,
+          error: error.message
+        });
+      }
       res.status(500).json({
         success: false,
         error: error.message || 'Failed to create carousel item'
@@ -94,6 +110,14 @@ export const carouselController = {
         isActive: item.isActive !== undefined ? item.isActive : true
       }));
 
+      await validateHomeModuleCollectionReferences(
+        req.storeId,
+        items.map((item: any, index: number) => ({
+          collectionId: item.collectionId,
+          field: `[${index}].collectionId`
+        }))
+      );
+
       // Delete only items from this store
       await CarouselItem.deleteMany({ storeId: req.storeId });
 
@@ -105,6 +129,12 @@ export const carouselController = {
         data: createdItems
       });
     } catch (error: any) {
+      if (error instanceof HomeModuleShopifyValidationError) {
+        return res.status(error.statusCode).json({
+          success: false,
+          error: error.message
+        });
+      }
       res.status(500).json({
         success: false,
         error: error.message || 'Failed to create carousel items'
@@ -145,6 +175,14 @@ export const carouselController = {
         isActive: item.isActive !== undefined ? item.isActive : true
       }));
 
+      await validateHomeModuleCollectionReferences(
+        req.storeId,
+        items.map((item: any, index: number) => ({
+          collectionId: item.collectionId,
+          field: `[${index}].collectionId`
+        }))
+      );
+
       // Delete only items from this store
       await CarouselItem.deleteMany({ storeId: req.storeId });
 
@@ -156,6 +194,12 @@ export const carouselController = {
         data: updatedItems
       });
     } catch (error: any) {
+      if (error instanceof HomeModuleShopifyValidationError) {
+        return res.status(error.statusCode).json({
+          success: false,
+          error: error.message
+        });
+      }
       res.status(500).json({
         success: false,
         error: error.message || 'Failed to update carousel items'
@@ -244,6 +288,24 @@ export const carouselController = {
       const id = (req.params as any)?.id as string;
       const isActive = (req.body as any)?.isActive;
 
+      if (isActive === true) {
+        const item = await CarouselItem.findOne({ _id: id, storeId: req.storeId })
+          .select('collectionId')
+          .lean();
+
+        if (!item) {
+          return res.status(404).json({
+            success: false,
+            error: 'Carousel item not found'
+          });
+        }
+
+        await validateHomeModuleCollectionReferences(
+          req.storeId,
+          singleCollectionReference(item.collectionId, 'collectionId')
+        );
+      }
+
       // Ensure user can only update items from their store
       const updatedItem = await CarouselItem.findOneAndUpdate(
         { _id: id, storeId: req.storeId },
@@ -264,6 +326,12 @@ export const carouselController = {
         data: updatedItem
       });
     } catch (error: any) {
+      if (error instanceof HomeModuleShopifyValidationError) {
+        return res.status(error.statusCode).json({
+          success: false,
+          error: error.message
+        });
+      }
       res.status(500).json({
         success: false,
         error: error.message || 'Failed to update carousel item status'
