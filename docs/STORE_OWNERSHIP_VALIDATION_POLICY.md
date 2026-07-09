@@ -6,6 +6,8 @@ This audit documents the current store ownership behavior and the recommended po
 
 > Update (2026-07-07, issue #79; auth restored earlier by issue #75): admin analytics and dashboard aggregates are now store-scoped. Every admin route on `analyticsRoutes` (combined/legacy dashboards, sales, customers, orders, inventory, app engagement/journeys) and the aggregate `adminRoutes` endpoints (`/dashboard`, `/system/stats`, `/logs`, `/inventory/overview`, `/inventory/reservations`, `/help-requests*`) run behind `requireOwnedStoreContext({ required: false })`: store admins are always bound to their own store (any other supplied store gets 403), and the platform-wide aggregate exists only for super admins who omit the store. Documents without their own `storeId` (`ProductView`, `ProductReview`) are scoped through the owning product's store via `$lookup`; aggregation `$match` stages cast the id to an ObjectId explicitly (a raw string silently matches nothing). The DAU/MAU endpoints (`/app-stats`, `/app-engagement`) have no platform-wide mode and return 400 when a super admin omits the store. Session journeys are store-scoped so session IDs cannot be guessed across stores.
 
+> Update (2026-07-09, issue #101): dashboard/admin route ownership coverage was audited across `src/routes` and related controllers/services. Store-admin `:storeId` route groups are wired through `requireOwnedStoreParam()` or an equivalent authenticated `storeAuth`/`req.storeId` pattern, aggregate dashboard/analytics routes use `requireOwnedStoreContext({ required: false })` with explicit super-admin global behavior, and intentionally public routes are limited to storefront/customer-entry/telemetry/health/webhook callback surfaces documented below. One ownership gap was fixed in `src/routes/shopifyRoutes.ts`: authenticated Shopify admin tooling routes now require admin/super-admin role and `requireOwnedStoreContext()`, then scope overview counts, product sync status, low-stock inventory, inventory history, product analytics, SEO enhancement, and image optimization to the validated store. Regression coverage in `tests/shopifyRoutesAdminOwnership.test.ts` proves store A admins cannot see store B product/order summaries or product analytics through those routes, and super admins can target a store explicitly.
+
 ## Current Behavior
 
 Global API requests pass through `strictStoreValidation`. That middleware accepts `X-Store-ID`, validates the ObjectId format, and sets `req.storeId` for guest requests. When an Authorization token is present, it tries to compare `decoded.storeId` with `X-Store-ID`, but currently issued JWTs contain `userId` only. For normal tokens, this means the global middleware cannot prove store ownership by token payload.
@@ -47,6 +49,7 @@ These routes should continue to allow supplied store context, with ObjectId and 
 - Customer registration and login, because the customer account lookup is store-scoped before authentication exists.
 - Guest unified-cart routes, because guest sessions are store-scoped before customer authentication exists.
 - Analytics/event tracking endpoints that intentionally accept anonymous app events, provided they remain write-limited to low-risk telemetry and do not expose store data.
+- Public health/status surfaces such as `/api/health`, `/api/ready`, and the minimal Shopify OAuth/webhook callback/health surfaces that must be reachable by infrastructure or Shopify before application authentication exists.
 
 ## Routes That Must Bind Authenticated Users To Store ID
 
@@ -66,6 +69,21 @@ Admin/staff routes must bind `:storeId` or any supplied store ID to the authenti
 - Store admin sync status at `/api/v1/stores/:storeId/admin/sync/status`.
 - Push notification admin endpoints under `/api/v1/notifications/stores/:storeId/...`.
 - Admin analytics and dashboard endpoints should consistently use store-bound middleware before reading store-scoped analytics.
+- Shopify admin tooling under `/api/v1/shopify/...` must use the authenticated user's store context for store-owned product/order/inventory data and Shopify Admin operations. Store admins cannot use a product ID from another store to read analytics, inventory history, sync status, or trigger product actions.
+
+## Dashboard/Admin Route Audit Findings (Issue #101)
+
+| Route area | Ownership classification | Current finding |
+| --- | --- | --- |
+| `adminRoutes` (`/api/v1/admin/dashboard`, sync status, system stats/logs, inventory overview/reservations, help requests) | Store-admin with explicit super-admin aggregate mode | Router-level `authenticate` + `authorize('admin', 'super_admin')`; store-owned aggregate reads use `requireOwnedStoreContext({ required: false })`. Super admins may omit store context for platform aggregates; store admins are bound to their own store. |
+| `analyticsRoutes` admin endpoints | Store-admin with explicit super-admin aggregate mode | Admin analytics run behind `authenticateAdmin` and `requireOwnedStoreContext({ required: false })`; public event/session write endpoints remain unauthenticated telemetry and do not return tenant data. |
+| `storeSettingsRoutes`, `storeBrandingRoutes`, `customerManagementRoutes`, `orderManagementRoutes`, `securityRoutes`, `emailConfigRoutes`, `complianceRoutes`, `abandonedCartRoutes`, `pushNotificationRoutes`, `storeAdminRoutes` | Store-admin `:storeId` routes | Store-specific paths run through `requireOwnedStoreParam()` before controllers. Existing controllers query or mutate by the route store ID / validated request store context. |
+| Home module admin routes (`carousel`, `promoBanner`, `calloutBanner`, `categoryGrid`, `collectionDisplay`, `collectionShowcase`, `categoryCollectionGrid`) | Store-admin `req.storeId` routes | Admin mutations require store context via the mounted admin/store middleware pattern and controllers scope reads/writes by `req.storeId`; issue #100 added owning-store Shopify collection validation before save/publish. |
+| `shopifyRoutes` (`/api/v1/shopify/...`) | Store-admin Shopify/Admin tooling | Issue #101 fixed unscoped authenticated reads/actions. Routes now require admin/super-admin role plus `requireOwnedStoreContext()`: store admins default to their own store and cannot override it, while super admins must explicitly supply a target store. Overview counts, product sync status, inventory/product detail reads, product actions, sync, inventory updates, and Admin connection checks use that validated store. |
+| Shopify OAuth callback and webhook POST handlers | Public callback/webhook with separate tenant proof | OAuth callback resolves store identity from the signed state token; Shopify webhooks verify HMAC and resolve trusted store context before handlers run. They are intentionally not protected by dashboard auth. |
+| `/api/health`, `/api/ready`, public storefront/customer-entry routes, public analytics event writes | Intentionally public or public store-context routes | These routes must remain reachable without dashboard auth. Public storefront/customer routes may accept supplied store context only for public data or pre-auth account lookup; they are outside dashboard/admin ownership controls. |
+
+No checkout/payment behavior, dashboard frontend code, mobile code, migrations, live Shopify credentials, or broad auth/JWT design was changed by issue #101.
 
 Routes already using `requireStoreAdmin` are closer to the target policy because `storeAuth` sets `req.storeId` from the authenticated user record. Future work should still verify that controllers do not accidentally trust a conflicting route parameter or body store ID.
 

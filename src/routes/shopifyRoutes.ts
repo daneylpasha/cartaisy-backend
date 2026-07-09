@@ -17,7 +17,8 @@ import {
   optimizeProductSearch,
   processProductImages
 } from '../services/productEnhancementService';
-import { authenticate } from '../middleware/auth';
+import { authenticate, authorize } from '../middleware/auth';
+import { requireOwnedStoreContext } from '../middleware/storeOwnership';
 import Product from '../models/Product';
 import Order from '../models/Order';
 
@@ -25,6 +26,8 @@ const router = express.Router();
 
 // Apply authentication middleware to all routes
 router.use(authenticate);
+router.use(authorize('admin', 'super_admin'));
+router.use(requireOwnedStoreContext());
 
 /**
  * Trusted store context for Shopify Admin operations: the authenticated
@@ -32,7 +35,7 @@ router.use(authenticate);
  * Callers without a store fail closed.
  */
 const getRequestStoreId = (req: Request): string | null => {
-  const storeId = (req as any).user?.storeId;
+  const storeId = (req as any).storeId;
   return storeId ? storeId.toString() : null;
 };
 
@@ -155,8 +158,14 @@ router.post('/inventory/sync', async (req: Request, res: Response) => {
  */
 router.get('/inventory/low-stock', async (req: Request, res: Response) => {
   try {
+    const storeId = getRequestStoreId(req);
+    if (!storeId) {
+      missingStoreResponse(res);
+      return;
+    }
+
     const threshold = req.query.threshold ? parseInt(req.query.threshold as string) : undefined;
-    const lowStockProducts = await getLowStockProducts(threshold);
+    const lowStockProducts = await getLowStockProducts(threshold, storeId);
     
     res.json({
       success: true,
@@ -177,8 +186,21 @@ router.get('/inventory/low-stock', async (req: Request, res: Response) => {
  */
 router.get('/inventory/history/:productId', async (req: Request, res: Response) => {
   try {
+    const storeId = getRequestStoreId(req);
+    if (!storeId) {
+      missingStoreResponse(res);
+      return;
+    }
+
     const { productId } = req.params;
     const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
+    const product = await Product.findOne({ _id: productId, storeId }).select('_id').lean();
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        error: 'Product not found'
+      });
+    }
     
     const history = await getInventoryHistory(productId, limit);
     
@@ -272,6 +294,20 @@ router.get('/products/:productId/recommendations', async (req: Request, res: Res
 router.post('/products/:productId/enhance-seo', async (req: Request, res: Response) => {
   try {
     const { productId } = req.params;
+    const storeId = getRequestStoreId(req);
+    if (!storeId) {
+      missingStoreResponse(res);
+      return;
+    }
+
+    const product = await Product.findOne({ _id: productId, storeId }).select('_id').lean();
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        error: 'Product not found'
+      });
+    }
+
     await optimizeProductSearch(productId);
 
     res.json({
@@ -294,7 +330,13 @@ router.post('/products/:productId/enhance-seo', async (req: Request, res: Respon
 router.post('/products/:productId/optimize-images', async (req: Request, res: Response) => {
   try {
     const { productId } = req.params;
-    const product = await Product.findById(productId);
+    const storeId = getRequestStoreId(req);
+    if (!storeId) {
+      missingStoreResponse(res);
+      return;
+    }
+
+    const product = await Product.findOne({ _id: productId, storeId });
     if (!product) {
       return res.status(404).json({
         success: false,
@@ -323,7 +365,13 @@ router.post('/products/:productId/optimize-images', async (req: Request, res: Re
 router.get('/products/:productId/analytics', async (req: Request, res: Response) => {
   try {
     const { productId } = req.params;
-    const product = await Product.findById(productId).select('analytics').lean();
+    const storeId = getRequestStoreId(req);
+    if (!storeId) {
+      missingStoreResponse(res);
+      return;
+    }
+
+    const product = await Product.findOne({ _id: productId, storeId }).select('analytics').lean();
 
     if (!product) {
       return res.status(404).json({
@@ -354,6 +402,12 @@ router.get('/products/:productId/analytics', async (req: Request, res: Response)
  */
 router.get('/overview', async (req: Request, res: Response) => {
   try {
+    const storeId = getRequestStoreId(req);
+    if (!storeId) {
+      missingStoreResponse(res);
+      return;
+    }
+
     const [
       productCount,
       orderCount,
@@ -361,10 +415,10 @@ router.get('/overview', async (req: Request, res: Response) => {
       mobileOrderCount,
       syncStatus
     ] = await Promise.all([
-      Product.countDocuments({ status: 'active' }),
-      Order.countDocuments(),
-      Product.countDocuments({ shopifyProductId: { $exists: true } }),
-      Order.countDocuments({ shopifyOrderId: { $exists: false } }),
+      Product.countDocuments({ storeId, status: 'active' }),
+      Order.countDocuments({ storeId }),
+      Product.countDocuments({ storeId, shopifyProductId: { $exists: true } }),
+      Order.countDocuments({ storeId, shopifyOrderId: { $exists: false } }),
       getSyncStatus()
     ]);
 
@@ -409,17 +463,23 @@ router.get('/overview', async (req: Request, res: Response) => {
  */
 router.get('/products/sync-status', async (req: Request, res: Response) => {
   try {
+    const storeId = getRequestStoreId(req);
+    if (!storeId) {
+      missingStoreResponse(res);
+      return;
+    }
+
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
     const skip = (page - 1) * limit;
 
-    const products = await Product.find({})
+    const products = await Product.find({ storeId })
       .select('title handle shopifyProductId updatedAt status')
       .sort({ updatedAt: -1 })
       .skip(skip)
       .limit(limit);
 
-    const total = await Product.countDocuments({});
+    const total = await Product.countDocuments({ storeId });
 
     const productsWithStatus = products.map(product => ({
       _id: product._id,
