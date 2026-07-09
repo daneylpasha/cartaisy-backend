@@ -35,7 +35,7 @@ router.use(requireOwnedStoreContext());
  * Callers without a store fail closed.
  */
 const getRequestStoreId = (req: Request): string | null => {
-  const storeId = (req as any).storeId || (req as any).user?.storeId;
+  const storeId = (req as any).storeId;
   return storeId ? storeId.toString() : null;
 };
 
