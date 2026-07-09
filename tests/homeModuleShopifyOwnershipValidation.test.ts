@@ -31,6 +31,7 @@ const storefrontClient = {
 };
 
 const storeACollectionId = 'store-a-featured';
+const storeASecondCollectionId = 'store-a-sale';
 const storeBCollectionId = 'store-b-featured';
 const invalidCollectionId = 'missing-collection';
 
@@ -62,7 +63,7 @@ describe('home module Shopify ID ownership validation', () => {
     storefrontService.getCollectionByIdWithClient.mockReset();
     storefrontService.getStorefrontClientForStore.mockResolvedValue(storefrontClient as any);
     storefrontService.getCollectionByIdWithClient.mockImplementation(async (_client, collectionId) => {
-      if (collectionId === storeACollectionId) {
+      if (collectionId === storeACollectionId || collectionId === storeASecondCollectionId) {
         return collectionResponse(collectionId) as any;
       }
 
@@ -270,5 +271,103 @@ describe('home module Shopify ID ownership validation', () => {
     await expect(CarouselItem.findById(carouselItem._id).lean()).resolves.toMatchObject({
       isActive: false,
     });
+  });
+
+  it('returns a service-unavailable status for transient Shopify validation failures', async () => {
+    storefrontService.getCollectionByIdWithClient.mockRejectedValueOnce({
+      response: { status: 429 },
+    });
+
+    const res = createResponse();
+    await categoryGridController.createCategoryGridItems(
+      {
+        storeId: storeAId,
+        body: [{
+          imageUrl: 'https://cdn.example.com/category.jpg',
+          title: 'Category',
+          collectionId: storeACollectionId,
+        }],
+      } as any,
+      res as any
+    );
+
+    expect(res.status).toHaveBeenCalledWith(503);
+    expect(getJson(res)).toEqual({
+      success: false,
+      error: 'Unable to validate Shopify collection IDs for this store',
+    });
+    await expect(CategoryGrid.countDocuments({ storeId: storeAId })).resolves.toBe(0);
+  });
+
+  it('validates multiple unique collection references in parallel', async () => {
+    let resolveFirst: (value: any) => void = () => undefined;
+    const firstLookup = new Promise((resolve) => {
+      resolveFirst = resolve;
+    });
+
+    storefrontService.getCollectionByIdWithClient.mockImplementation((_client, collectionId) => {
+      if (collectionId === storeACollectionId) {
+        return firstLookup as any;
+      }
+
+      return Promise.resolve(collectionResponse(collectionId)) as any;
+    });
+
+    const res = createResponse();
+    const request = categoryCollectionGridController.createCategoryCollectionGrids(
+      {
+        storeId: storeAId,
+        body: [{
+          title: 'Categories',
+          subtitle: 'Browse',
+          collections: [
+            {
+              image: 'https://cdn.example.com/first.jpg',
+              title: 'First',
+              collectionId: storeACollectionId,
+            },
+            {
+              image: 'https://cdn.example.com/second.jpg',
+              title: 'Second',
+              collectionId: storeASecondCollectionId,
+            },
+          ],
+        }],
+      } as any,
+      res as any
+    );
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(storefrontService.getCollectionByIdWithClient).toHaveBeenCalledTimes(2);
+
+    resolveFirst(collectionResponse(storeACollectionId));
+    await request;
+
+    expect(res.status).toHaveBeenCalledWith(201);
+    await expect(CategoryCollectionGrid.countDocuments({ storeId: storeAId })).resolves.toBe(1);
+  });
+
+  it('returns a clear 400 when nested collections is missing or not an array', async () => {
+    const res = createResponse();
+    await collectionShowcaseController.createCollectionShowcases(
+      {
+        storeId: storeAId,
+        body: [{
+          type: 'grid',
+          title: 'Showcase',
+        }],
+      } as any,
+      res as any
+    );
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(getJson(res)).toEqual({
+      success: false,
+      error: 'collections must be a non-empty array at [0].collections',
+    });
+    expect(storefrontService.getCollectionByIdWithClient).not.toHaveBeenCalled();
+    await expect(CollectionShowcase.countDocuments({ storeId: storeAId })).resolves.toBe(0);
   });
 });

@@ -6,11 +6,12 @@ export interface ShopifyCollectionReference {
 }
 
 export class HomeModuleShopifyValidationError extends Error {
-  public readonly statusCode = 400;
+  public readonly statusCode: number;
 
-  constructor(message: string) {
+  constructor(message: string, statusCode: number = 400) {
     super(message);
     this.name = 'HomeModuleShopifyValidationError';
+    this.statusCode = statusCode;
   }
 }
 
@@ -20,6 +21,33 @@ const normalizeStoreId = (storeId: unknown): string => {
   }
 
   return '';
+};
+
+const getUpstreamStatusCode = (error: unknown): number => {
+  const responseStatus = (error as { response?: { status?: number } })?.response?.status;
+  if (responseStatus === 429) {
+    return 503;
+  }
+
+  if (typeof responseStatus === 'number' && responseStatus >= 500) {
+    return 502;
+  }
+
+  const statusCode = (error as { statusCode?: number })?.statusCode;
+  if (statusCode === 429) {
+    return 503;
+  }
+
+  if (typeof statusCode === 'number' && statusCode >= 500) {
+    return 502;
+  }
+
+  const code = (error as { code?: string })?.code;
+  if (code === 'ECONNABORTED' || code === 'ECONNRESET' || code === 'ETIMEDOUT') {
+    return 503;
+  }
+
+  return 400;
 };
 
 export const validateHomeModuleCollectionReferences = async (
@@ -55,7 +83,7 @@ export const validateHomeModuleCollectionReferences = async (
   try {
     const storefrontClient = await shopifyStorefront.getStorefrontClientForStore(normalizedStoreId);
 
-    for (const reference of uniqueReferences.values()) {
+    await Promise.all(Array.from(uniqueReferences.values()).map(async (reference) => {
       const collectionId = reference.collectionId as string;
       const response = await shopifyStorefront.getCollectionByIdWithClient(
         storefrontClient,
@@ -68,14 +96,15 @@ export const validateHomeModuleCollectionReferences = async (
           `Invalid Shopify collection ID at ${reference.field}`
         );
       }
-    }
+    }));
   } catch (error) {
     if (error instanceof HomeModuleShopifyValidationError) {
       throw error;
     }
 
     throw new HomeModuleShopifyValidationError(
-      'Unable to validate Shopify collection IDs for this store'
+      'Unable to validate Shopify collection IDs for this store',
+      getUpstreamStatusCode(error)
     );
   }
 };
@@ -89,8 +118,8 @@ export const collectionArrayReferences = (
   collections: unknown,
   field: string
 ): ShopifyCollectionReference[] => {
-  if (!Array.isArray(collections)) {
-    throw new HomeModuleShopifyValidationError(`Invalid Shopify collection ID at ${field}`);
+  if (!Array.isArray(collections) || collections.length === 0) {
+    throw new HomeModuleShopifyValidationError(`collections must be a non-empty array at ${field}`);
   }
 
   return collections.map((collection, index) => ({
