@@ -29,6 +29,8 @@ No staging database output was provided in issue #98, and this docs update did
 not run staging database reads, writes, migrations, Shopify actions, or
 deployments. The staging gates therefore remain pending until the project
 owner/operator records the outputs from the target staging environment.
+Customer/User/Order legacy `storeId` gates are tracked only in
+`docs/RELEASE_CHECKLIST.md` to keep that evidence in one authoritative table.
 
 | Gate | Staging status | Recorded result |
 | --- | --- | --- |
@@ -39,10 +41,6 @@ owner/operator records the outputs from the target staging environment.
 | Product counts by store | Pending operator verification | Not provided in issue #98. Expected: post-run counts match the reviewed dry-run before-picture. |
 | Product store-scoped compound unique indexes | Pending operator verification | Not provided in issue #98. Expected: unique `{ storeId, shopifyProductId }`, `{ storeId, handle }`, and `{ storeId, "seo.slug" }` indexes present. |
 | Legacy global unique Product indexes | Pending operator verification | Not provided in issue #98. Expected: no single-field unique indexes remain on `shopifyProductId`, `handle`, or `seo.slug`. |
-| Customer/User/Order storeless counts | Pending operator verification | Not provided in issue #98. Record `customers`, Shopify customer `users`, and Shopify `orders` storeless counts from the release checklist commands. |
-| Customer/User/Order store-scoped indexes | Pending operator verification | Not provided in issue #98. Record the customer email, user email/customer ID, and order Shopify/order-number index query results. |
-| Legacy global Customer/User/Order indexes | Pending operator verification | Not provided in issue #98. Expected: legacy global unique email/customer/order index queries return `[]`. |
-| Rollback notes | Pending operator record | Not provided in issue #98. Record backup restore path and, if applicable, the exact recorded IDs that would be unset for customer/order rollback. |
 
 Products are now tenant-scoped: `Product.storeId` references the owning `Store`, and Shopify identifier uniqueness (`shopifyProductId`, `handle`, `seo.slug`) is enforced per store instead of globally. This document is the runbook for migrating an existing (single-store) deployment safely.
 
