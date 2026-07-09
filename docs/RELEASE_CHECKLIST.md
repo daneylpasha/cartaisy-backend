@@ -45,7 +45,9 @@ Exact prerequisites to record before treating staging as release-ready:
 - Build/deploy source: Railway service connected to this repository and branch, using `railway.json` and the repository `Dockerfile`.
 - Runtime health endpoints: `/api/health` must return HTTP 200; `/api/ready` must return HTTP 200 with `{"ready":true}` after MongoDB connects. A 503 from `/api/ready` means the process is up but database readiness is not proven.
 - MongoDB: dedicated staging MongoDB only, never production. Required variable name: `MONGODB_URI`.
-- Core runtime env vars by name: `NODE_ENV`, `PORT`, `API_BASE_URL`, `FRONTEND_URL`, `JWT_SECRET`, `STORE_NAME`, `STORE_DOMAIN`, `STORE_CURRENCY`, `STORE_TIMEZONE`, `STORE_COUNTRY`, `EMAIL_FROM_ADDRESS`.
+- Core runtime env vars by name: `NODE_ENV`, `PORT`, `API_BASE_URL`, `FRONTEND_URL`, `JWT_SECRET`, `EMAIL_FROM_ADDRESS`.
+- SaaS tenant data: create and verify the staging merchant `Store` database record before smoke tests. Store identity, domain, currency, timezone, country, Shopify connection state, and per-store credentials should come from that record in SaaS staging paths.
+- Legacy/single-store fallback env vars by name: `STORE_NAME`, `STORE_DOMAIN`, `STORE_CURRENCY`, `STORE_TIMEZONE`, `STORE_COUNTRY`. These are not the source of truth for multi-tenant staging when `SAAS_MODE` or `MULTI_TENANT_MODE` is set and a `Store` record exists.
 - CORS/rate-limit env vars by name: `CORS_ORIGINS` or `ALLOWED_ORIGINS`, `RATE_LIMIT_WINDOW_MS`, `RATE_LIMIT_MAX_REQUESTS`.
 - Shopify app/dev-store env vars by name only: `SHOPIFY_STORE_URL`, `SHOPIFY_API_KEY`, `SHOPIFY_API_SECRET`, `SHOPIFY_ACCESS_TOKEN`, `SHOPIFY_STOREFRONT_ACCESS_TOKEN`, `SHOPIFY_SHOP_DOMAIN`, `SHOPIFY_SCOPES`, `SHOPIFY_API_VERSION`, `SHOPIFY_WEBHOOK_URL`.
 - Webhook secret env var by name only: `SHOPIFY_WEBHOOK_SECRET`.
