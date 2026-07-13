@@ -415,10 +415,24 @@ Before private beta, an operator must run
 approved Shopify development or generated-test-data store and a reachable
 backend environment.
 
-Current status (issue #99): runbook prepared; smoke execution is pending
-operator context. This docs update did not run staging database reads/writes,
-Shopify checkout, webhook delivery tests, production/staging deployments, or
-live credential actions.
+Current status (issues #99 and #109): runbook prepared; issue #109 attempted
+to execute it but was blocked before checkout handoff because no verified
+Railway staging URL, health/readiness output, staging `Store` id/shop-domain
+evidence, Storefront credential presence, webhook secret/configuration
+evidence, webhook URL, Shopify development-store domain, test cart, or operator
+approval for live Railway/Shopify actions was available. This docs update did
+not run staging database reads/writes, Shopify checkout, webhook delivery
+tests, production/staging deployments, or live credential actions. Do not check
+the gates below until an operator records real smoke evidence.
+
+Issue #109 evidence summary:
+
+| Gate | Current status | Evidence recorded |
+| --- | --- | --- |
+| Checkout handoff returns Shopify-hosted URL | Blocked before execution | Not called; staging/backend/store/cart prerequisites were not available. |
+| Order webhook reconciliation verified | Blocked before execution | Not verified; no Shopify test checkout or webhook delivery was generated. |
+| Guest/customer attribution checked | Blocked before execution | Not tested; smoke run did not reach checkout handoff. |
+| Follow-up defects filed | No defect identified | No focused defect issue was filed because no backend/mobile/Shopify runtime failure was observed. |
 
 - [ ] Backend commit, environment, and store description recorded without secrets.
 - [ ] Store record exists and is active/connected for the test store.
