@@ -143,7 +143,8 @@ router.post('/inventory/sync', async (req: Request, res: Response) => {
     }
 
     const { productId } = req.body;
-    if (productId) {
+    const hasProductId = Object.prototype.hasOwnProperty.call(req.body || {}, 'productId');
+    if (hasProductId) {
       if (typeof productId !== 'string' || !Types.ObjectId.isValid(productId)) {
         return res.status(404).json({
           success: false,
@@ -160,7 +161,7 @@ router.post('/inventory/sync', async (req: Request, res: Response) => {
       }
     }
 
-    await updateInventoryLevels(productId, storeId);
+    await updateInventoryLevels(hasProductId ? productId : undefined, storeId);
     
     res.json({
       success: true,

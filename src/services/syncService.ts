@@ -30,7 +30,7 @@ const createInitialSyncStatus = (): ISyncStatus => ({
 
 const syncStatusByStore = new Map<string, ISyncStatus>();
 
-const normalizeStoreId = (storeId: string): string => storeId.toString();
+const normalizeStoreId = (storeId: string): string => storeId.toString().toLowerCase();
 
 const getMutableSyncStatus = (storeId: string): ISyncStatus => {
   const normalizedStoreId = normalizeStoreId(storeId);

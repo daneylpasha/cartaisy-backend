@@ -228,7 +228,7 @@ describe('Shopify admin routes enforce authenticated store ownership', () => {
     const storeBResponse = await request(app)
       .get('/api/v1/shopify/sync/status')
       .set('Authorization', `Bearer ${superAdminToken}`)
-      .set('X-Store-ID', storeBId.toString());
+      .set('X-Store-ID', storeBId.toString().toUpperCase());
 
     expect(storeBResponse.status).toBe(200);
     expect(storeBResponse.body.data.errors).toEqual(['store-b-only-sync-error']);
@@ -244,6 +244,19 @@ describe('Shopify admin routes enforce authenticated store ownership', () => {
     expect(response.status).toBe(404);
     expect(response.body).toEqual({ success: false, error: 'Product not found' });
   });
+
+  test.each([null, '', false, 0])(
+    'inventory sync rejects malformed productId %p without falling back to bulk sync',
+    async (productId) => {
+      const response = await request(app)
+        .post('/api/v1/shopify/inventory/sync')
+        .set('Authorization', `Bearer ${adminAToken}`)
+        .send({ productId });
+
+      expect(response.status).toBe(404);
+      expect(response.body).toEqual({ success: false, error: 'Product not found' });
+    }
+  );
 
   test('admin cannot read analytics for another store product', async () => {
     const wrongStoreResponse = await request(app)
