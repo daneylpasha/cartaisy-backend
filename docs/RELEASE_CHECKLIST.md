@@ -61,9 +61,10 @@ Current blocker status: Railway staging is selected but not provisioned or verif
 
 Issue #107 is an operator provisioning and verification gate. This repository
 does not contain Railway project access, a staging URL, a staging MongoDB
-connection, Shopify development-store credentials, webhook secrets, or live
-health/readiness responses. Do not mark this gate complete from documentation
-alone, and do not paste secrets or connection strings into this file.
+connection, Shopify development-store credentials, webhook secrets, live
+runtime configuration-validation output, or live health/readiness responses. Do
+not mark this gate complete from documentation alone, and do not paste secrets
+or connection strings into this file.
 
 | Required evidence | Current status | Evidence recorded |
 | --- | --- | --- |
@@ -73,7 +74,7 @@ alone, and do not paste secrets or connection strings into this file.
 | `/api/health` response | Pending operator execution | Not provided in issue #107. Expected: HTTP 200 from the staging URL. |
 | `/api/ready` response | Pending operator execution | Not provided in issue #107. Expected: HTTP 200 with `{"ready":true}` from the staging URL. |
 | Dedicated staging MongoDB label/name | Pending operator execution | Not provided in issue #107. Record database or cluster label only, never `MONGODB_URI`. |
-| Required Railway env vars configured by name | Pending operator execution | Not provided in issue #107. Confirm names only; never record values. |
+| Required Railway env vars pass runtime configuration validation | Pending operator execution | Not provided in issue #107. Record validator result by field/group name and status only; never record values. Name-only inventory is not enough. |
 | Shopify development-store domain | Pending operator execution | Not provided in issue #107. Record shop domain only, no tokens. |
 | Staging `Store` record | Pending operator execution | Not provided in issue #107. Record store id, shop domain, active/connected state, and credential presence only. |
 | Webhook secret configured | Pending operator execution | Not provided in issue #107. Record presence only, never the value. |
@@ -86,6 +87,14 @@ curl -i "$STAGING_API_URL/api/health"
 curl -i "$STAGING_API_URL/api/ready"
 ```
 
+Also inspect the Railway deployment/runtime logs for the backend
+`validateRequiredConfig()` output. Record that mandatory configuration produced
+zero critical errors, record any warning field names that were reviewed, and
+confirm the mandatory Railway env-var groups above passed runtime validation
+without recording values. `/api/health` and `/api/ready` alone are not
+sufficient evidence for auth, Shopify, webhook, CORS, or rate-limit
+configuration.
+
 Expected sanitized readiness evidence:
 
 ```text
@@ -96,7 +105,9 @@ MongoDB staging database label:
 Shopify dev-store domain:
 Store record id:
 Store active/connected:
-Required env var names present:
+Runtime config validation result:
+Config warning field names reviewed:
+Mandatory env var groups validated:
 SaaS safety flag status:
 /api/health HTTP status:
 /api/ready HTTP status:
