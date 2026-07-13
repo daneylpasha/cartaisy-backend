@@ -7,6 +7,8 @@ import Order from '../src/models/Order';
 import Store from '../src/models/Store';
 import User from '../src/models/User';
 import { generateToken } from '../src/utils/jwt';
+import * as shopifyService from '../src/services/shopifyService';
+import { performFullSync, resetSyncStatus } from '../src/services/syncService';
 
 const buildTestApp = () => {
   const app = express();
@@ -151,6 +153,10 @@ describe('Shopify admin routes enforce authenticated store ownership', () => {
     productBId = productB._id.toString();
   });
 
+  afterEach(() => {
+    resetSyncStatus();
+  });
+
   test('overview counts only the authenticated admin store', async () => {
     const response = await request(app)
       .get('/api/v1/shopify/overview')
@@ -199,6 +205,58 @@ describe('Shopify admin routes enforce authenticated store ownership', () => {
     expect(response.body.data.orders.total).toBe(1);
     expect(response.body.data.orders.shopifyOrders).toBe(1);
   });
+
+  test('sync status exposes only the validated Shopify admin store status', async () => {
+    jest.spyOn(shopifyService, 'syncProducts').mockResolvedValue({
+      synced: 0,
+      errors: ['store-b-only-sync-error'],
+    });
+    jest.spyOn(shopifyService, 'syncCustomers').mockResolvedValue({ synced: 0, errors: [] });
+    jest.spyOn(shopifyService, 'syncOrders').mockResolvedValue({ synced: 0, errors: [] });
+
+    await performFullSync(storeBId.toString());
+
+    const storeAResponse = await request(app)
+      .get('/api/v1/shopify/sync/status')
+      .set('Authorization', `Bearer ${adminAToken}`);
+
+    expect(storeAResponse.status).toBe(200);
+    expect(storeAResponse.body.success).toBe(true);
+    expect(storeAResponse.body.data.errors).toEqual([]);
+    expect(storeAResponse.body.data.lastFullSync).toBeUndefined();
+
+    const storeBResponse = await request(app)
+      .get('/api/v1/shopify/sync/status')
+      .set('Authorization', `Bearer ${superAdminToken}`)
+      .set('X-Store-ID', storeBId.toString().toUpperCase());
+
+    expect(storeBResponse.status).toBe(200);
+    expect(storeBResponse.body.data.errors).toEqual(['store-b-only-sync-error']);
+    expect(storeBResponse.body.data.lastFullSync).toEqual(expect.any(String));
+  });
+
+  test('inventory sync returns a controlled not-found response for another store product', async () => {
+    const response = await request(app)
+      .post('/api/v1/shopify/inventory/sync')
+      .set('Authorization', `Bearer ${adminAToken}`)
+      .send({ productId: productBId });
+
+    expect(response.status).toBe(404);
+    expect(response.body).toEqual({ success: false, error: 'Product not found' });
+  });
+
+  test.each([null, '', false, 0])(
+    'inventory sync rejects malformed productId %p without falling back to bulk sync',
+    async (productId) => {
+      const response = await request(app)
+        .post('/api/v1/shopify/inventory/sync')
+        .set('Authorization', `Bearer ${adminAToken}`)
+        .send({ productId });
+
+      expect(response.status).toBe(404);
+      expect(response.body).toEqual({ success: false, error: 'Product not found' });
+    }
+  );
 
   test('admin cannot read analytics for another store product', async () => {
     const wrongStoreResponse = await request(app)
