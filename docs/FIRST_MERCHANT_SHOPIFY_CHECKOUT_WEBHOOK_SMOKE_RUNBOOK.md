@@ -1,6 +1,7 @@
 # First-Merchant Shopify Checkout Webhook Smoke Runbook
 
 GitHub issue: #99
+Latest blocked execution attempt: issue #109, 2026-07-13
 Date: 2026-07-09
 
 This runbook verifies the first-merchant Shopify-hosted checkout path against a
@@ -230,20 +231,20 @@ the blocker as backend, mobile/API client, Shopify config, or environment.
 
 | Check | Expected result | Actual result | Status | Follow-up owner |
 | --- | --- | --- | --- | --- |
-| Backend commit recorded | Commit SHA recorded | Pending operator execution | Pending | Operator |
-| Environment recorded | Staging or local+tunnel description recorded | Pending operator execution | Pending | Operator |
-| Store description recorded | Development/generated-test-data store recorded without secrets | Pending operator execution | Pending | Operator |
-| Store record exists | Target `Store` exists and is active/connected | Pending operator execution | Pending | Operator |
-| Storefront credentials scoped | Store-specific credentials confirmed, no global fallback needed | Pending operator execution | Pending | Operator |
-| Webhook secret configured | Secret present in environment, value not recorded | Pending operator execution | Pending | Operator |
-| Webhook delivery reaches backend | Shopify delivery reaches expected backend URL | Pending operator execution | Pending | Operator |
-| Checkout handoff returns URL | `/checkout/handoff` returns `checkoutUrl` | Pending operator execution | Pending | Operator |
-| Shopify test checkout completes | Development-store checkout creates Shopify order | Pending operator execution | Pending | Operator |
-| Order webhook accepted | HMAC verified and handler accepts order webhook | Pending operator execution | Pending | Operator |
-| Handoff reconciled | Matching `CheckoutHandoff` marked reconciled | Pending operator execution | Pending | Operator |
-| Local order store-scoped | Local `Order.storeId` equals target store id | Pending operator execution | Pending | Operator |
-| Guest attribution | Guest order/session attribution verified, if practical | Pending operator execution | Pending | Operator |
-| Customer attribution | Customer order attribution verified, if practical | Pending operator execution | Pending | Operator |
+| Backend commit recorded | Commit SHA recorded | Issue #109 did not provide a deployed Railway commit SHA or operator-approved local backend SHA. | Blocked | Operator |
+| Environment recorded | Staging or local+tunnel description recorded | Verified Railway staging URL was not provided; no operator-approved local HTTPS tunnel was provided. | Blocked | Operator |
+| Store description recorded | Development/generated-test-data store recorded without secrets | Shopify development/generated-test-data store domain was not provided. | Blocked | Operator |
+| Store record exists | Target `Store` exists and is active/connected | Target Cartaisy `Store` id, shop domain, and active/connected evidence were not provided. | Blocked | Operator |
+| Storefront credentials scoped | Store-specific credentials confirmed, no global fallback needed | Store-scoped Storefront credential presence could not be verified without target store access/evidence. | Blocked | Operator |
+| Webhook secret configured | Secret present in environment, value not recorded | `SHOPIFY_WEBHOOK_SECRET` presence in Railway/local environment was not provided. | Blocked | Operator |
+| Webhook delivery reaches backend | Shopify delivery reaches expected backend URL | Webhook URL and Shopify webhook delivery logs were not available. | Blocked | Operator |
+| Checkout handoff returns URL | `/checkout/handoff` returns `checkoutUrl` | Not called in issue #109 because staging URL, target store id, Storefront credential evidence, and test cart were unavailable. | Blocked | Operator |
+| Shopify test checkout completes | Development-store checkout creates Shopify order | Not executed because checkout handoff did not run and no Shopify development store/test checkout access was provided. | Blocked | Operator |
+| Order webhook accepted | HMAC verified and handler accepts order webhook | Not verified because no Shopify test checkout or webhook delivery was generated. | Blocked | Operator |
+| Handoff reconciled | Matching `CheckoutHandoff` marked reconciled | Not verified because no checkout handoff/webhook pair was executed. | Blocked | Operator |
+| Local order store-scoped | Local `Order.storeId` equals target store id | Not verified because no order webhook reconciliation was executed. | Blocked | Operator |
+| Guest attribution | Guest order/session attribution verified, if practical | Not tested because the smoke run was blocked before cart/handoff execution. | Blocked | Operator |
+| Customer attribution | Customer order attribution verified, if practical | Not tested because the smoke run was blocked before cart/handoff execution. | Blocked | Operator |
 
 ## Failure Classification
 
@@ -252,6 +253,7 @@ Use this table for any failed or blocked step.
 | Failure | Evidence | Classification | Follow-up |
 | --- | --- | --- | --- |
 | Pending operator execution | Not run as part of issue #99 docs update | Environment/operator | Run smoke after staging or local tunnel context is approved |
+| Issue #109 blocked before checkout handoff | Issue #109 supplied the runbook scope but no verified Railway staging URL, health/readiness output, staging `Store` id/shop-domain evidence, Storefront credential presence, webhook secret/configuration evidence, webhook URL, Shopify development-store domain, test cart, or operator approval for live Railway/Shopify actions. | Environment/operator | Operator must provision or record the staging/backend/store/webhook prerequisites, then rerun this runbook. |
 
 Classifications:
 
@@ -290,8 +292,15 @@ Follow-up issues:
 
 ## Current Execution Status
 
-No smoke run was executed as part of issue #99. This document adds the
-repeatable runbook and evidence table only. Successful checkout URL generation
-and order webhook reconciliation remain pending until an operator runs the
-smoke test against an approved Shopify development or generated-test-data store
-and records the result.
+No smoke run was executed as part of issue #99. Issue #109 attempted to move
+the runbook from pending to executed, but the run was blocked before checkout
+handoff because the operator-sensitive Railway staging backend, Shopify
+development/generated-test-data store, target `Store` record, Storefront
+credential presence, webhook secret/configuration, webhook URL, and test cart
+evidence were not available in the issue or repository.
+
+`POST /api/v1/checkout/handoff` was not called, so no Shopify-hosted checkout
+URL was produced. Order webhook reconciliation was not verified because no
+test checkout or Shopify webhook delivery was generated. No backend defect was
+identified and no follow-up defect issue was filed from issue #109; any defect
+found during a later operator run should be filed as a focused follow-up issue.
