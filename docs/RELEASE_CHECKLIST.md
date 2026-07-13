@@ -189,27 +189,29 @@ production) and record the evidence in its "Execution status" table. All
 steps must be executed by the project owner/operator with a database backup
 — never by AI agents against shared environments.
 
-Staging status update (issue #98): no operator staging output was provided in
-the issue, and this docs update did not run staging database reads, writes,
-migrations, deployments, or Shopify actions. The release gates below remain
-unchecked until the project owner/operator records staging evidence in
-`docs/PRODUCT_TENANCY_MIGRATION.md`.
+Staging status update (issue #108): no operator staging output was provided in
+the issue body or comments, and this docs update did not run staging database
+reads, writes, migrations, deployments, or Shopify actions. The release gates
+below remain unchecked until the project owner/operator records staging
+evidence in `docs/PRODUCT_TENANCY_MIGRATION.md`.
 
 | Staging product gate | Current status | Evidence recorded |
 | --- | --- | --- |
-| Database backup before product migration gates | Pending operator execution | Not provided in issue #98. |
-| Product dry run | Pending operator execution | Not provided in issue #98. |
-| Product real backfill | Pending operator approval/execution | Not provided in issue #98. |
-| Storeless Product count | Pending operator verification | Not provided in issue #98; expected `0` after successful backfill. |
-| Product counts by store | Pending operator verification | Not provided in issue #98. |
-| Store-scoped Product compound unique indexes | Pending operator verification | Not provided in issue #98. |
-| Legacy global unique Product indexes | Pending operator verification | Not provided in issue #98; expected `[]` for legacy single-field unique index query. |
+| Database backup before product migration gates | Pending operator execution | Not provided in issue #108. |
+| Product dry run | Pending operator execution | Not provided in issue #108. |
+| Product real backfill | Pending operator approval/execution | Not provided in issue #108. |
+| Storeless Product count | Pending operator verification | Not provided in issue #108; expected `0` after successful backfill. |
+| Product counts by store | Pending operator verification | Not provided in issue #108. |
+| Store-scoped Product compound unique indexes | Pending operator verification | Not provided in issue #108. |
+| Legacy global unique Product indexes | Pending operator verification | Not provided in issue #108; expected `[]` for legacy single-field unique index query. |
+| Product rollback notes | Pending operator record | Not provided in issue #108. |
 
 - [ ] Dry run completed (`backfillProductStoreId.ts --dry-run`) and its output reviewed: correct target store, plausible product sample, before-picture "Product counts by store" recorded.
 - [ ] Real backfill completed; `db.products.countDocuments({ storeId: { $exists: false } })` returns `0`.
 - [ ] Product counts by store verified against the dry-run before-picture (script output or the aggregate in the runbook).
 - [ ] Legacy global unique indexes (`shopifyProductId_1`, `handle_1`, `seo.slug_1`) checked and dropped where present (`--drop-legacy-indexes`); `db.products.getIndexes()` shows no single-field unique index on those fields.
 - [ ] Store-scoped compound unique indexes verified present (`{ storeId, shopifyProductId }`, `{ storeId, handle }`, `{ storeId, "seo.slug" }`) — the script prints this verdict on every run.
+- [ ] Product rollback notes recorded: restore the backup, or if the backfill target was wrong and no later writes depend on it, unset only the recorded product IDs changed in this gate and re-create any dropped legacy unique indexes only if rolling back permanently.
 
 Exact Mongo verification commands to record after each environment run:
 
@@ -266,24 +268,24 @@ legacy storeless documents and their owning store.
 
 #### Staging
 
-Staging status update (issue #98): no operator staging output was provided in
-the issue, and this docs update did not run customer/order database reads,
-writes, or backfills. All staging customer/order gates remain unchecked until
-the project owner/operator records the counts, exact IDs, index query results,
-and rollback notes from the staging database.
+Staging status update (issue #108): no operator staging output was provided in
+the issue body or comments, and this docs update did not run customer/order
+database reads, writes, or backfills. All staging customer/order gates remain
+unchecked until the project owner/operator records the counts, exact IDs, index
+query results, and rollback notes from the staging database.
 
 | Staging customer/order gate | Current status | Evidence recorded |
 | --- | --- | --- |
-| Backup/snapshot before customer/order backfill | Pending operator execution | Not provided in issue #98. |
-| Storeless Customer count | Pending operator verification | Not provided in issue #98. |
-| Storeless Shopify customer `User` count | Pending operator verification | Not provided in issue #98. |
-| Storeless Shopify `Order` count | Pending operator verification | Not provided in issue #98. |
-| Exact `User` IDs to backfill | Pending operator record | Not provided in issue #98. |
-| Exact `Order` IDs to backfill | Pending operator record | Not provided in issue #98. |
-| Customer/User/Order real backfill | Pending operator approval/execution | Not provided in issue #98. |
-| Store-scoped customer/user/order indexes | Pending operator verification | Not provided in issue #98. |
-| Legacy global unique customer/user/order indexes | Pending operator verification | Not provided in issue #98; expected `[]` for legacy global unique index queries. |
-| Rollback notes | Pending operator record | Not provided in issue #98. |
+| Backup/snapshot before customer/order backfill | Pending operator execution | Not provided in issue #108. |
+| Storeless Customer count | Pending operator verification | Not provided in issue #108. |
+| Storeless Shopify customer `User` count | Pending operator verification | Not provided in issue #108. |
+| Storeless Shopify `Order` count | Pending operator verification | Not provided in issue #108. |
+| Exact `User` IDs to backfill | Pending operator record | Not provided in issue #108. |
+| Exact `Order` IDs to backfill | Pending operator record | Not provided in issue #108. |
+| Customer/User/Order real backfill | Pending operator approval/execution | Not provided in issue #108. |
+| Store-scoped customer/user/order indexes | Pending operator verification | Not provided in issue #108. |
+| Legacy global unique customer/user/order indexes | Pending operator verification | Not provided in issue #108; expected `[]` for legacy global unique index queries. |
+| Rollback notes | Pending operator record | Not provided in issue #108. |
 
 - [ ] Backup/snapshot recorded before customer/order backfill.
 - [ ] Dry-run counts recorded and reviewed:
