@@ -11,21 +11,28 @@ Date: 2026-07-02
 > a seeded local database is included below. Release gates for this
 > migration are in `docs/RELEASE_CHECKLIST.md`.
 
+> Update (2026-07-13, issue #108): no operator-provided staging backup,
+> dry-run, backfill, verification, or rollback evidence was present in the
+> issue body or comments. This docs pass did not run staging database reads,
+> staging database writes, migrations, deployments, or Shopify actions.
+> Staging remains pending until the project owner/operator records sanitized
+> evidence from the target staging environment.
+
 ## Execution status
 
 | Environment | Dry run | Backfill | Verified |
 | --- | --- | --- | --- |
 | Local (seeded test DB) | ✅ 2026-07-03 (recorded below) | ✅ 2026-07-03 (throwaway DB) | ✅ via script output + Jest suite |
-| Staging | ⏳ pending operator output (issue #98; see staging evidence table below) | ⏳ pending operator approval/output (issue #98) | ⏳ pending operator output (issue #98) |
+| Staging | ⏳ pending operator output (issue #108; see staging evidence table below) | ⏳ pending operator approval/output (issue #108) | ⏳ pending operator output (issue #108) |
 | Production | ❌ not run | ❌ not run | ❌ |
 
 **Staging/production execution is operator work**: it must be run by the
 project owner/operator with a database backup and access to the target
 environment. AI agents must never run it against shared environments.
 
-### Staging execution evidence (issue #98)
+### Staging execution evidence (issue #108)
 
-No staging database output was provided in issue #98, and this docs update did
+No staging database output was provided in issue #108, and this docs update did
 not run staging database reads, writes, migrations, Shopify actions, or
 deployments. The staging gates therefore remain pending until the project
 owner/operator records the outputs from the target staging environment.
@@ -34,13 +41,14 @@ Customer/User/Order legacy `storeId` gates are tracked only in
 
 | Gate | Staging status | Recorded result |
 | --- | --- | --- |
-| Database backup recorded before migration gates | Pending operator execution | Not provided in issue #98. Record backup/snapshot identifier or storage location without credentials. |
-| Product `storeId` dry run (`backfillProductStoreId.ts --dry-run`) | Pending operator execution | Not provided in issue #98. Record target store, storeless product count, sample review result, product counts by store, legacy index status, and compound index status. |
-| Product real backfill | Pending operator approval/execution | Not provided in issue #98. Run only after operator approval and backup; record update count and target store. |
-| Storeless Product count | Pending operator verification | Not provided in issue #98. Expected after successful backfill: `0` for products with missing/null `storeId`. |
-| Product counts by store | Pending operator verification | Not provided in issue #98. Expected: post-run counts match the reviewed dry-run before-picture. |
-| Product store-scoped compound unique indexes | Pending operator verification | Not provided in issue #98. Expected: unique `{ storeId, shopifyProductId }`, `{ storeId, handle }`, and `{ storeId, "seo.slug" }` indexes present. |
-| Legacy global unique Product indexes | Pending operator verification | Not provided in issue #98. Expected: no single-field unique indexes remain on `shopifyProductId`, `handle`, or `seo.slug`. |
+| Database backup recorded before migration gates | Pending operator execution | Not provided in issue #108. Record backup/snapshot identifier or storage location without credentials. |
+| Product `storeId` dry run (`backfillProductStoreId.ts --dry-run`) | Pending operator execution | Not provided in issue #108. Record target store, storeless product count, sample review result, product counts by store, legacy index status, and compound index status. |
+| Product real backfill | Pending operator approval/execution | Not provided in issue #108. Run only after operator approval and backup; record update count and target store. |
+| Storeless Product count | Pending operator verification | Not provided in issue #108. Expected after successful backfill: `0` for products with missing/null `storeId`. |
+| Product counts by store | Pending operator verification | Not provided in issue #108. Expected: post-run counts match the reviewed dry-run before-picture. |
+| Product store-scoped compound unique indexes | Pending operator verification | Not provided in issue #108. Expected: unique `{ storeId, shopifyProductId }`, `{ storeId, handle }`, and `{ storeId, "seo.slug" }` indexes present. |
+| Legacy global unique Product indexes | Pending operator verification | Not provided in issue #108. Expected: no single-field unique indexes remain on `shopifyProductId`, `handle`, or `seo.slug`. |
+| Product rollback notes | Pending operator record | Not provided in issue #108. Record backup restore path and any approved product `storeId`/index rollback notes after staging execution. |
 
 Products are now tenant-scoped: `Product.storeId` references the owning `Store`, and Shopify identifier uniqueness (`shopifyProductId`, `handle`, `seo.slug`) is enforced per store instead of globally. This document is the runbook for migrating an existing (single-store) deployment safely.
 
