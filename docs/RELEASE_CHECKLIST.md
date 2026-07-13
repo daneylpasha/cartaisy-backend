@@ -432,7 +432,7 @@ Issue #109 evidence summary:
 | Checkout handoff returns Shopify-hosted URL | Blocked before execution | Not called; staging/backend/store/cart prerequisites were not available. |
 | Order webhook reconciliation verified | Blocked before execution | Not verified; no Shopify test checkout or webhook delivery was generated. |
 | Guest/customer attribution checked | Blocked before execution | Not tested; smoke run did not reach checkout handoff. |
-| Follow-up defects filed | No defect identified | No focused defect issue was filed because no backend/mobile/Shopify runtime failure was observed. |
+| Follow-up defects filed | Not evaluated | No focused defect issue was filed because the smoke run was blocked before any backend, mobile, or Shopify runtime behavior was exercised. |
 
 - [ ] Backend commit, environment, and store description recorded without secrets.
 - [ ] Store record exists and is active/connected for the test store.

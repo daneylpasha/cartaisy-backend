@@ -1,7 +1,7 @@
 # First-Merchant Shopify Checkout Webhook Smoke Runbook
 
 GitHub issue: #99
-Latest execution record: issue #109, 2026-07-13
+Latest blocked execution attempt: issue #109, 2026-07-13
 Date: 2026-07-09
 
 This runbook verifies the first-merchant Shopify-hosted checkout path against a
