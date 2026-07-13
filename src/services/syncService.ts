@@ -1,4 +1,3 @@
-import mongoose from 'mongoose';
 import { syncProducts, syncCustomers, syncOrders } from './shopifyService';
 import Product from '../models/Product';
 import User from '../models/User';
@@ -19,7 +18,7 @@ interface ISyncStatus {
   };
 }
 
-let syncStatus: ISyncStatus = {
+const createInitialSyncStatus = (): ISyncStatus => ({
   inProgress: false,
   errors: [],
   stats: {
@@ -27,6 +26,66 @@ let syncStatus: ISyncStatus = {
     customersSync: 0,
     ordersSync: 0
   }
+});
+
+const syncStatusByStore = new Map<string, ISyncStatus>();
+
+const normalizeStoreId = (storeId: string): string => storeId.toString();
+
+const getMutableSyncStatus = (storeId: string): ISyncStatus => {
+  const normalizedStoreId = normalizeStoreId(storeId);
+  const existingStatus = syncStatusByStore.get(normalizedStoreId);
+
+  if (existingStatus) {
+    return existingStatus;
+  }
+
+  const initialStatus = createInitialSyncStatus();
+  syncStatusByStore.set(normalizedStoreId, initialStatus);
+  return initialStatus;
+};
+
+const cloneSyncStatus = (status: ISyncStatus): ISyncStatus => ({
+  lastFullSync: status.lastFullSync ? new Date(status.lastFullSync) : undefined,
+  lastIncrementalSync: status.lastIncrementalSync ? new Date(status.lastIncrementalSync) : undefined,
+  inProgress: status.inProgress,
+  errors: [...status.errors],
+  stats: { ...status.stats }
+});
+
+const latestDate = (dates: Array<Date | undefined>): Date | undefined => {
+  const timestamps = dates
+    .filter((date): date is Date => Boolean(date))
+    .map(date => date.getTime());
+
+  if (timestamps.length === 0) {
+    return undefined;
+  }
+
+  return new Date(Math.max(...timestamps));
+};
+
+const getPlatformSyncStatus = (): ISyncStatus => {
+  const statuses = Array.from(syncStatusByStore.values());
+
+  if (statuses.length === 0) {
+    return createInitialSyncStatus();
+  }
+
+  return {
+    lastFullSync: latestDate(statuses.map(status => status.lastFullSync)),
+    lastIncrementalSync: latestDate(statuses.map(status => status.lastIncrementalSync)),
+    inProgress: statuses.some(status => status.inProgress),
+    errors: statuses.flatMap(status => status.errors),
+    stats: statuses.reduce(
+      (totals, status) => ({
+        productsSync: totals.productsSync + status.stats.productsSync,
+        customersSync: totals.customersSync + status.stats.customersSync,
+        ordersSync: totals.ordersSync + status.stats.ordersSync
+      }),
+      { productsSync: 0, customersSync: 0, ordersSync: 0 }
+    )
+  };
 };
 
 /**
@@ -36,6 +95,8 @@ export const performFullSync = async (storeId: string): Promise<ISyncStatus> => 
   if (!storeId) {
     throw new Error('performFullSync requires a storeId');
   }
+
+  const syncStatus = getMutableSyncStatus(storeId);
 
   if (syncStatus.inProgress) {
     throw new Error('Sync already in progress');
@@ -68,7 +129,7 @@ export const performFullSync = async (storeId: string): Promise<ISyncStatus> => 
 
     // Step 4: Validate sync integrity
     console.log('🔍 Validating sync integrity...');
-    await validateSyncIntegrity();
+    await validateSyncIntegrity(storeId);
 
     syncStatus.lastFullSync = new Date();
     syncStatus.inProgress = false;
@@ -84,7 +145,7 @@ export const performFullSync = async (storeId: string): Promise<ISyncStatus> => 
       console.warn(`⚠️ ${syncStatus.errors.length} errors occurred during sync`);
     }
 
-    return { ...syncStatus };
+    return cloneSyncStatus(syncStatus);
   } catch (error) {
     syncStatus.inProgress = false;
     syncStatus.errors.push(`Full sync failed: ${error}`);
@@ -100,6 +161,8 @@ export const performIncrementalSync = async (storeId: string): Promise<ISyncStat
   if (!storeId) {
     throw new Error('performIncrementalSync requires a storeId');
   }
+
+  const syncStatus = getMutableSyncStatus(storeId);
 
   if (syncStatus.inProgress) {
     throw new Error('Sync already in progress');
@@ -128,6 +191,11 @@ export const performIncrementalSync = async (storeId: string): Promise<ISyncStat
     syncStatus.lastIncrementalSync = new Date();
     syncStatus.inProgress = false;
     syncStatus.errors = incrementalErrors;
+    syncStatus.stats = {
+      productsSync: 0,
+      customersSync: 0,
+      ordersSync: orderResult.synced
+    };
 
     // Update lastSyncAt for the synced store only
     await updateStoreLastSyncAt(storeId);
@@ -136,7 +204,7 @@ export const performIncrementalSync = async (storeId: string): Promise<ISyncStat
     console.log(`✅ Incremental sync completed in ${duration}s`);
     console.log(`📊 Stats: ${orderResult.synced} orders`);
 
-    return { ...syncStatus };
+    return cloneSyncStatus(syncStatus);
   } catch (error) {
     syncStatus.inProgress = false;
     incrementalErrors.push(`Incremental sync failed: ${error}`);
@@ -411,13 +479,15 @@ export const handleDataConflicts = (localData: any, shopifyData: any, type: 'pro
 /**
  * Validate data consistency between our system and Shopify
  */
-export const validateSyncIntegrity = async (): Promise<{ issues: any[]; valid: boolean }> => {
+export const validateSyncIntegrity = async (storeId?: string): Promise<{ issues: any[]; valid: boolean }> => {
   const issues: any[] = [];
+  const storeFilter = storeId ? { storeId } : {};
 
   try {
     // Check for products without Shopify IDs
-    const orphanedProducts = await Product.countDocuments({ 
-      shopifyProductId: { $exists: false } 
+    const orphanedProducts = await Product.countDocuments({
+      ...storeFilter,
+      shopifyProductId: { $exists: false }
     });
     
     if (orphanedProducts > 0) {
@@ -429,7 +499,8 @@ export const validateSyncIntegrity = async (): Promise<{ issues: any[]; valid: b
     }
 
     // Check for users without Shopify customer IDs (normal for app-only users)
-    const localOnlyUsers = await User.countDocuments({ 
+    const localOnlyUsers = await User.countDocuments({
+      ...storeFilter,
       shopifyCustomerId: { $exists: false },
       role: 'customer'
     });
@@ -443,8 +514,9 @@ export const validateSyncIntegrity = async (): Promise<{ issues: any[]; valid: b
     }
 
     // Check for orders without Shopify order IDs (mobile-only orders)
-    const mobileOnlyOrders = await Order.countDocuments({ 
-      shopifyOrderId: { $exists: false } 
+    const mobileOnlyOrders = await Order.countDocuments({
+      ...storeFilter,
+      shopifyOrderId: { $exists: false }
     });
     
     if (mobileOnlyOrders > 0) {
@@ -457,6 +529,7 @@ export const validateSyncIntegrity = async (): Promise<{ issues: any[]; valid: b
 
     // Check for recent product updates that might need re-sync
     const staleProducts = await Product.countDocuments({
+      ...storeFilter,
       updatedAt: { $lt: new Date(Date.now() - 24 * 60 * 60 * 1000) }, // Older than 24 hours
       shopifyProductId: { $exists: true }
     });
@@ -473,7 +546,7 @@ export const validateSyncIntegrity = async (): Promise<{ issues: any[]; valid: b
       issue.type === 'orphaned_products'
     ).length === 0;
 
-    console.log(`🔍 Sync integrity check: ${isValid ? 'VALID' : 'ISSUES FOUND'}`);
+    console.log(`🔍 Sync integrity check${storeId ? ` for store ${storeId}` : ''}: ${isValid ? 'VALID' : 'ISSUES FOUND'}`);
     if (issues.length > 0) {
       console.log('📋 Issues found:', issues);
     }
@@ -489,10 +562,16 @@ export const validateSyncIntegrity = async (): Promise<{ issues: any[]; valid: b
 };
 
 /**
- * Get current sync status and statistics
+ * Get current sync status and statistics.
+ * Supplying storeId returns that store's in-memory status only. Omitting it
+ * is the explicit platform aggregate used by super-admin/global views.
  */
-export const getSyncStatus = (): ISyncStatus => {
-  return { ...syncStatus };
+export const getSyncStatus = (storeId?: string): ISyncStatus => {
+  if (storeId) {
+    return cloneSyncStatus(getMutableSyncStatus(storeId));
+  }
+
+  return cloneSyncStatus(getPlatformSyncStatus());
 };
 
 /**
@@ -536,16 +615,14 @@ export const scheduledSync = async (type: 'full' | 'incremental' = 'incremental'
 /**
  * Reset sync status (for testing or recovery)
  */
-export const resetSyncStatus = (): void => {
-  syncStatus = {
-    inProgress: false,
-    errors: [],
-    stats: {
-      productsSync: 0,
-      customersSync: 0,
-      ordersSync: 0
-    }
-  };
+export const resetSyncStatus = (storeId?: string): void => {
+  if (storeId) {
+    syncStatusByStore.delete(normalizeStoreId(storeId));
+    console.log(`🔄 Sync status reset for store ${storeId}`);
+    return;
+  }
+
+  syncStatusByStore.clear();
   console.log('🔄 Sync status reset');
 };
 

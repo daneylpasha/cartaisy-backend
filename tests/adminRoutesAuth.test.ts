@@ -5,6 +5,8 @@ import adminRoutes from '../src/routes/adminRoutes';
 import User from '../src/models/User';
 import Store from '../src/models/Store';
 import { generateToken } from '../src/utils/jwt';
+import * as shopifyService from '../src/services/shopifyService';
+import { performFullSync, resetSyncStatus } from '../src/services/syncService';
 
 // =============================================================================
 // ROUTE TESTS: adminRoutes require authentication and store ownership
@@ -116,6 +118,10 @@ describe('admin routes enforce store ownership where store-specific', () => {
     superAdminToken = generateToken(superAdmin._id.toString());
   });
 
+  afterEach(() => {
+    resetSyncStatus();
+  });
+
   test('admin can read their own sync status when authenticated', async () => {
     const response = await request(app)
       .get('/api/v1/admin/sync/status')
@@ -171,6 +177,37 @@ describe('admin routes enforce store ownership where store-specific', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.success).toBe(true);
+  });
+
+  test('store admin sync status excludes another store while super admin global view aggregates it', async () => {
+    jest.spyOn(shopifyService, 'syncProducts').mockResolvedValue({
+      synced: 0,
+      errors: ['store-b-platform-error'],
+    });
+    jest.spyOn(shopifyService, 'syncCustomers').mockResolvedValue({ synced: 0, errors: [] });
+    jest.spyOn(shopifyService, 'syncOrders').mockResolvedValue({ synced: 0, errors: [] });
+
+    await performFullSync(storeBId.toString());
+
+    const adminResponse = await request(app)
+      .get('/api/v1/admin/sync/status')
+      .set('Authorization', `Bearer ${adminAToken}`);
+
+    expect(adminResponse.status).toBe(200);
+    expect(adminResponse.body.success).toBe(true);
+    expect(adminResponse.body.data.recentErrors).toBeUndefined();
+    expect(adminResponse.body.data.lastSync.completedAt).toBeNull();
+
+    const platformResponse = await request(app)
+      .get('/api/v1/admin/sync/status')
+      .set('Authorization', `Bearer ${superAdminToken}`);
+
+    expect(platformResponse.status).toBe(200);
+    expect(platformResponse.body.success).toBe(true);
+    expect(platformResponse.body.data.recentErrors).toEqual([
+      expect.objectContaining({ message: 'store-b-platform-error' }),
+    ]);
+    expect(platformResponse.body.data.lastSync.completedAt).toEqual(expect.any(String));
   });
 
   test('super admin without a storeId gets the global sync view', async () => {

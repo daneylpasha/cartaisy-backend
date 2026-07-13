@@ -36,8 +36,8 @@ router.get(
     try {
       const { storeId } = req.params;
 
-      // Get global sync status from in-memory tracker
-      const syncStatus = getSyncStatus();
+      // Get this store's sync status from the in-memory tracker
+      const syncStatus = getSyncStatus(storeId);
 
       // Get resource counts for this store (in parallel)
       const [productCount, customerCount, orderCount, store] = await Promise.all([

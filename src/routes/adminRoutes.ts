@@ -63,7 +63,7 @@ router.get('/dashboard', ...ownedStoreChainOptional, async (req: Request, res: R
       systemStats,
       recentActivity
     ] = await Promise.all([
-      getSyncStatus(),
+      getSyncStatus(storeId),
       getBackgroundJobsStatus(),
       getSystemStatistics(storeId),
       getRecentActivity(50, storeId)
@@ -101,10 +101,11 @@ router.get('/sync/status', ...ownedStoreChainOptional, async (req: Request, res:
     // (undefined only for super admins requesting the global view)
     const storeId = (req as any).storeId as string | undefined;
 
-    // Get global sync status
+    // Get sync status for the validated store context. When storeId is
+    // undefined, this is the explicit super-admin platform aggregate.
     const [syncStatus, integrityCheck] = await Promise.all([
-      getSyncStatus(),
-      validateSyncIntegrity()
+      getSyncStatus(storeId),
+      validateSyncIntegrity(storeId)
     ]);
 
     // Build query filter for store-specific counts
@@ -225,9 +226,8 @@ router.post('/sync/trigger', async (req: Request, res: Response) => {
     await scheduledSync(type);
 
     // Per-store failures are logged by scheduledSync and do not abort the
-    // loop, so report the run as triggered rather than uniformly successful;
-    // data reflects the most recent store's sync status (per-store status
-    // tracking is follow-up work)
+    // loop, so report the run as triggered rather than uniformly successful.
+    // Omitting storeId here is the explicit platform aggregate.
     res.json({
       success: true,
       message: `${type} sync triggered for all connected stores`,

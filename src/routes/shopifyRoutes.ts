@@ -1,5 +1,6 @@
 import express from 'express';
 import { Request, Response } from 'express';
+import { Types } from 'mongoose';
 import { 
   performFullSync, 
   performIncrementalSync, 
@@ -54,7 +55,13 @@ const missingStoreResponse = (res: Response): Response =>
  */
 router.get('/sync/status', async (req: Request, res: Response) => {
   try {
-    const status = getSyncStatus();
+    const storeId = getRequestStoreId(req);
+    if (!storeId) {
+      missingStoreResponse(res);
+      return;
+    }
+
+    const status = getSyncStatus(storeId);
     res.json({
       success: true,
       data: status
@@ -136,6 +143,23 @@ router.post('/inventory/sync', async (req: Request, res: Response) => {
     }
 
     const { productId } = req.body;
+    if (productId) {
+      if (typeof productId !== 'string' || !Types.ObjectId.isValid(productId)) {
+        return res.status(404).json({
+          success: false,
+          error: 'Product not found'
+        });
+      }
+
+      const ownedProduct = await Product.findOne({ _id: productId, storeId }).select('_id').lean();
+      if (!ownedProduct) {
+        return res.status(404).json({
+          success: false,
+          error: 'Product not found'
+        });
+      }
+    }
+
     await updateInventoryLevels(productId, storeId);
     
     res.json({
@@ -419,7 +443,7 @@ router.get('/overview', async (req: Request, res: Response) => {
       Order.countDocuments({ storeId }),
       Product.countDocuments({ storeId, shopifyProductId: { $exists: true } }),
       Order.countDocuments({ storeId, shopifyOrderId: { $exists: false } }),
-      getSyncStatus()
+      getSyncStatus(storeId)
     ]);
 
     const overview = {
