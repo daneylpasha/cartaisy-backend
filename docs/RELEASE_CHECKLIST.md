@@ -74,7 +74,7 @@ or connection strings into this file.
 | `/api/health` response | Pending operator execution | Not provided in issue #107. Expected: HTTP 200 from the staging URL. |
 | `/api/ready` response | Pending operator execution | Not provided in issue #107. Expected: HTTP 200 with `{"ready":true}` from the staging URL. |
 | Dedicated staging MongoDB label/name | Pending operator execution | Not provided in issue #107. Record database or cluster label only, never `MONGODB_URI`. |
-| Required Railway env vars pass runtime configuration validation | Pending operator execution | Not provided in issue #107. Record validator result by field/group name and status only; never record values. Name-only inventory is not enough. |
+| Mandatory staging configuration audit | Pending operator execution | Not provided in issue #107. Record the check name/command, timestamp, and sanitized pass/fail field list. The check must reject every missing, blank, default, or invalid required staging field; never record values. |
 | Shopify development-store domain | Pending operator execution | Not provided in issue #107. Record shop domain only, no tokens. |
 | Staging `Store` record | Pending operator execution | Not provided in issue #107. Record store id, shop domain, active/connected state, and credential presence only. |
 | Webhook secret configured | Pending operator execution | Not provided in issue #107. Record presence only, never the value. |
@@ -87,13 +87,28 @@ curl -i "$STAGING_API_URL/api/health"
 curl -i "$STAGING_API_URL/api/ready"
 ```
 
-Also inspect the Railway deployment/runtime logs for the backend
-`validateRequiredConfig()` output. Record that mandatory configuration produced
-zero critical errors, record any warning field names that were reviewed, and
-confirm the mandatory Railway env-var groups above passed runtime validation
-without recording values. `/api/health` and `/api/ready` alone are not
-sufficient evidence for auth, Shopify, webhook, CORS, or rate-limit
-configuration.
+Also run an explicit staging configuration audit against the Railway
+environment before recording this gate as complete. `validateRequiredConfig()`
+output is useful supporting evidence, but it is not sufficient by itself
+because some mandatory staging fields are outside its critical-error checks.
+The audit must fail closed for every missing, blank, default, or invalid
+required staging field listed in "Railway staging prerequisites", including
+Shopify app/dev-store fields, `SHOPIFY_WEBHOOK_SECRET`, SaaS safety flags, CORS,
+and rate-limit settings. Record only the audit name/command, timestamp, deploy
+identifier, and sanitized field/group pass/fail summary. Do not record secret
+values. `/api/health` and `/api/ready` alone are not sufficient evidence for
+auth, Shopify, webhook, CORS, or rate-limit configuration.
+
+Minimum mandatory staging config audit coverage:
+
+| Config group | Required sanitized result |
+| --- | --- |
+| MongoDB | `MONGODB_URI` present, non-default, points to the dedicated staging database label recorded above. |
+| Core runtime | `NODE_ENV`, `PORT`, `API_BASE_URL`, `FRONTEND_URL`, `JWT_SECRET`, and `EMAIL_FROM_ADDRESS` present, non-default where applicable, and format-valid. |
+| Shopify dev-store | `SHOPIFY_STORE_URL`, `SHOPIFY_API_KEY`, `SHOPIFY_API_SECRET`, `SHOPIFY_ACCESS_TOKEN`, `SHOPIFY_STOREFRONT_ACCESS_TOKEN`, `SHOPIFY_SHOP_DOMAIN`, `SHOPIFY_SCOPES`, `SHOPIFY_API_VERSION`, and `SHOPIFY_WEBHOOK_URL` present and tied to the recorded development store. |
+| Webhooks | `SHOPIFY_WEBHOOK_SECRET` present and the webhook URL targets the staging backend. |
+| SaaS safety | `SAAS_MODE` or `MULTI_TENANT_MODE` enabled for staging SaaS verification. |
+| CORS/rate limits | `CORS_ORIGINS` or `ALLOWED_ORIGINS`, `RATE_LIMIT_WINDOW_MS`, and `RATE_LIMIT_MAX_REQUESTS` present and reviewed for staging. |
 
 Expected sanitized readiness evidence:
 
@@ -105,9 +120,13 @@ MongoDB staging database label:
 Shopify dev-store domain:
 Store record id:
 Store active/connected:
-Runtime config validation result:
+Mandatory staging config audit:
+Audit command/check name:
+Audit timestamp:
+Audit deploy identifier:
+Sanitized field/group pass-fail summary:
+validateRequiredConfig supporting result:
 Config warning field names reviewed:
-Mandatory env var groups validated:
 SaaS safety flag status:
 /api/health HTTP status:
 /api/ready HTTP status:
