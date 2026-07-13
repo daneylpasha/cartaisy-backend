@@ -57,6 +57,52 @@ Exact prerequisites to record before treating staging as release-ready:
 
 Current blocker status: Railway staging is selected but not provisioned or verified in this repository. Do not run migration gates, Shopify webhook tests, mobile/backend smoke tests, or first-merchant checkout validation until the operator records the staging URL and both health checks.
 
+### Railway staging evidence record (issue #107) — operator work
+
+Issue #107 is an operator provisioning and verification gate. This repository
+does not contain Railway project access, a staging URL, a staging MongoDB
+connection, Shopify development-store credentials, webhook secrets, or live
+health/readiness responses. Do not mark this gate complete from documentation
+alone, and do not paste secrets or connection strings into this file.
+
+| Required evidence | Current status | Evidence recorded |
+| --- | --- | --- |
+| Railway project/service identifier | Pending operator execution | Not provided in issue #107. Record identifier or label only, no secrets. |
+| Deployed backend commit SHA or deployment timestamp | Pending operator execution | Not provided in issue #107. |
+| Staging API URL | Pending operator execution | Not provided in issue #107. Record the Railway/custom URL only after provisioning. |
+| `/api/health` response | Pending operator execution | Not provided in issue #107. Expected: HTTP 200 from the staging URL. |
+| `/api/ready` response | Pending operator execution | Not provided in issue #107. Expected: HTTP 200 with `{"ready":true}` from the staging URL. |
+| Dedicated staging MongoDB label/name | Pending operator execution | Not provided in issue #107. Record database or cluster label only, never `MONGODB_URI`. |
+| Required Railway env vars configured by name | Pending operator execution | Not provided in issue #107. Confirm names only; never record values. |
+| Shopify development-store domain | Pending operator execution | Not provided in issue #107. Record shop domain only, no tokens. |
+| Staging `Store` record | Pending operator execution | Not provided in issue #107. Record store id, shop domain, active/connected state, and credential presence only. |
+| Webhook secret configured | Pending operator execution | Not provided in issue #107. Record presence only, never the value. |
+| SaaS safety flags configured | Pending operator execution | Not provided in issue #107. Record whether `SAAS_MODE` or `MULTI_TENANT_MODE` is set by name/status only. |
+
+Operator verification commands to run after the Railway staging URL is known:
+
+```bash
+curl -i "$STAGING_API_URL/api/health"
+curl -i "$STAGING_API_URL/api/ready"
+```
+
+Expected sanitized readiness evidence:
+
+```text
+Staging API URL:
+Railway project/service label:
+Backend commit SHA:
+MongoDB staging database label:
+Shopify dev-store domain:
+Store record id:
+Store active/connected:
+Required env var names present:
+SaaS safety flag status:
+/api/health HTTP status:
+/api/ready HTTP status:
+/api/ready body:
+```
+
 ## Pre-release checks
 
 - Confirm the release scope and risk level.
