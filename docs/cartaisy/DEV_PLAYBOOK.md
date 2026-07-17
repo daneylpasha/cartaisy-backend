@@ -35,6 +35,17 @@ Last updated: 2026-07-17. For the human developer working the Cartaisy ticket qu
 
 7. **Confirm the issue auto-closed**, then go to step 1.
 
+## Model routing
+
+Every repo has two GitHub Actions workers, dispatched by mention:
+
+- `@claude` — the default (Sonnet). All tickets go here unless a rule below says otherwise.
+- `@claude-opus` — the escalation tier (Opus). Use it only for: root-cause debugging, multi-file architectural work, or tickets the orchestrator has flagged high-complexity.
+
+Mandatory escalation rule: a ticket whose Sonnet PR needs rework twice is re-dispatched to `@claude-opus` — do not send it to `@claude` a third time. Note the escalation as a comment on the issue so the history shows why.
+
+Mentions are exclusive: a comment containing `@claude-opus` triggers only the Opus worker, never the default one. Both workers run with the same turn cap.
+
 ## Automated review comments (Greptile etc.)
 
 Every PR gets automated review. Those comments are **input, not orders** — triage each one (or have the coding agent do it with the prompt below):
