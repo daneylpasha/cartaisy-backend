@@ -35,6 +35,25 @@ Last updated: 2026-07-17. For the human developer working the Cartaisy ticket qu
 
 7. **Confirm the issue auto-closed**, then go to step 1.
 
+## Automated review comments (Greptile etc.)
+
+Every PR gets automated review. Those comments are **input, not orders** — triage each one (or have the coding agent do it with the prompt below):
+
+- Valid AND within the ticket's scope → fix on the same branch.
+- Valid but OUT of scope → do not fix. Reply "valid, out of scope for #<ticket>", and bring it to the orchestrator, who decides if it becomes a follow-up ticket.
+- Incorrect/noise → reply briefly why, and resolve the thread.
+
+Never silently ignore a comment. Merge requires: CI green + orchestrator review + every automated-review thread fixed or answered.
+
+Agent prompt template:
+```
+Read the automated review comments on PR #<N> (gh pr view <N> --comments).
+Triage each: valid + in scope of issue #<M> → fix on this branch; valid but
+out of scope → reply "valid, out of scope for #<M>" and list it for the
+orchestrator; incorrect → reply why and resolve. Do not expand scope.
+Report the triage summary.
+```
+
 ## When to interrupt Daniyal (only these)
 
 - An `[operator]` ticket is blocking the whole queue.
