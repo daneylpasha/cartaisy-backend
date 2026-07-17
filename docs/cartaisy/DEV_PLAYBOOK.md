@@ -65,6 +65,12 @@ orchestrator; incorrect → reply why and resolve. Do not expand scope.
 Report the triage summary.
 ```
 
+## Decision authority
+
+Business-strategy decisions — pricing, product scope, target market, merchant-facing behavior/features, partnerships, positioning — are made only in conversation with Daniyal and recorded in `docs/DECISIONS.md` (backend repo) before any ticket exists. The orchestrator may propose options with trade-offs, but never decides or tickets strategy unilaterally.
+
+Operational decisions — sequencing, ticket slicing, model routing, review verdicts — are delegated to the orchestrator within the approved roadmap.
+
 ## When to interrupt Daniyal (only these)
 
 - An `[operator]` ticket is blocking the whole queue.
