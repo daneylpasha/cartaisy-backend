@@ -45,3 +45,8 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
+
+# Generated local status/report artifacts (kept out of git and archives)
+/output/
+cartaisy-*-status-report-*
+/_to_delete/

@@ -139,6 +139,62 @@ Known gap: exact original decision dates are not known for most entries. Use "Da
 - Operator status: not yet provisioned or verified in this repository. Required follow-up is to create/connect the Railway staging service, attach a dedicated staging MongoDB, set required environment variables by name only, configure Shopify dev-store credentials and webhook secret in Railway, and verify `/api/health` and `/api/ready` against the staging URL.
 - Related docs: `railway.json`, `Dockerfile`, `.github/workflows/cd.yml`, `docs/RELEASE_CHECKLIST.md`, `docs/STATUS.md`. GitHub issue: #97.
 
+### Merchant billing is manual for early merchants
+
+- Date: 2026-07-17.
+- Decision: Cartaisy charges early merchants manually (setup fee plus monthly subscription handled outside the product). Dashboard/Stripe-driven merchant subscription billing is deferred scope. The existing `Store.plan` field may be set manually by a super admin to record what a merchant pays; nothing may enforce payment in runtime code yet.
+- Reason: Billing automation is not required to onboard and serve the first merchants, and building it now would delay the critical path (staging, checkout proof, branded builds).
+- Impact: No agent should add merchant billing, payment enforcement, or plan gating without a new human-approved decision. The `plan` enum remains descriptive, not enforced.
+- Related docs: `docs/cartaisy/SAAS_SCOPE.md`, `docs/cartaisy/ROADMAP.md`. Decided by Daniyal, 2026-07-17.
+
+### Dashboard becomes a pure client of backend APIs
+
+- Date: 2026-07-17.
+- Decision: The dashboard's target architecture is UI plus backend API client. The backend is the sole owner of tenant data, Shopify credentials/OAuth, and validation. Dashboard-local MongoDB models for tenant-owned data (Store, User, HomeLayout, home module models, AppConfig) are to be retired incrementally, route by route, starting with Shopify OAuth/token handling moving to the backend. Marketing-only content (blog, newsletter, contact submissions) may stay dashboard-local.
+- Reason: The dashboard currently duplicates backend schemas (already drifted) and stores Shopify access tokens in its own database, bypassing every tenancy and credential guardrail enforced in the backend.
+- Impact: New dashboard features must call backend APIs, not dashboard Mongoose models. Migration proceeds in small PRs; each dashboard model is deleted when its last consumer is migrated. Dashboard auth aligns to backend-issued JWT/roles, replacing the hard-coded master-admin email list.
+- Related docs: `docs/cartaisy/CROSS_REPO_MAP.md`, dashboard repo `docs/ARCHITECTURE.md`, `docs/DASHBOARD_ONBOARDING_FLOW.md`. Decided by Daniyal, 2026-07-17.
+
+### Merchants own their app-store developer accounts
+
+- Date: 2026-07-17.
+- Decision: Each merchant enrolls in and owns their own Apple Developer and Google Play developer accounts. Cartaisy performs the setup, provisioning, build, and submission work inside those accounts as part of the paid onboarding/setup service.
+- Reason: Publishing many merchant apps from one Cartaisy-owned account conflicts with Apple App Store guidelines for white-label/reseller apps and concentrates platform risk; merchant-owned accounts keep app ownership portable and review risk isolated per merchant.
+- Impact: The onboarding runbook must include merchant account enrollment (including Apple enrollment lead time), credential/access handling per merchant, and EAS credential configuration per merchant account. Sales/onboarding promises must account for Apple enrollment delays.
+- Related docs: mobile repo `docs/MOBILE_MERCHANT_PROVISIONING_RUNBOOK.md`, `docs/MOBILE_BRANDED_BUILD_CHECKLIST.md`. Decided by Daniyal, 2026-07-17.
+
+### Push notifications are per-merchant Firebase, configured at onboarding
+
+- Date: 2026-07-17.
+- Decision: Push notifications are part of the managed service. Each merchant app uses its own Firebase project/app registration. Mobile receives Firebase files at build time (EAS file environment variables). The backend must resolve Firebase Admin credentials per store (target pattern: a per-store resolver mirroring `getShopifyClientForStore(storeId)`, with encrypted per-store credential storage and no global fallback in SaaS mode).
+- Reason: A shared Firebase project would mix merchant identity, quotas, and notification data across tenants; per-merchant Firebase keeps push tenant-isolated and makes onboarding a repeatable runbook step.
+- Impact: Backend push/notification code paths must accept a trusted store context and fail closed without one. Onboarding runbook gains a Firebase setup step. Existing push diagnostic findings are handled against this target.
+- Related docs: `PUSH_NOTIFICATION_DIAGNOSTIC.md` (all repos), `docs/cartaisy/TENANCY_MODEL.md`. Decided by Daniyal, 2026-07-17.
+
+### Runtime branding with build-time brand defaults
+
+- Date: 2026-07-17.
+- Decision: Merchant-facing branding uses a two-layer model. Each merchant build ships that merchant's colors and logo as build-time defaults (env-driven `app.config.ts` and build assets), so the first rendered frame is on-brand with no loading flash. Runtime `/store/config` branding fields (primary color, secondary color, logo URL) silently override and are cached on device, so dashboard branding edits propagate without a rebuild. Native identity, icons, splash, Firebase files, and payment capabilities stay build-time per the runtime branding contract.
+- Reason: Daniyal requires runtime branding only if it never looks laggy or cheap to the merchant's app users; build-time defaults plus cached runtime override achieves updateability without an unbranded first paint.
+- Impact: Implementing the mobile runtime branding contract and the `/store/config` branding extension is approved MVP work. Dashboard exposes only merchant-safe branding fields; native-side changes remain onboarding work.
+- Related docs: mobile repo `docs/MOBILE_RUNTIME_BRANDING_CONTRACT.md`, `docs/cartaisy/ROADMAP.md`. Decided by Daniyal, 2026-07-17.
+
+### Shopify Partners development store is the test and demo environment
+
+- Date: 2026-07-17.
+- Decision: A Cartaisy-controlled Shopify Partners development store, seeded with realistic catalog/collection/customer/order data, is the primary test tenant and the standing sales demo environment. No real merchant exists yet; first-merchant readiness is proven against this store.
+- Reason: Every blocked verification chain (staging smoke, checkout handoff, tenant-mismatch tests, branded build demo) needs a reachable Shopify store, and a demo is needed to sell to the first real merchant.
+- Impact: Staging provisioning, smoke runbooks, and demo preparation target this store. A second seeded store is added for cross-tenant isolation testing.
+- Related docs: `docs/RELEASE_CHECKLIST.md`, `docs/FIRST_MERCHANT_SHOPIFY_CHECKOUT_WEBHOOK_SMOKE_RUNBOOK.md`, `docs/cartaisy/ROADMAP.md`. Decided by Daniyal, 2026-07-17.
+
+### GitHub Issues are the ticketing system
+
+- Date: 2026-07-17.
+- Decision: Scoped work items live as GitHub Issues in the owning repo, written by the orchestrator (planning agent) as self-contained tickets: goal, context files to read, scope, exclusions, verification commands, and definition of done. Implementing agents read the ticket (`gh issue view N`), deliver one small PR referencing "Closes #N", and must stop and report instead of expanding scope. Root-level `issue-*.md` files are legacy; completed ones are removed (git history preserves them) and open ones migrate to GitHub Issues.
+- Reason: Committed ticket files accumulate as clutter and lose open/closed state; GitHub Issues provide lifecycle, PR linkage, and are readable by any agent tool.
+- Impact: Permanent memory stays in repo docs (`ROADMAP.md`, `DECISIONS.md`, `STATUS.md`, context packs), updated in place. A housekeeping pass audits and removes completed root-level issue files in all three repos.
+- Related docs: `docs/cartaisy/AGENT_WORKFLOW.md`, `docs/cartaisy/ISSUE_PRIORITY_RULES.md`, `docs/cartaisy/ROADMAP.md`. Decided by Daniyal, 2026-07-17.
+
 ## Related docs/issues
 
 - GitHub issue: #52.
