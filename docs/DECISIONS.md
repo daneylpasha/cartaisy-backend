@@ -195,6 +195,14 @@ Known gap: exact original decision dates are not known for most entries. Use "Da
 - Impact: Permanent memory stays in repo docs (`ROADMAP.md`, `DECISIONS.md`, `STATUS.md`, context packs), updated in place. A housekeeping pass audits and removes completed root-level issue files in all three repos.
 - Related docs: `docs/cartaisy/AGENT_WORKFLOW.md`, `docs/cartaisy/ISSUE_PRIORITY_RULES.md`, `docs/cartaisy/ROADMAP.md`. Decided by Daniyal, 2026-07-17.
 
+### Strategy decisions are Daniyal's; operational decisions are delegated
+
+- Date: 2026-07-17.
+- Decision: Business-strategy decisions — pricing, product scope, target market, merchant-facing behavior/features, partnerships, positioning — are made only in conversation with Daniyal and recorded in this file before any ticket exists. The orchestrator may propose options with trade-offs but never decides or tickets strategy unilaterally. Operational decisions — sequencing, ticket slicing, model routing, review verdicts — are delegated to the orchestrator within the approved roadmap.
+- Reason: Keeps ownership of the business unambiguous as agent autonomy grows: agents can move fast inside the approved plan without strategy drifting into tickets nobody signed off on.
+- Impact: A ticket implying a strategy change is invalid until a matching entry exists here; the orchestrator flags the needed decision in its summary instead of cutting the ticket.
+- Related docs: `docs/cartaisy/DEV_PLAYBOOK.md`, `docs/cartaisy/ROADMAP.md`, `docs/cartaisy/SAAS_SCOPE.md`. Decided by Daniyal, 2026-07-17.
+
 ## Related docs/issues
 
 - GitHub issue: #52.
