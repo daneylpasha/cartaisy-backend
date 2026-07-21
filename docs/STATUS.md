@@ -34,13 +34,15 @@ Known gap: status categories below are based on repo inspection and existing doc
 First-merchant checkout smoke status (issues #99 and #109): a repeatable
 Shopify-hosted checkout/order webhook smoke runbook exists at
 `docs/FIRST_MERCHANT_SHOPIFY_CHECKOUT_WEBHOOK_SMOKE_RUNBOOK.md`. Issue #109
-attempted to execute the runbook but was blocked before checkout handoff:
-the repo/issue still has no verified Railway staging URL, health/readiness
-output, staging `Store` id/shop-domain evidence, Storefront credential presence,
-webhook secret/configuration evidence, webhook URL, Shopify development-store
-domain, test cart, or operator approval for live Railway/Shopify actions.
-Successful `checkoutUrl` generation and order webhook reconciliation remain
-unverified until an operator provides that context and records a real run.
+attempted to execute the runbook but was blocked before checkout handoff. As of
+issue #116, the previously-missing prerequisites are now recorded: a verified
+Railway staging URL, `/api/health`/`/api/ready` output, a staging `Store`
+record, and a live Shopify OAuth connection (shop domain, scopes,
+`shopify.isConnected: true`) — see `docs/RELEASE_CHECKLIST.md`. Still not
+exercised: live Shopify webhook HMAC delivery to the staging backend, a test
+cart/checkout, and operator approval for live checkout actions. Successful
+`checkoutUrl` generation and order webhook reconciliation remain unverified
+until an operator runs the smoke test end-to-end and records a real run.
 
 ## What appears complete
 
