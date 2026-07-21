@@ -55,7 +55,7 @@ Exact prerequisites to record before treating staging as release-ready:
 - Optional service env vars by name, when the corresponding staging feature is enabled: `REDIS_ENABLED`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`, `REDIS_DATABASE`, `EMAIL_SERVICE_TYPE`, `RESEND_API_KEY`, `EMAIL_SMTP_HOST`, `EMAIL_SMTP_PORT`, `EMAIL_SMTP_USER`, `EMAIL_SMTP_PASS`, `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`, `FIREBASE_SERVICE_ACCOUNT`, `SENTRY_DSN`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`.
 - Operator evidence to record: Railway project/service identifier, deployment timestamp or commit SHA, staging API URL, `/api/health` response, `/api/ready` response, MongoDB staging database name/cluster label without credentials, and Shopify dev-store domain without tokens.
 
-Current blocker status: Railway staging is selected but not provisioned or verified in this repository. Do not run migration gates, Shopify webhook tests, mobile/backend smoke tests, or first-merchant checkout validation until the operator records the staging URL and both health checks.
+Current blocker status (updated issue #116, 2026-07-21): Railway staging is provisioned and verified — staging URL, `/api/health`, and `/api/ready` are recorded below. Issue #115 (Shopify Partners dev store) is closed; Shopify dev-store credentials are configured and the OAuth connection was verified live (`shopify.isConnected: true` on the staging `Store` record — see below). Note: the Shopify app originally created for issue #115 was a store-admin "custom app" (Settings → Apps and sales channels → Develop apps), which does not support the OAuth authorization-code redirect flow this codebase implements (no `App URL`/redirect-URL configuration exists for that app type). A second Shopify app was created via the Shopify Dev Dashboard specifically to support OAuth, and its credentials are what's configured in Railway now. `SHOPIFY_WEBHOOK_SECRET` is present in Railway, but live webhook HMAC delivery was not exercised in this pass. Do not run Shopify webhook delivery tests, mobile/backend smoke tests, or first-merchant checkout validation until an operator records that live-delivery evidence separately (see `docs/FIRST_MERCHANT_SHOPIFY_CHECKOUT_WEBHOOK_SMOKE_RUNBOOK.md`, issues #99/#109).
 
 ### Railway staging evidence record (issue #107) — operator work
 
@@ -68,17 +68,17 @@ or connection strings into this file.
 
 | Required evidence | Current status | Evidence recorded |
 | --- | --- | --- |
-| Railway project/service identifier | Pending operator execution | Not provided in issue #107. Record identifier or label only, no secrets. |
-| Deployed backend commit SHA or deployment timestamp | Pending operator execution | Not provided in issue #107. |
-| Staging API URL | Pending operator execution | Not provided in issue #107. Record the Railway/custom URL only after provisioning. |
-| `/api/health` response | Pending operator execution | Not provided in issue #107. Expected: HTTP 200 from the staging URL. |
-| `/api/ready` response | Pending operator execution | Not provided in issue #107. Expected: HTTP 200 with `{"ready":true}` from the staging URL. |
-| Dedicated staging MongoDB label/name | Pending operator execution | Not provided in issue #107. Record database or cluster label only, never `MONGODB_URI`. |
-| Mandatory staging configuration audit | Pending operator execution | Not provided in issue #107. Record the check name/command, timestamp, and sanitized pass/fail field list. The check must reject every missing, blank, default, or invalid required staging field; never record values. |
-| Shopify development-store domain | Pending operator execution | Not provided in issue #107. Record shop domain only, no tokens. |
-| Staging `Store` record | Pending operator execution | Not provided in issue #107. Record store id, shop domain, active/connected state, and credential presence only. |
-| Webhook secret configured | Pending operator execution | Not provided in issue #107. Record presence only, never the value. |
-| SaaS safety flags configured | Pending operator execution | Not provided in issue #107. Record whether `SAAS_MODE` or `MULTI_TENANT_MODE` is set by name/status only. |
+| Railway project/service identifier | Recorded (issue #116) | Railway project `charming-energy`, environment `staging`, service `cartaisy-backend-staging`. |
+| Deployed backend commit SHA or deployment timestamp | Recorded (issue #116) | Commit `4d1136d739cb73bbf8e0ff6a08c9d6847ba21168` (`main` branch), deployed 2026-07-20. |
+| Staging API URL | Recorded (issue #116) | `https://cartaisy-backend-staging-staging.up.railway.app` |
+| `/api/health` response | Recorded (issue #116) | HTTP 200, body `OK`, checked 2026-07-20. |
+| `/api/ready` response | Recorded (issue #116) | HTTP 200, body `{"ready":true}`, checked 2026-07-20. |
+| Dedicated staging MongoDB label/name | Recorded (issue #116) | Railway MongoDB service in the `staging` environment, database `cartaisy_staging` — a separate Railway service/instance from `production`; never shares data or connection details with it. |
+| Mandatory staging configuration audit | Partial (issue #116) | MongoDB connectivity is confirmed live via `/api/ready` (HTTP 200, `{"ready":true}`). `JWT_SECRET` is confirmed present and functional — register/login successfully issued and verified JWT tokens — but a successful round trip only proves the app can sign/verify with whatever value is configured; it does not prove the secret is strong or non-default. Treat `JWT_SECRET` strength as unverified until `validateRequiredConfig()` output or an equivalent secret-strength check is recorded. `NODE_ENV`, `PORT`, `API_BASE_URL`, `FRONTEND_URL`, `EMAIL_FROM_ADDRESS`, and `SAAS_MODE` are confirmed present in Railway but were not independently runtime-verified beyond successful app startup in this pass — do not treat their presence alone as proof they are valid/non-default. Shopify dev-store variables (`SHOPIFY_CLIENT_ID`, `SHOPIFY_CLIENT_SECRET`, `SHOPIFY_API_KEY`, `SHOPIFY_API_SECRET`, `SHOPIFY_ACCESS_TOKEN`, `SHOPIFY_STORE_URL`, `SHOPIFY_REDIRECT_URI`, `SHOPIFY_SCOPES`, `ENCRYPTION_KEY`) are present in Railway and confirmed live: the full OAuth authorization-code flow was executed end-to-end against a live Shopify app and the staging `Store` record now shows `shopify.isConnected: true` (see below). `SHOPIFY_WEBHOOK_SECRET` is present in Railway but not runtime-exercised — no live webhook was delivered in this pass. `RATE_LIMIT_WINDOW_MS`/`RATE_LIMIT_MAX_REQUESTS` are present; note `CORS_ORIGINS`/`ALLOWED_ORIGINS` are not currently consumed by the live CORS middleware in `src/app.ts` (hardcoded allow-all-origins), so setting them has no effect on current runtime behavior. |
+| Shopify development-store domain | Recorded (issue #116) | `cartaisy-basic-test.myshopify.com` (issue #115 dev store). OAuth-authorized scopes returned by the live connection: `read_customers, write_inventory, write_orders, write_products`. |
+| Staging `Store` record | Recorded (issue #116) | Store id `6a5f46b302669bae116c348e`, created via `POST /api/v1/auth/register`, active, `shopify.isConnected: true` (verified live via `GET /api/v1/shopify/status`, connected 2026-07-21). |
+| Webhook secret configured | Recorded (issue #116) — presence only | `SHOPIFY_WEBHOOK_SECRET` is set in Railway (presence confirmed per operator security rule; value not recorded). Live HMAC webhook delivery was not exercised in this pass — see `docs/FIRST_MERCHANT_SHOPIFY_CHECKOUT_WEBHOOK_SMOKE_RUNBOOK.md` for that follow-up. |
+| SaaS safety flags configured | Recorded (issue #116) | `SAAS_MODE` is set to `true` on the staging service. |
 
 Operator verification commands to run after the Railway staging URL is known:
 
@@ -113,24 +113,25 @@ Minimum mandatory staging config audit coverage:
 Expected sanitized readiness evidence:
 
 ```text
-Staging API URL:
-Railway project/service label:
-Backend commit SHA:
-MongoDB staging database label:
-Shopify dev-store domain:
-Store record id:
-Store active/connected:
-Mandatory staging config audit:
-Audit command/check name:
-Audit timestamp:
-Audit deploy identifier:
-Sanitized field/group pass-fail summary:
-validateRequiredConfig supporting result:
-Config warning field names reviewed:
-SaaS safety flag status:
-/api/health HTTP status:
-/api/ready HTTP status:
-/api/ready body:
+Staging API URL: https://cartaisy-backend-staging-staging.up.railway.app
+Railway project/service label: charming-energy / staging / cartaisy-backend-staging
+Backend commit SHA: 4d1136d739cb73bbf8e0ff6a08c9d6847ba21168
+MongoDB staging database label: cartaisy_staging (dedicated Railway MongoDB service, staging environment)
+Shopify dev-store domain: cartaisy-basic-test.myshopify.com
+Shopify OAuth scopes granted: read_customers, write_inventory, write_orders, write_products
+Store record id: 6a5f46b302669bae116c348e
+Store active/connected: active, shopify.isConnected=true (verified live via GET /api/v1/shopify/status, connected 2026-07-21T12:35:33.865Z)
+Mandatory staging config audit: partial — see evidence table above
+Audit command/check name: manual review of Railway service Variables, live /api/health and /api/ready checks, and a full live Shopify OAuth authorization-code round trip
+Audit timestamp: 2026-07-20 / 2026-07-21
+Audit deploy identifier: commit 4d1136d739cb73bbf8e0ff6a08c9d6847ba21168
+Sanitized field/group pass-fail summary: MongoDB PASS (live), JWT_SECRET PRESENT + functional (register/login round-trip proven; secret strength/non-default not independently verified), core runtime + SaaS safety PRESENT (not independently runtime-verified beyond app startup), rate-limit vars present (CORS_ORIGINS/ALLOWED_ORIGINS not wired into runtime CORS behavior — see note above), Shopify dev-store PASS (live OAuth connection verified), webhook secret PRESENT (not exercised — no live webhook delivered)
+validateRequiredConfig supporting result: not separately captured from Railway logs in this pass
+Config warning field names reviewed: not separately captured in this pass
+SaaS safety flag status: SAAS_MODE=true
+/api/health HTTP status: 200
+/api/ready HTTP status: 200
+/api/ready body: {"ready":true}
 ```
 
 ## Pre-release checks
