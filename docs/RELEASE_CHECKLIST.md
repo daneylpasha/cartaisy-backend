@@ -55,7 +55,7 @@ Exact prerequisites to record before treating staging as release-ready:
 - Optional service env vars by name, when the corresponding staging feature is enabled: `REDIS_ENABLED`, `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`, `REDIS_DATABASE`, `EMAIL_SERVICE_TYPE`, `RESEND_API_KEY`, `EMAIL_SMTP_HOST`, `EMAIL_SMTP_PORT`, `EMAIL_SMTP_USER`, `EMAIL_SMTP_PASS`, `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`, `FIREBASE_SERVICE_ACCOUNT`, `SENTRY_DSN`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`.
 - Operator evidence to record: Railway project/service identifier, deployment timestamp or commit SHA, staging API URL, `/api/health` response, `/api/ready` response, MongoDB staging database name/cluster label without credentials, and Shopify dev-store domain without tokens.
 
-Current blocker status: Railway staging is selected but not provisioned or verified in this repository. Do not run migration gates, Shopify webhook tests, mobile/backend smoke tests, or first-merchant checkout validation until the operator records the staging URL and both health checks.
+Current blocker status (updated issue #116, 2026-07-21): Railway staging is now provisioned and verified — staging URL, `/api/health`, and `/api/ready` are recorded below. Shopify dev-store credentials, webhook secret, and the Shopify-dependent portions of the mandatory config audit remain blocked on issue #115 (Shopify Partners dev store not yet created). Do not run Shopify webhook tests, mobile/backend smoke tests, or first-merchant checkout validation until issue #115 closes and those fields are recorded.
 
 ### Railway staging evidence record (issue #107) — operator work
 
@@ -68,17 +68,17 @@ or connection strings into this file.
 
 | Required evidence | Current status | Evidence recorded |
 | --- | --- | --- |
-| Railway project/service identifier | Pending operator execution | Not provided in issue #107. Record identifier or label only, no secrets. |
-| Deployed backend commit SHA or deployment timestamp | Pending operator execution | Not provided in issue #107. |
-| Staging API URL | Pending operator execution | Not provided in issue #107. Record the Railway/custom URL only after provisioning. |
-| `/api/health` response | Pending operator execution | Not provided in issue #107. Expected: HTTP 200 from the staging URL. |
-| `/api/ready` response | Pending operator execution | Not provided in issue #107. Expected: HTTP 200 with `{"ready":true}` from the staging URL. |
-| Dedicated staging MongoDB label/name | Pending operator execution | Not provided in issue #107. Record database or cluster label only, never `MONGODB_URI`. |
-| Mandatory staging configuration audit | Pending operator execution | Not provided in issue #107. Record the check name/command, timestamp, and sanitized pass/fail field list. The check must reject every missing, blank, default, or invalid required staging field; never record values. |
-| Shopify development-store domain | Pending operator execution | Not provided in issue #107. Record shop domain only, no tokens. |
-| Staging `Store` record | Pending operator execution | Not provided in issue #107. Record store id, shop domain, active/connected state, and credential presence only. |
-| Webhook secret configured | Pending operator execution | Not provided in issue #107. Record presence only, never the value. |
-| SaaS safety flags configured | Pending operator execution | Not provided in issue #107. Record whether `SAAS_MODE` or `MULTI_TENANT_MODE` is set by name/status only. |
+| Railway project/service identifier | Recorded (issue #116) | Railway project `charming-energy`, environment `staging`, service `cartaisy-backend-staging`. |
+| Deployed backend commit SHA or deployment timestamp | Recorded (issue #116) | Commit `4d1136d739cb73bbf8e0ff6a08c9d6847ba21168` (`main` branch), deployed 2026-07-20. |
+| Staging API URL | Recorded (issue #116) | `https://cartaisy-backend-staging-staging.up.railway.app` |
+| `/api/health` response | Recorded (issue #116) | HTTP 200, body `OK`, checked 2026-07-20. |
+| `/api/ready` response | Recorded (issue #116) | HTTP 200, body `{"ready":true}`, checked 2026-07-20. |
+| Dedicated staging MongoDB label/name | Recorded (issue #116) | Railway MongoDB service in the `staging` environment, database `cartaisy_staging` — a separate Railway service/instance from `production`; never shares data or connection details with it. |
+| Mandatory staging configuration audit | Partial (issue #116) | MongoDB, core runtime (`NODE_ENV`, `PORT`, `API_BASE_URL`, `FRONTEND_URL`, `JWT_SECRET`, `EMAIL_FROM_ADDRESS`), and SaaS safety (`SAAS_MODE`) groups verified present in Railway and confirmed live via `/api/ready`. Shopify dev-store and webhook groups pending, blocked on issue #115. `RATE_LIMIT_WINDOW_MS`/`RATE_LIMIT_MAX_REQUESTS` are present; note `CORS_ORIGINS`/`ALLOWED_ORIGINS` are not currently consumed by the live CORS middleware in `src/app.ts` (hardcoded allow-all-origins), so setting them has no effect on current runtime behavior. |
+| Shopify development-store domain | Pending — blocked on issue #115 | Not yet available; issue #115 (Shopify Partners dev store) is still open. |
+| Staging `Store` record | Recorded (issue #116) | Store id `6a5f46b302669bae116c348e`, created via `POST /api/v1/auth/register`, active, `shopify.isConnected: false` pending issue #115. |
+| Webhook secret configured | Pending — blocked on issue #115 | Not yet configured; depends on the Shopify dev-store app credentials from issue #115. |
+| SaaS safety flags configured | Recorded (issue #116) | `SAAS_MODE` is set to `true` on the staging service. |
 
 Operator verification commands to run after the Railway staging URL is known:
 
@@ -113,24 +113,24 @@ Minimum mandatory staging config audit coverage:
 Expected sanitized readiness evidence:
 
 ```text
-Staging API URL:
-Railway project/service label:
-Backend commit SHA:
-MongoDB staging database label:
-Shopify dev-store domain:
-Store record id:
-Store active/connected:
-Mandatory staging config audit:
-Audit command/check name:
-Audit timestamp:
-Audit deploy identifier:
-Sanitized field/group pass-fail summary:
-validateRequiredConfig supporting result:
-Config warning field names reviewed:
-SaaS safety flag status:
-/api/health HTTP status:
-/api/ready HTTP status:
-/api/ready body:
+Staging API URL: https://cartaisy-backend-staging-staging.up.railway.app
+Railway project/service label: charming-energy / staging / cartaisy-backend-staging
+Backend commit SHA: 4d1136d739cb73bbf8e0ff6a08c9d6847ba21168
+MongoDB staging database label: cartaisy_staging (dedicated Railway MongoDB service, staging environment)
+Shopify dev-store domain: pending — blocked on issue #115
+Store record id: 6a5f46b302669bae116c348e
+Store active/connected: active, shopify.isConnected=false (pending issue #115)
+Mandatory staging config audit: partial — see evidence table above
+Audit command/check name: manual review of Railway service Variables plus live /api/health and /api/ready checks
+Audit timestamp: 2026-07-20 / 2026-07-21
+Audit deploy identifier: commit 4d1136d739cb73bbf8e0ff6a08c9d6847ba21168
+Sanitized field/group pass-fail summary: MongoDB PASS, core runtime PASS, SaaS safety PASS, rate-limit vars present (CORS_ORIGINS/ALLOWED_ORIGINS not wired into runtime CORS behavior — see note above), Shopify dev-store PENDING (#115), webhook PENDING (#115)
+validateRequiredConfig supporting result: not separately captured from Railway logs in this pass
+Config warning field names reviewed: not separately captured in this pass
+SaaS safety flag status: SAAS_MODE=true
+/api/health HTTP status: 200
+/api/ready HTTP status: 200
+/api/ready body: {"ready":true}
 ```
 
 ## Pre-release checks
