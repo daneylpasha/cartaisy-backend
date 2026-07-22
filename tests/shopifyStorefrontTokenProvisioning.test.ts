@@ -15,6 +15,75 @@ const mockedAxios = axios as jest.Mocked<typeof axios>;
 const postMock = jest.fn();
 
 const STOREFRONT_TOKEN = 'sf-provisioned-token-9876';
+const TOKEN_TITLE = 'Cartaisy Storefront API Token';
+
+// A query-aware Admin GraphQL mock. Provisioning now performs up to three kinds
+// of calls (list existing tokens, delete stale ones, create), so the mock has to
+// respond based on the operation in the request body rather than a single
+// canned response.
+const configureShopifyMock = (
+  {
+    existingTokens = [],
+    createResult,
+  }: {
+    existingTokens?: Array<{ id: string; title: string; accessToken?: string }>;
+    createResult?: any;
+  } = {}
+) => {
+  postMock.mockImplementation((_url: string, body: any) => {
+    const query: string = body?.query || '';
+
+    if (query.includes('storefrontAccessTokens(first')) {
+      return Promise.resolve({
+        data: {
+          data: {
+            shop: {
+              storefrontAccessTokens: {
+                edges: existingTokens.map((node) => ({ node })),
+              },
+            },
+          },
+        },
+      });
+    }
+
+    if (query.includes('storefrontAccessTokenDelete')) {
+      return Promise.resolve({
+        data: {
+          data: {
+            storefrontAccessTokenDelete: {
+              deletedStorefrontAccessTokenId: body?.variables?.input?.id,
+              userErrors: [],
+            },
+          },
+        },
+      });
+    }
+
+    // Default: storefrontAccessTokenCreate
+    return Promise.resolve(
+      createResult ?? {
+        data: {
+          data: {
+            storefrontAccessTokenCreate: {
+              storefrontAccessToken: {
+                accessToken: STOREFRONT_TOKEN,
+                title: TOKEN_TITLE,
+              },
+              userErrors: [],
+            },
+          },
+        },
+      }
+    );
+  });
+};
+
+// Count how many create mutations were issued across the mock's call history.
+const createCallCount = () =>
+  postMock.mock.calls.filter(([, body]: any[]) =>
+    (body?.query || '').includes('storefrontAccessTokenCreate')
+  ).length;
 
 const buildTestApp = () => {
   const app = express();
@@ -46,20 +115,9 @@ describe('Per-store Storefront API token provisioning (issue #124)', () => {
   beforeEach(() => {
     mockedAxios.create.mockReset();
     postMock.mockReset();
-    // Default: Shopify returns a fresh Storefront access token.
-    postMock.mockResolvedValue({
-      data: {
-        data: {
-          storefrontAccessTokenCreate: {
-            storefrontAccessToken: {
-              accessToken: STOREFRONT_TOKEN,
-              title: 'Cartaisy Storefront API Token',
-            },
-            userErrors: [],
-          },
-        },
-      },
-    });
+    // Default: no pre-existing tokens on the shop, so provisioning creates a
+    // fresh Storefront access token.
+    configureShopifyMock();
     mockedAxios.create.mockReturnValue({ post: postMock, get: jest.fn() } as any);
   });
 
@@ -106,12 +164,14 @@ describe('Per-store Storefront API token provisioning (issue #124)', () => {
 
     it('fails closed and does not persist when Shopify returns userErrors', async () => {
       const store = await createConnectedStore('d');
-      postMock.mockResolvedValueOnce({
-        data: {
+      configureShopifyMock({
+        createResult: {
           data: {
-            storefrontAccessTokenCreate: {
-              storefrontAccessToken: null,
-              userErrors: [{ field: null, message: 'Access denied' }],
+            data: {
+              storefrontAccessTokenCreate: {
+                storefrontAccessToken: null,
+                userErrors: [{ field: null, message: 'Access denied' }],
+              },
             },
           },
         },
@@ -125,6 +185,32 @@ describe('Per-store Storefront API token provisioning (issue #124)', () => {
       // Still fails closed for downstream storefront calls.
       const client = await shopifyStorefront.getStorefrontClientForStore(store._id.toString());
       expect(client.isConfigured).toBe(false);
+    });
+
+    it('is idempotent: a repeated call reuses the existing token instead of creating a duplicate', async () => {
+      const store = await createConnectedStore('idempotent');
+
+      // First call: no pre-existing tokens, so one is created.
+      const first = await createStorefrontAccessToken(store._id.toString());
+      expect(first).toEqual({ created: true, last4: STOREFRONT_TOKEN.slice(-4) });
+      expect(createCallCount()).toBe(1);
+      expect(await readStorefrontToken(store._id)).toBe(STOREFRONT_TOKEN);
+
+      // Simulate the token now existing on the shop (as a reconnect/retry would
+      // see it) and replay provisioning.
+      postMock.mockClear();
+      configureShopifyMock({
+        existingTokens: [
+          { id: 'gid://shopify/StorefrontAccessToken/1', title: TOKEN_TITLE, accessToken: STOREFRONT_TOKEN },
+        ],
+      });
+
+      const second = await createStorefrontAccessToken(store._id.toString());
+
+      // Reused, not recreated: no create mutation was issued this time.
+      expect(second).toEqual({ created: false, last4: STOREFRONT_TOKEN.slice(-4) });
+      expect(createCallCount()).toBe(0);
+      expect(await readStorefrontToken(store._id)).toBe(STOREFRONT_TOKEN);
     });
   });
 
