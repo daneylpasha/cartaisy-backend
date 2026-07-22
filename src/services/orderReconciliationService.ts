@@ -235,6 +235,31 @@ const resolveLineItems = async (
   }));
 };
 
+/**
+ * Address fields Shopify does not require for every country. When a
+ * webhook-sourced order lacks one of these, we store it as absent and log a
+ * warning (not an error) rather than dropping the order (issue #126).
+ */
+const OPTIONAL_ADDRESS_FIELDS = ['province', 'zip', 'phone'] as const;
+
+const warnAbsentAddressFields = (
+  storeId: string,
+  shopifyOrderId: string,
+  orderData: Record<string, any>
+): void => {
+  for (const key of ['billingAddress', 'shippingAddress'] as const) {
+    const address = orderData[key];
+    if (!address) continue;
+    const absent = OPTIONAL_ADDRESS_FIELDS.filter(field => !address[field]);
+    if (absent.length > 0) {
+      console.warn(
+        `⚠️ Shopify order ${shopifyOrderId} ${key} is missing ${absent.join(', ')}; ` +
+          `stored as absent (store: ${storeId})`
+      );
+    }
+  }
+};
+
 const buildOrderData = (
   storeId: string,
   shopifyOrder: any,
@@ -355,6 +380,14 @@ export const reconcileShopifyOrder = async (
   let created = false;
   let attribution: OrderAttribution | null = null;
 
+  // Mark the document as webhook-sourced so the Order address schema relaxes
+  // province/zip/phone validation (issue #76): any address Shopify accepted is
+  // storable. Set on the loaded order too, so subsequent update/paid saves of a
+  // sparse-address order re-validate under the same relaxed rules.
+  if (order) {
+    order.$locals.webhookSourced = true;
+  }
+
   if (!order) {
     const email: string | null =
       shopifyOrder.email || shopifyOrder.contact_email || shopifyOrder.customer?.email || null;
@@ -374,7 +407,12 @@ export const reconcileShopifyOrder = async (
     ]);
     attribution = resolved.type;
 
-    const newOrder = new Order(buildOrderData(storeId, shopifyOrder, email, resolved, lineItems));
+    const orderData = buildOrderData(storeId, shopifyOrder, email, resolved, lineItems);
+    warnAbsentAddressFields(storeId, shopifyOrderId, orderData);
+
+    const newOrder = new Order(orderData);
+    // Webhook-sourced: relax province/zip/phone validation (see above)
+    newOrder.$locals.webhookSourced = true;
 
     try {
       await newOrder.save();

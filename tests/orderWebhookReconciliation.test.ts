@@ -487,4 +487,94 @@ describe('Shopify order webhook reconciliation', () => {
       expect(await Order.countDocuments({})).toBe(0);
     });
   });
+
+  // ===========================================================================
+  // Webhook-sourced orders relax province/zip/phone validation (issue #126).
+  //
+  // Order address validation unconditionally required province + zip and
+  // applied a strict phone format, so Shopify-valid orders from countries
+  // without provinces/postal codes (e.g. Pakistan) were silently dropped.
+  // Any address Shopify itself accepted must be storable from a webhook, with
+  // empty/missing values persisted as absent (never invented).
+  // ===========================================================================
+  describe('webhook-sourced address validation (issue #126)', () => {
+    // Pakistan-style address: no province, no postal code - Shopify accepts it
+    const PK_ADDRESS = {
+      first_name: 'Ali',
+      last_name: 'Khan',
+      address1: '12 Tariq Rd',
+      city: 'Karachi',
+      country: 'Pakistan',
+    };
+
+    test('a Pakistan-style address (no province, no zip) stores from orders/create, store-scoped', async () => {
+      const response = await postWebhook(
+        app,
+        'orders/create',
+        shopifyOrderPayload({ billing_address: PK_ADDRESS, shipping_address: PK_ADDRESS }),
+        SHOP_A
+      );
+
+      expect(response.status).toBe(200);
+
+      const order = await Order.findOne({ storeId: storeAId });
+      expect(order).not.toBeNull();
+      // Store-scoped to the resolving store, never leaking to store B
+      expect(order!.storeId!.toString()).toBe(storeAId.toString());
+      expect(await Order.countDocuments({ storeId: storeBId })).toBe(0);
+      // Absent province/zip persist as absent, never invented
+      expect(order!.shippingAddress?.city).toBe('Karachi');
+      expect(order!.shippingAddress?.country).toBe('Pakistan');
+      expect(order!.shippingAddress?.province).toBeUndefined();
+      expect(order!.shippingAddress?.zip).toBeUndefined();
+      expect(order!.billingAddress?.province).toBeUndefined();
+      expect(order!.billingAddress?.zip).toBeUndefined();
+    });
+
+    test("a phone format the strict local validator rejects still stores from a webhook", async () => {
+      // Shopify accepts free-form phones the strict local regex rejects (e.g.
+      // the extension format seen on Shopify's test payload). It must persist.
+      const phone = '555-1199 ext. 42';
+      const response = await postWebhook(
+        app,
+        'orders/create',
+        shopifyOrderPayload({
+          billing_address: { ...PK_ADDRESS, province: 'Sindh', zip: '74000', phone },
+        }),
+        SHOP_A
+      );
+
+      expect(response.status).toBe(200);
+
+      const order = await Order.findOne({ storeId: storeAId });
+      expect(order).not.toBeNull();
+      expect(order!.billingAddress?.phone).toBe(phone);
+    });
+
+    test('locally-created orders keep strict province/zip validation (relaxation is webhook-only)', async () => {
+      const localOrderData = {
+        storeId: storeAId,
+        orderNumber: 'LOCAL-126-1',
+        email: 'local@example.com',
+        isGuestOrder: true,
+        guestContact: { email: 'local@example.com', fullName: 'Local Buyer' },
+        lineItems: [{ quantity: 1, price: 10, title: 'Widget' }],
+        subtotalPrice: 10,
+        totalTax: 0,
+        totalPrice: 10,
+        currency: 'USD',
+        // Missing province and zip
+        shippingAddress: { firstName: 'Local', address1: '1 St', city: 'Karachi', country: 'Pakistan' },
+      };
+
+      // Without the webhook-sourced marker, the strict rules still apply
+      const strictOrder = new Order(localOrderData);
+      await expect(strictOrder.validate()).rejects.toThrow(/Province\/State is required/);
+
+      // The same document validates once marked webhook-sourced
+      const relaxedOrder = new Order({ ...localOrderData, orderNumber: 'LOCAL-126-2' });
+      relaxedOrder.$locals.webhookSourced = true;
+      await expect(relaxedOrder.validate()).resolves.toBeUndefined();
+    });
+  });
 });

@@ -83,6 +83,28 @@ const OrderLineItemSchema = new Schema({
   }
 }, { _id: false });
 
+/**
+ * Province, ZIP, and a strict phone format are required for locally-created
+ * orders, but must stay OPTIONAL for webhook-sourced (Shopify order
+ * reconciliation) orders: any address Shopify itself accepted has to be
+ * storable, including addresses from countries without provinces or postal
+ * codes (e.g. Pakistan) and Shopify's own test-payload phone formats. The
+ * reconciliation service sets `order.$locals.webhookSourced = true` on
+ * webhook-built orders; empty/missing values then persist as absent rather
+ * than failing validation and silently dropping the order (issue #126).
+ */
+function isWebhookSourcedOrder(this: any): boolean {
+  const owner = typeof this.ownerDocument === 'function' ? this.ownerDocument() : this;
+  return Boolean(owner?.$locals?.webhookSourced);
+}
+
+const requiredUnlessWebhookSourced = (message: string): [() => boolean, string] => [
+  function (this: any): boolean {
+    return !isWebhookSourcedOrder.call(this);
+  },
+  message,
+];
+
 const OrderAddressSchema = new Schema({
   firstName: { 
     type: String, 
@@ -117,9 +139,9 @@ const OrderAddressSchema = new Schema({
     trim: true,
     maxlength: [100, 'City cannot exceed 100 characters']
   },
-  province: { 
-    type: String, 
-    required: [true, 'Province/State is required'],
+  province: {
+    type: String,
+    required: requiredUnlessWebhookSourced('Province/State is required'),
     trim: true,
     maxlength: [100, 'Province cannot exceed 100 characters']
   },
@@ -129,18 +151,21 @@ const OrderAddressSchema = new Schema({
     trim: true,
     maxlength: [100, 'Country cannot exceed 100 characters']
   },
-  zip: { 
-    type: String, 
-    required: [true, 'ZIP/Postal code is required'],
+  zip: {
+    type: String,
+    required: requiredUnlessWebhookSourced('ZIP/Postal code is required'),
     trim: true,
     maxlength: [20, 'ZIP code cannot exceed 20 characters']
   },
-  phone: { 
+  phone: {
     type: String,
     trim: true,
     validate: {
-      validator: function(phone: string): boolean {
+      validator: function(this: any, phone: string): boolean {
         if (!phone) return true; // Allow empty phone
+        // Webhook-sourced orders carry a phone Shopify already accepted; don't
+        // re-impose the strict local format on it (issue #126)
+        if (isWebhookSourcedOrder.call(this)) return true;
         return /^\+?[\d\s\-\(\)]{10,}$/.test(phone);
       },
       message: 'Please provide a valid phone number'
