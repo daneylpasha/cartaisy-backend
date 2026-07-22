@@ -94,4 +94,4 @@ The agent commented on the issue and stopped (as instructed). Do not patch aroun
 
 ## Current phase
 
-Phase 0 of `docs/cartaisy/ROADMAP.md` (in cartaisy-backend). Queue at time of writing: T3 (backend CI verification) and T4 (mobile CI verification) are agent-ready now; T1/T2 are Daniyal's operator tickets; Phase 1 tickets appear once T2's staging URL is recorded.
+Phase 1 of `docs/cartaisy/ROADMAP.md` (Phase 0 gate met 2026-07-22 - evidence linked in the roadmap). In flight: backend [agent] tickets #124 (Storefront token) and #126 (webhook address validation); both are high-risk PRs that Daniyal merges after orchestrator review. Phase 1 tickets are cut by the orchestrator.

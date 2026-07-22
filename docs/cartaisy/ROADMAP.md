@@ -27,6 +27,8 @@ The phases below, in order, each ending with a verifiable gate. Work items are t
 
 Gate: staging URL responds; dev store connected; webhooks registered; CI green; backfill evidence recorded.
 
+**Gate met 2026-07-22.** Evidence: green CI (issue #117 / PR #118; mobile PR #95); Railway staging URL with /api/health and /api/ready recorded in docs/RELEASE_CHECKLIST.md (issue #116, PR #122); dev store connected via live OAuth (shopify.isConnected: true); webhooks registered with verified HMAC delivery (issue #116 comment, 2026-07-21); staging backfill gates recorded - zero storeless Product/User/Order data, store-scoped unique indexes present, no legacy global unique indexes (issue #108 comment, 2026-07-22). Follow-ups in flight: issues #124 (per-store Storefront token) and #126 (webhook order address validation).
+
 ### Phase 1 — Prove the money path end-to-end
 
 1. Execute `docs/FIRST_MERCHANT_SHOPIFY_CHECKOUT_WEBHOOK_SMOKE_RUNBOOK.md` against staging: generated `/cart/*` → `POST /checkout/handoff` → Shopify-hosted checkout → test order → order webhook → store-scoped `Order` + `CheckoutHandoff` reconciliation (issues #99/#109).
