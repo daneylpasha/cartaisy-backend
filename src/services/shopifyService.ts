@@ -748,6 +748,12 @@ export const syncOrders = async (daysBack: number = 30, storeId?: string): Promi
             };
 
             const newOrder = new Order(orderData);
+            // Sync-sourced orders carry addresses Shopify already accepted, so
+            // relax the local province/zip/phone rules the same way the webhook
+            // reconciliation path does - a Shopify-valid sparse address (e.g. a
+            // country without provinces/postal codes) must be storable instead
+            // of failing strict validation and being skipped (issue #126).
+            newOrder.$locals.webhookSourced = true;
             await newOrder.save();
             synced++;
           }

@@ -10,7 +10,10 @@ import CheckoutHandoff from '../src/models/CheckoutHandoff';
 import webhookRoutes from '../src/routes/webhookRoutes';
 import { shopifyWebhookBodyParser } from '../src/middleware/shopifyWebhookAuth';
 import { tenantConfig } from '../src/config/tenant';
-import { extractShopifyCartToken } from '../src/services/orderReconciliationService';
+import {
+  extractShopifyCartToken,
+  reconcileShopifyOrder,
+} from '../src/services/orderReconciliationService';
 
 // =============================================================================
 // Shopify order webhook reconciliation (issue #76)
@@ -485,6 +488,142 @@ describe('Shopify order webhook reconciliation', () => {
 
       expect(response.status).toBe(200);
       expect(await Order.countDocuments({})).toBe(0);
+    });
+  });
+
+  // ===========================================================================
+  // Webhook-sourced orders relax province/zip/phone validation (issue #126).
+  //
+  // Order address validation unconditionally required province + zip and
+  // applied a strict phone format, so Shopify-valid orders from countries
+  // without provinces/postal codes (e.g. Pakistan) were silently dropped.
+  // Any address Shopify itself accepted must be storable from a webhook, with
+  // empty/missing values persisted as absent (never invented).
+  // ===========================================================================
+  describe('webhook-sourced address validation (issue #126)', () => {
+    // Pakistan-style address: no province, no postal code - Shopify accepts it
+    const PK_ADDRESS = {
+      first_name: 'Ali',
+      last_name: 'Khan',
+      address1: '12 Tariq Rd',
+      city: 'Karachi',
+      country: 'Pakistan',
+    };
+
+    test('a Pakistan-style address (no province, no zip) stores from orders/create, store-scoped', async () => {
+      const response = await postWebhook(
+        app,
+        'orders/create',
+        shopifyOrderPayload({ billing_address: PK_ADDRESS, shipping_address: PK_ADDRESS }),
+        SHOP_A
+      );
+
+      expect(response.status).toBe(200);
+
+      const order = await Order.findOne({ storeId: storeAId });
+      expect(order).not.toBeNull();
+      // Store-scoped to the resolving store, never leaking to store B
+      expect(order!.storeId!.toString()).toBe(storeAId.toString());
+      expect(await Order.countDocuments({ storeId: storeBId })).toBe(0);
+      // Absent province/zip persist as absent, never invented
+      expect(order!.shippingAddress?.city).toBe('Karachi');
+      expect(order!.shippingAddress?.country).toBe('Pakistan');
+      expect(order!.shippingAddress?.province).toBeUndefined();
+      expect(order!.shippingAddress?.zip).toBeUndefined();
+      expect(order!.billingAddress?.province).toBeUndefined();
+      expect(order!.billingAddress?.zip).toBeUndefined();
+    });
+
+    test("a phone format the strict local validator rejects still stores from a webhook", async () => {
+      // Shopify accepts free-form phones the strict local regex rejects (e.g.
+      // the extension format seen on Shopify's test payload). It must persist.
+      const phone = '555-1199 ext. 42';
+      const response = await postWebhook(
+        app,
+        'orders/create',
+        shopifyOrderPayload({
+          billing_address: { ...PK_ADDRESS, province: 'Sindh', zip: '74000', phone },
+        }),
+        SHOP_A
+      );
+
+      expect(response.status).toBe(200);
+
+      const order = await Order.findOne({ storeId: storeAId });
+      expect(order).not.toBeNull();
+      expect(order!.billingAddress?.phone).toBe(phone);
+    });
+
+    test('duplicate-key recovery re-marks the refetched order so a later sparse-address save still passes', async () => {
+      // A concurrent duplicate webhook takes the create path (initial lookup
+      // sees no order), loses the { storeId, shopifyOrderId } race, and
+      // recovers the winner via a fresh Order.findOne() whose $locals are
+      // empty. The controller then saves that returned order again (paid/status
+      // transition), so the webhook-sourced marker must be restored or the
+      // winner's sparse (no province/zip) address fails strict validation and
+      // the webhook errors instead of completing idempotently (issue #126).
+      await Order.init(); // ensure the unique compound index is built so the duplicate insert throws 11000
+
+      const shopifyOrder = shopifyOrderPayload({
+        billing_address: PK_ADDRESS,
+        shipping_address: PK_ADDRESS,
+      });
+
+      // The order that won the race: already stored with a sparse address.
+      const winner = await reconcileShopifyOrder(storeAId.toString(), shopifyOrder);
+      expect(winner.created).toBe(true);
+
+      // Force the race: the next reconcile must believe no order exists so it
+      // takes the create path and hits the duplicate-key (11000) recovery.
+      const findOneSpy = jest
+        .spyOn(Order, 'findOne')
+        .mockImplementationOnce(() => null as any);
+
+      const result = await reconcileShopifyOrder(storeAId.toString(), shopifyOrder);
+      findOneSpy.mockRestore();
+
+      // Recovery returned the winner and re-marked it webhook-sourced.
+      expect(result.order).not.toBeNull();
+      expect(result.order!.$locals.webhookSourced).toBe(true);
+
+      // A subsequent save (as the controller does on paid/status transitions)
+      // must not trip strict province/zip validation on the sparse address.
+      result.order!.financialStatus = 'paid';
+      await expect(result.order!.save()).resolves.toBeDefined();
+
+      // Still exactly one order for this store + Shopify order id.
+      expect(
+        await Order.countDocuments({
+          storeId: storeAId,
+          shopifyOrderId: shopifyOrder.id.toString(),
+        })
+      ).toBe(1);
+    });
+
+    test('locally-created orders keep strict province/zip validation (relaxation is webhook-only)', async () => {
+      const localOrderData = {
+        storeId: storeAId,
+        orderNumber: 'LOCAL-126-1',
+        email: 'local@example.com',
+        isGuestOrder: true,
+        guestContact: { email: 'local@example.com', fullName: 'Local Buyer' },
+        lineItems: [{ quantity: 1, price: 10, title: 'Widget' }],
+        subtotalPrice: 10,
+        totalTax: 0,
+        totalPrice: 10,
+        currency: 'USD',
+        // Missing province and zip
+        shippingAddress: { firstName: 'Local', address1: '1 St', city: 'Karachi', country: 'Pakistan' },
+      };
+
+      // Without the webhook-sourced marker, the strict rules still apply
+      const strictOrder = new Order(localOrderData);
+      await expect(strictOrder.validate()).rejects.toThrow(/Province\/State is required/);
+
+      // The same document validates once marked webhook-sourced
+      const relaxedOrder = new Order({ ...localOrderData, orderNumber: 'LOCAL-126-2' });
+      relaxedOrder.$locals.webhookSourced = true;
+      await expect(relaxedOrder.validate()).resolves.toBeUndefined();
     });
   });
 });
