@@ -37,6 +37,12 @@ Gate: staging URL responds; dev store connected; webhooks registered; CI green; 
 
 Gate: a recorded, repeatable cart-to-hosted-checkout-to-webhook-to-order run, plus passing cross-store isolation checks.
 
+**Phase 1 gate met 2026-07-22.** Both halves recorded:
+- Money path: recorded cart -> POST /api/v1/checkout/handoff checkoutUrl (tenant Storefront creds) -> Shopify-hosted test checkout (approved) -> order 1008 stored store-scoped; orders/create+updated+paid webhooks HMAC-verified and idempotent (issue #109 comment). Prereqs done this session: Storefront token (#124), unauthenticated_* scopes + re-OAuth, catalog synced (41 products).
+- Cross-store isolation: tenant/wrong-store rejection rows pass (inactive / nonexistent / malformed store) in the mobile smoke suite (Cartaisy issue #99); plus a live Store-A-vs-Store-B check — a seeded second store (distinct active tenant 6a60e96d503b868f1461357a) returns NONE of Store A's 41 products and fails closed on cart create ("Store missing Shopify shop domain"), confirming per-store data and credential isolation with no fallback.
+
+Remaining Phase 1 validation (not gate-blocking): mobile-on-staging device/simulator smoke; wire the seeded second store into the automated A-vs-B suite rows for CI repeatability; update harness expected-values for the now-resolved #62/#63 route rows.
+
 ### Phase 2 — Prove "write once, build for many"
 
 1. Initialize Android remote credentials/keystore for the sample merchant EAS project (operator, interactive); supply Firebase files via EAS file env vars; produce, install, and verify a branded Android artifact with no Cartaisy identity leakage.
