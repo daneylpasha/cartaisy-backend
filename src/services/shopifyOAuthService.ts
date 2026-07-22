@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import fetch from 'node-fetch';
 import Store from '../models/Store';
 import { encrypt, decrypt } from '../utils/encryption';
+import { getShopifyClientForStore } from './shopifyService';
 
 /**
  * Shopify OAuth Service
@@ -324,6 +325,229 @@ export const saveCredentials = async (
     console.error('Save credentials error:', error);
     throw new Error('Failed to save Shopify credentials');
   }
+};
+
+// Title we tag every Cartaisy-provisioned Storefront token with so provisioning
+// can recognise (and reuse/clean up) its own tokens on subsequent runs.
+const STOREFRONT_TOKEN_TITLE = 'Cartaisy Storefront API Token';
+
+/**
+ * Lists the shop's existing Storefront access tokens via the Admin GraphQL API.
+ * Returns `{ id, title, accessToken }` for each token so provisioning can find
+ * and reuse a token Cartaisy already created.
+ */
+const listStorefrontAccessTokens = async (
+  client: any
+): Promise<Array<{ id: string; title: string; accessToken?: string }>> => {
+  const query = `
+    query {
+      shop {
+        storefrontAccessTokens(first: 100) {
+          edges {
+            node {
+              id
+              title
+              accessToken
+            }
+          }
+        }
+      }
+    }
+  `;
+
+  const response = await client.post('/graphql.json', { query });
+
+  if (response.data?.errors?.length) {
+    throw new Error(
+      `Failed to list Storefront access tokens: ${response.data.errors[0]?.message || 'Unknown error'}`
+    );
+  }
+
+  return (
+    response.data?.data?.shop?.storefrontAccessTokens?.edges?.map(
+      (edge: any) => edge.node
+    ) || []
+  );
+};
+
+/**
+ * Best-effort deletion of a Storefront access token by its GraphQL id. Never
+ * throws — a failed cleanup must not block reuse/creation of a working token.
+ */
+const deleteStorefrontAccessToken = async (
+  client: any,
+  storeId: string,
+  id: string
+): Promise<void> => {
+  const mutation = `
+    mutation storefrontAccessTokenDelete($input: StorefrontAccessTokenDeleteInput!) {
+      storefrontAccessTokenDelete(input: $input) {
+        deletedStorefrontAccessTokenId
+        userErrors {
+          field
+          message
+        }
+      }
+    }
+  `;
+
+  try {
+    const response = await client.post('/graphql.json', {
+      query: mutation,
+      variables: { input: { id } },
+    });
+
+    const userErrors =
+      response.data?.data?.storefrontAccessTokenDelete?.userErrors ||
+      response.data?.errors;
+    if (userErrors?.length) {
+      console.warn(
+        `[Shopify Storefront Token] Could not delete stale token for store ${storeId}:`,
+        userErrors
+      );
+    }
+  } catch (error) {
+    console.warn(
+      `[Shopify Storefront Token] Error deleting stale token for store ${storeId}:`,
+      error
+    );
+  }
+};
+
+/**
+ * Provisions a per-store Shopify Storefront API access token and persists it to
+ * `Store.shopify.storefrontAccessToken` for that store only.
+ *
+ * Resolves the store's already-connected Admin credentials via
+ * `getShopifyClientForStore(storeId)` (no global env fallback). Provisioning is
+ * **idempotent**: it first queries the shop's existing Storefront tokens and, if
+ * a `'Cartaisy Storefront API Token'` already exists, reuses that token instead
+ * of creating another. Only when no reusable token exists does it delete any
+ * stale Cartaisy-titled tokens (e.g. ones missing a readable value) and create a
+ * fresh one. This prevents OAuth reconnects and manual retries from
+ * accumulating orphaned active tokens and eventually hitting Shopify's per-shop
+ * token limit.
+ *
+ * The token value is never logged or returned in full — callers receive only a
+ * presence flag and the last 4 characters for diagnostics.
+ *
+ * @param storeId - MongoDB Store ID whose Admin connection is used
+ * @returns Summary with a `created` flag (true only when a new token was
+ *   created, false when an existing one was reused) and the token's last-4
+ *   characters
+ */
+export const createStorefrontAccessToken = async (
+  storeId: string
+): Promise<{ created: boolean; last4: string }> => {
+  if (!storeId) {
+    throw new Error('Cannot create Storefront access token without a storeId');
+  }
+
+  // Resolve the store's own Admin credentials — fail closed if not connected.
+  const client = await getShopifyClientForStore(storeId);
+  if (!client) {
+    throw new Error('Store not connected to Shopify');
+  }
+
+  // Idempotency: inspect tokens that already exist on this shop.
+  const existingTokens = await listStorefrontAccessTokens(client);
+  const cartaisyTokens = existingTokens.filter(
+    (token) => token.title === STOREFRONT_TOKEN_TITLE
+  );
+  const reusable = cartaisyTokens.filter((token) => !!token.accessToken);
+
+  if (reusable.length > 0) {
+    // Reuse the first Cartaisy token and prune any duplicates so the shop
+    // converges to a single active Storefront credential.
+    const [keep, ...duplicates] = reusable;
+    for (const duplicate of duplicates) {
+      await deleteStorefrontAccessToken(client, storeId, duplicate.id);
+    }
+
+    const accessToken = keep.accessToken as string;
+    const store = await Store.findByIdAndUpdate(
+      storeId,
+      { $set: { 'shopify.storefrontAccessToken': accessToken } },
+      { new: true }
+    );
+    if (!store) {
+      throw new Error('Store not found');
+    }
+
+    const last4 = accessToken.slice(-4);
+    console.log(
+      `♻️ [Shopify Storefront Token] Reused existing token for store ${storeId} (present, last4: ${last4})`
+    );
+    return { created: false, last4 };
+  }
+
+  // No reusable token: delete any stale Cartaisy-titled tokens (e.g. ones whose
+  // value can't be read back) so we don't leave orphans behind, then create one.
+  for (const stale of cartaisyTokens) {
+    await deleteStorefrontAccessToken(client, storeId, stale.id);
+  }
+
+  const mutation = `
+    mutation storefrontAccessTokenCreate($input: StorefrontAccessTokenInput!) {
+      storefrontAccessTokenCreate(input: $input) {
+        storefrontAccessToken {
+          accessToken
+          title
+        }
+        userErrors {
+          field
+          message
+        }
+      }
+    }
+  `;
+
+  const response = await client.post('/graphql.json', {
+    query: mutation,
+    variables: {
+      input: { title: STOREFRONT_TOKEN_TITLE },
+    },
+  });
+
+  const payload = response.data?.data?.storefrontAccessTokenCreate;
+  const userErrors = payload?.userErrors?.length
+    ? payload.userErrors
+    : response.data?.errors;
+
+  if (userErrors && userErrors.length > 0) {
+    // Log the structured errors (no token present in this path) and fail closed.
+    console.error(
+      `[Shopify Storefront Token] Shopify returned errors for store ${storeId}:`,
+      userErrors
+    );
+    throw new Error(
+      `Failed to create Storefront access token: ${userErrors[0]?.message || 'Unknown error'}`
+    );
+  }
+
+  const accessToken = payload?.storefrontAccessToken?.accessToken;
+  if (!accessToken) {
+    throw new Error('Shopify did not return a Storefront access token');
+  }
+
+  // storefrontAccessToken is a public (client-side) token; the schema stores it
+  // unencrypted, matching how getStorefrontClientForStore() reads it back.
+  const store = await Store.findByIdAndUpdate(
+    storeId,
+    { $set: { 'shopify.storefrontAccessToken': accessToken } },
+    { new: true }
+  );
+
+  if (!store) {
+    throw new Error('Store not found');
+  }
+
+  const last4 = accessToken.slice(-4);
+  console.log(
+    `✅ [Shopify Storefront Token] Persisted for store ${storeId} (present, last4: ${last4})`
+  );
+
+  return { created: true, last4 };
 };
 
 /**

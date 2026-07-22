@@ -20,6 +20,7 @@ import {
 } from '../services/productEnhancementService';
 import { authenticate, authorize } from '../middleware/auth';
 import { requireOwnedStoreContext } from '../middleware/storeOwnership';
+import { createStorefrontAccessToken } from '../services/shopifyOAuthService';
 import Product from '../models/Product';
 import Order from '../models/Order';
 
@@ -123,6 +124,47 @@ router.post('/sync/incremental', async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: error.message || 'Incremental synchronization failed'
+    });
+  }
+});
+
+// ===============================
+// STOREFRONT CREDENTIAL ROUTES
+// ===============================
+
+/**
+ * POST /api/v1/shopify/storefront-token - Create (or refresh) the per-store
+ * Shopify Storefront API access token using the store's already-connected Admin
+ * credentials, and persist it to Store.shopify.storefrontAccessToken.
+ *
+ * Store-admin only: router-level authenticate + authorize('admin','super_admin')
+ * + requireOwnedStoreContext() scope this to the caller's validated store, so a
+ * non-owner cannot provision a token for another store. The token value is never
+ * returned in full — only presence and last-4.
+ */
+router.post('/storefront-token', async (req: Request, res: Response) => {
+  try {
+    const storeId = getRequestStoreId(req);
+    if (!storeId) {
+      missingStoreResponse(res);
+      return;
+    }
+
+    const result = await createStorefrontAccessToken(storeId);
+
+    res.json({
+      success: true,
+      message: 'Storefront API access token created and saved',
+      data: {
+        storefrontTokenPresent: result.created,
+        storefrontTokenLast4: result.last4,
+      },
+    });
+  } catch (error: any) {
+    console.error('Error creating Storefront access token:', error?.message || error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to create Storefront API access token',
     });
   }
 });

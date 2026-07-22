@@ -121,6 +121,20 @@ export const handleCallback = async (req: AuthenticatedRequest, res: Response) =
       },
     });
 
+    // Best-effort: provision a per-store Storefront API access token so
+    // store-scoped mobile product/cart/checkout paths work for this store.
+    // A failure here must NOT fail the OAuth flow — the store stays
+    // Admin-connected and an operator can retry via POST /shopify/storefront-token.
+    try {
+      await shopifyOAuth.createStorefrontAccessToken(storeId);
+    } catch (storefrontError: any) {
+      console.warn(
+        `[Shopify OAuth] Storefront access token provisioning failed for store ${storeId}; ` +
+          `store remains Admin-connected:`,
+        storefrontError?.message || 'Unknown error'
+      );
+    }
+
     // Return success with shop info (but NOT the access token)
     res.status(200).json({
       success: true,
