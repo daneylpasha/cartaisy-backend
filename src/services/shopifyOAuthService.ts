@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import fetch from 'node-fetch';
 import Store from '../models/Store';
 import { encrypt, decrypt } from '../utils/encryption';
+import { getShopifyClientForStore } from './shopifyService';
 
 /**
  * Shopify OAuth Service
@@ -324,6 +325,98 @@ export const saveCredentials = async (
     console.error('Save credentials error:', error);
     throw new Error('Failed to save Shopify credentials');
   }
+};
+
+/**
+ * Creates a per-store Shopify Storefront API access token and persists it to
+ * `Store.shopify.storefrontAccessToken` for that store only.
+ *
+ * Resolves the store's already-connected Admin credentials via
+ * `getShopifyClientForStore(storeId)` (no global env fallback) and calls the
+ * Admin GraphQL `storefrontAccessTokenCreate` mutation. On success the returned
+ * token is written to the store document so `getStorefrontClientForStore()`
+ * stops failing closed for this store.
+ *
+ * The token value is never logged or returned in full — callers receive only a
+ * presence flag and the last 4 characters for diagnostics.
+ *
+ * @param storeId - MongoDB Store ID whose Admin connection is used
+ * @returns Summary with a `created` flag and the token's last-4 characters
+ */
+export const createStorefrontAccessToken = async (
+  storeId: string
+): Promise<{ created: boolean; last4: string }> => {
+  if (!storeId) {
+    throw new Error('Cannot create Storefront access token without a storeId');
+  }
+
+  // Resolve the store's own Admin credentials — fail closed if not connected.
+  const client = await getShopifyClientForStore(storeId);
+  if (!client) {
+    throw new Error('Store not connected to Shopify');
+  }
+
+  const mutation = `
+    mutation storefrontAccessTokenCreate($input: StorefrontAccessTokenInput!) {
+      storefrontAccessTokenCreate(input: $input) {
+        storefrontAccessToken {
+          accessToken
+          title
+        }
+        userErrors {
+          field
+          message
+        }
+      }
+    }
+  `;
+
+  const response = await client.post('/graphql.json', {
+    query: mutation,
+    variables: {
+      input: { title: 'Cartaisy Storefront API Token' },
+    },
+  });
+
+  const payload = response.data?.data?.storefrontAccessTokenCreate;
+  const userErrors = payload?.userErrors?.length
+    ? payload.userErrors
+    : response.data?.errors;
+
+  if (userErrors && userErrors.length > 0) {
+    // Log the structured errors (no token present in this path) and fail closed.
+    console.error(
+      `[Shopify Storefront Token] Shopify returned errors for store ${storeId}:`,
+      userErrors
+    );
+    throw new Error(
+      `Failed to create Storefront access token: ${userErrors[0]?.message || 'Unknown error'}`
+    );
+  }
+
+  const accessToken = payload?.storefrontAccessToken?.accessToken;
+  if (!accessToken) {
+    throw new Error('Shopify did not return a Storefront access token');
+  }
+
+  // storefrontAccessToken is a public (client-side) token; the schema stores it
+  // unencrypted, matching how getStorefrontClientForStore() reads it back.
+  const store = await Store.findByIdAndUpdate(
+    storeId,
+    { $set: { 'shopify.storefrontAccessToken': accessToken } },
+    { new: true }
+  );
+
+  if (!store) {
+    throw new Error('Store not found');
+  }
+
+  const last4 = accessToken.slice(-4);
+  console.log(
+    `✅ [Shopify Storefront Token] Persisted for store ${storeId} (present, last4: ${last4})`
+  );
+
+  return { created: true, last4 };
 };
 
 /**
