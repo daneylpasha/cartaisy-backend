@@ -48,4 +48,4 @@ jobs:
 
           # Cap agent turns per run. For other options see
           # https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
-          claude_args: '--max-turns 15'
+          claude_args: '--max-turns 50'
