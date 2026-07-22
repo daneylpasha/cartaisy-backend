@@ -45,4 +45,4 @@ jobs:
 
           # Run on Opus with the same turn cap as the default worker. See
           # https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
-          claude_args: '--model opus --max-turns 15'
+          claude_args: '--model opus --max-turns 75'
