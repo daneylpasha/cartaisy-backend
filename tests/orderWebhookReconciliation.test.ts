@@ -10,7 +10,10 @@ import CheckoutHandoff from '../src/models/CheckoutHandoff';
 import webhookRoutes from '../src/routes/webhookRoutes';
 import { shopifyWebhookBodyParser } from '../src/middleware/shopifyWebhookAuth';
 import { tenantConfig } from '../src/config/tenant';
-import { extractShopifyCartToken } from '../src/services/orderReconciliationService';
+import {
+  extractShopifyCartToken,
+  reconcileShopifyOrder,
+} from '../src/services/orderReconciliationService';
 
 // =============================================================================
 // Shopify order webhook reconciliation (issue #76)
@@ -549,6 +552,52 @@ describe('Shopify order webhook reconciliation', () => {
       const order = await Order.findOne({ storeId: storeAId });
       expect(order).not.toBeNull();
       expect(order!.billingAddress?.phone).toBe(phone);
+    });
+
+    test('duplicate-key recovery re-marks the refetched order so a later sparse-address save still passes', async () => {
+      // A concurrent duplicate webhook takes the create path (initial lookup
+      // sees no order), loses the { storeId, shopifyOrderId } race, and
+      // recovers the winner via a fresh Order.findOne() whose $locals are
+      // empty. The controller then saves that returned order again (paid/status
+      // transition), so the webhook-sourced marker must be restored or the
+      // winner's sparse (no province/zip) address fails strict validation and
+      // the webhook errors instead of completing idempotently (issue #126).
+      await Order.init(); // ensure the unique compound index is built so the duplicate insert throws 11000
+
+      const shopifyOrder = shopifyOrderPayload({
+        billing_address: PK_ADDRESS,
+        shipping_address: PK_ADDRESS,
+      });
+
+      // The order that won the race: already stored with a sparse address.
+      const winner = await reconcileShopifyOrder(storeAId.toString(), shopifyOrder);
+      expect(winner.created).toBe(true);
+
+      // Force the race: the next reconcile must believe no order exists so it
+      // takes the create path and hits the duplicate-key (11000) recovery.
+      const findOneSpy = jest
+        .spyOn(Order, 'findOne')
+        .mockImplementationOnce(() => null as any);
+
+      const result = await reconcileShopifyOrder(storeAId.toString(), shopifyOrder);
+      findOneSpy.mockRestore();
+
+      // Recovery returned the winner and re-marked it webhook-sourced.
+      expect(result.order).not.toBeNull();
+      expect(result.order!.$locals.webhookSourced).toBe(true);
+
+      // A subsequent save (as the controller does on paid/status transitions)
+      // must not trip strict province/zip validation on the sparse address.
+      result.order!.financialStatus = 'paid';
+      await expect(result.order!.save()).resolves.toBeDefined();
+
+      // Still exactly one order for this store + Shopify order id.
+      expect(
+        await Order.countDocuments({
+          storeId: storeAId,
+          shopifyOrderId: shopifyOrder.id.toString(),
+        })
+      ).toBe(1);
     });
 
     test('locally-created orders keep strict province/zip validation (relaxation is webhook-only)', async () => {

@@ -421,9 +421,14 @@ export const reconcileShopifyOrder = async (
     } catch (error: any) {
       if (error?.code === 11000) {
         // Concurrent duplicate webhook lost the race to the compound unique
-        // index { storeId, shopifyOrderId }; fall back to the winner's order
+        // index { storeId, shopifyOrderId }; fall back to the winner's order.
+        // The refetch is a fresh document with empty $locals, so re-mark it
+        // webhook-sourced: the controller saves it again (paid/status
+        // transitions), and a sparse Shopify address must stay storable under
+        // the relaxed rules instead of failing strict validation (issue #126).
         order = await Order.findOne({ storeId, shopifyOrderId });
         if (!order) throw error;
+        order.$locals.webhookSourced = true;
       } else if (error?.name === 'ValidationError') {
         // A payload that fails schema validation can never succeed on
         // retry: log it clearly and let the handler acknowledge with 200
