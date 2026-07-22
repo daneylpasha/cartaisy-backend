@@ -406,5 +406,61 @@ describe('store-scoped customer and order webhook/sync matching', () => {
       const order = await Order.findOne({ storeId: storeAId });
       expect(order!.storeId!.toString()).toBe(storeAId.toString());
     });
+
+    // Sync-created orders carry Shopify-accepted addresses and must be storable
+    // under the relaxed province/zip/phone rules, the same as the webhook
+    // reconciliation path (issue #126). Before the fix, a Shopify-valid sparse
+    // address (a country without provinces/postal codes) failed strict local
+    // validation and the order was silently skipped.
+    test('syncOrders stores a Shopify order with a sparse (no province/zip) address, while a local order stays strict', async () => {
+      await createStoreUser(storeAId);
+
+      // Pakistan-style address Shopify accepts: no province, no postal code
+      const PK_ADDRESS = {
+        first_name: 'Ali',
+        last_name: 'Khan',
+        address1: '12 Tariq Rd',
+        city: 'Karachi',
+        country: 'Pakistan',
+      };
+
+      mockShopifyGet({
+        '/orders.json': {
+          orders: [
+            shopifyOrderPayload({ billing_address: PK_ADDRESS, shipping_address: PK_ADDRESS }),
+          ],
+        },
+      });
+
+      const result = await syncOrders(30, storeAId.toString());
+
+      expect(result.errors).toEqual([]);
+      expect(result.synced).toBe(1);
+
+      const order = await Order.findOne({ storeId: storeAId, shopifyOrderId: '450789469' });
+      expect(order).not.toBeNull();
+      // Absent province/zip persist as absent, never invented
+      expect(order!.shippingAddress?.city).toBe('Karachi');
+      expect(order!.shippingAddress?.country).toBe('Pakistan');
+      expect(order!.shippingAddress?.province).toBeUndefined();
+      expect(order!.shippingAddress?.zip).toBeUndefined();
+
+      // The relaxation is Shopify-source-only: a locally-created order with the
+      // same sparse address (no webhook-sourced marker) still fails validation
+      const localOrder = new Order({
+        storeId: storeAId,
+        orderNumber: 'LOCAL-SYNC-126',
+        email: 'local@example.com',
+        isGuestOrder: true,
+        guestContact: { email: 'local@example.com', fullName: 'Local Buyer' },
+        lineItems: [{ quantity: 1, price: 10, title: 'Widget' }],
+        subtotalPrice: 10,
+        totalTax: 0,
+        totalPrice: 10,
+        currency: 'USD',
+        shippingAddress: { firstName: 'Local', address1: '1 St', city: 'Karachi', country: 'Pakistan' },
+      });
+      await expect(localOrder.validate()).rejects.toThrow(/Province\/State is required/);
+    });
   });
 });
