@@ -77,6 +77,10 @@ Operational decisions — sequencing, ticket slicing, model routing, review verd
 
 Strategy/architecture conversations happen in the dedicated Fable-model session when available and always conclude with a DECISIONS.md entry. Operational orchestration (status, reviews, dispatch, evidence checks) may run on any model — all sessions are bound by the same repo rules.
 
+## Reporting preferences
+
+Daniyal strongly prefers visual reports over text. Any status report, briefing, phase overview, or progress summary requested in any session must default to a rendered HTML visual (phase tracks, checklists, cards, timelines — consistent with the Cartaisy Dashboard artifact's style), with at most a few lines of text alongside. Long prose reports only if he explicitly asks for text. Where the Cartaisy Dashboard artifact covers the need, refresh and point to it instead of composing a new report.
+
 ## When to interrupt Daniyal (only these)
 
 - An `[operator]` ticket is blocking the whole queue.
