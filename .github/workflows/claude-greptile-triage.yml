@@ -1,0 +1,99 @@
+name: Greptile Triage (Claude)
+
+on:
+  pull_request_review:
+    types: [submitted]
+  pull_request_review_comment:
+    types: [created]
+
+concurrency:
+  group: greptile-triage-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  triage:
+    if: |
+      (github.event_name == 'pull_request_review' && github.event.review.user.login == 'greptile-apps[bot]') ||
+      (github.event_name == 'pull_request_review_comment' && github.event.comment.user.login == 'greptile-apps[bot]')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+      actions: read # Required for Claude to read CI results on PRs
+    steps:
+      - name: Loop guard — count prior triage runs on this PR
+        id: guard
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          COUNT="$(
+            gh api "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" --paginate 2>/dev/null \
+              | jq -s '[.[][] | select(((.body // "") | test("<!-- claude-greptile-triage-run -->")) and .user.login == "github-actions[bot]")] | length' \
+              || echo 0
+          )"
+          COUNT="${COUNT:-0}"
+          echo "Prior triage runs on PR #${PR_NUMBER}: ${COUNT}"
+          echo "count=${COUNT}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout repository
+        if: fromJSON(steps.guard.outputs.count) < 2
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 1
+
+      - name: Run Claude Code (Greptile triage)
+        if: fromJSON(steps.guard.outputs.count) < 2
+        id: claude
+        uses: anthropics/claude-code-action@44423bdec74b97d67543eb16c110546762c110b2 # v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+
+          additional_permissions: |
+            actions: read
+
+          prompt: |
+            Triage every unresolved Greptile review thread on this pull request,
+            per docs/cartaisy/DEV_PLAYBOOK.md's "Automated review comments" rules:
+
+            - Valid AND within the ticket's scope -> fix it on this branch.
+            - Valid but OUT of scope -> do not fix. Reply on the thread "valid,
+              out of scope for #<ticket>" (the issue number this PR closes) and
+              say so plainly in your final summary, so the orchestrator can
+              turn it into a follow-up ticket.
+            - Incorrect or noise -> reply briefly why, and resolve the thread.
+
+            Never expand scope beyond what the linked issue asks for. Never
+            touch the high-risk areas (checkout, payments, auth, tenancy,
+            Shopify credentials, webhooks, migrations, CI/production config)
+            even if a Greptile comment suggests it — for those, reply "valid,
+            out of scope, high-risk — needs Daniyal" and stop instead of
+            fixing them yourself.
+
+            Do not silently ignore any unresolved thread. Post a short triage
+            summary as your final PR comment, listing anything you flagged as
+            out of scope.
+
+          claude_args: '--max-turns 15 --allowedTools "Edit,MultiEdit,Write,Bash(npm ci),Bash(npm install),Bash(npm run:*),Bash(npm test:*),Bash(gh pr comment:*),Bash(gh api:*)"'
+
+      - name: Record triage-run marker (loop guard)
+        if: fromJSON(steps.guard.outputs.count) < 2
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          RUN_NUM: ${{ steps.guard.outputs.count }}
+        run: |
+          gh api "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
+            -f body="<!-- claude-greptile-triage-run --> Greptile triage run #$((RUN_NUM + 1)) completed by Claude on this PR."
+
+      - name: Loop-guard tripped — notify instead of running again
+        if: fromJSON(steps.guard.outputs.count) >= 2
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          gh api "repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
+            -f body="<!-- claude-greptile-triage-run --> Loop guard tripped: this workflow has already run 2+ times on this PR. Skipping automatic triage — this needs a human look."
