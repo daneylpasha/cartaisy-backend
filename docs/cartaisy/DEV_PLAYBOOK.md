@@ -81,6 +81,16 @@ Strategy/architecture conversations happen in the dedicated Fable-model session 
 
 Daniyal strongly prefers visual reports over text. Any status report, briefing, phase overview, or progress summary requested in any session must default to a rendered HTML visual (phase tracks, checklists, cards, timelines — consistent with the Cartaisy Dashboard artifact's style), with at most a few lines of text alongside. Long prose reports only if he explicitly asks for text. Where the Cartaisy Dashboard artifact covers the need, refresh and point to it instead of composing a new report.
 
+## Freshness rule
+
+Before any orchestration action — status reports, deciding what's next,
+cutting or dispatching tickets, reviewing PRs, updating the dashboard — every
+session must first refresh from live sources: git pull/read of each affected
+repo's origin main, plus live GitHub issue/PR state (API or git evidence
+only; never cached page reads, local folder snapshots, or chat memory).
+If live state can't be verified, say so and ask rather than proceeding on
+stale data.
+
 ## When to interrupt Daniyal (only these)
 
 - An `[operator]` ticket is blocking the whole queue.
