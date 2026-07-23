@@ -56,6 +56,10 @@ Every PR gets automated review. Those comments are **input, not orders** — tri
 
 Never silently ignore a comment. Merge requires: CI green + orchestrator review + every automated-review thread fixed or answered.
 
+Automatic triage: `.github/workflows/claude-greptile-triage.yml` runs Claude Code itself on every Greptile review submission or review comment, performing the exact triage above (fix in-scope, flag out-of-scope, resolve noise), capped at 15 turns and guarded against ping-ponging with Greptile.
+The orchestrator/human only gets pulled in for what that workflow reports as "valid, out of scope" — a follow-up-ticket call — or when its loop guard trips after 2 runs on the same PR.
+This workflow is CI/workflow config, so it's on the high-risk list: Daniyal reviews and merges any change to it, same as the model-routing workflows.
+
 Agent prompt template:
 ```
 Read the automated review comments on PR #<N> (gh pr view <N> --comments).
