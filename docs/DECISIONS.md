@@ -203,6 +203,22 @@ Known gap: exact original decision dates are not known for most entries. Use "Da
 - Impact: A ticket implying a strategy change is invalid until a matching entry exists here; the orchestrator flags the needed decision in its summary instead of cutting the ticket.
 - Related docs: `docs/cartaisy/DEV_PLAYBOOK.md`, `docs/cartaisy/ROADMAP.md`, `docs/cartaisy/SAAS_SCOPE.md`. Decided by Daniyal, 2026-07-17.
 
+### Merchant EAS/Expo projects live under a Cartaisy-managed Expo organization
+
+- Date: 2026-07-23.
+- Decision: Merchant mobile builds run from a Cartaisy-managed Expo/EAS organization, with one EAS project per merchant app inside it. Merchant-owned Expo accounts are a documented, separately priced exception for merchants who explicitly require full infrastructure ownership — never the default. This resolves the open flag in the mobile repo's `docs/MOBILE_MERCHANT_PROVISIONING_RUNBOOK.md` (Steps 2–3).
+- Reason: Expo/EAS is build machinery, not app identity. Identity layers (Apple Developer, Google Play, Shopify, Stripe) remain merchant-owned per the 2026-07-17 decision, which is where Apple's white-label ownership rules and portability actually apply. A Cartaisy-managed org removes a confusing merchant-side signup from onboarding, avoids per-merchant credential/invite churn, keeps EAS billing on one Cartaisy subscription, and lets provisioning automation run with a single org-scoped token instead of per-merchant secrets.
+- Impact: Store-facing provisioning automation (EAS project bootstrap, Firebase Management API provisioning, and the single "provision merchant" pipeline in the runbook's automation list) is now unblocked and may be ticketed. iOS signing continues to resolve against the merchant's own Apple team, and Android upload keystores remain exportable from EAS; the merchant offboarding path (hand over keystore + bundle IDs) must be written into the onboarding runbook and merchant agreement. The Cartaisy Expo org requires hardware-key 2FA and scoped org tokens for automation.
+- Related docs: mobile repo `docs/MOBILE_MERCHANT_PROVISIONING_RUNBOOK.md`, `docs/MOBILE_BRANDED_BUILD_CHECKLIST.md`, `docs/cartaisy/ROADMAP.md` (Phase 2). Decided by Daniyal, 2026-07-23.
+
+### Legacy CLIENT-ONBOARDING.md is superseded by the SaaS onboarding flow
+
+- Date: 2026-07-23.
+- Decision: `docs/CLIENT-ONBOARDING.md` describes the retired pre-SaaS model (per-client backend deployments, manually created Shopify private apps, hand-entered Admin tokens, per-client cloud provider choices) and is superseded. The current onboarding sources of truth are: dashboard repo `docs/DASHBOARD_ONBOARDING_FLOW.md` (merchant-facing flow), mobile repo `docs/MOBILE_MERCHANT_PROVISIONING_RUNBOOK.md` (Cartaisy-side provisioning), and `docs/cartaisy/ROADMAP.md` Phase 6 (onboarding productization). The legacy doc must be rewritten to match the current model or reduced to a pointer at those docs.
+- Reason: The legacy doc contradicts recorded decisions (backend-owned Shopify OAuth, multi-tenant single backend, server-side credential handling) and is a live hazard: an agent or future hire following it would onboard a merchant against the wrong architecture.
+- Impact: No agent may follow `docs/CLIENT-ONBOARDING.md` as-is. A docs-only ticket rewrites or stubs it; until that lands, this entry is the authoritative warning. The rewrite must not introduce new onboarding behavior — it documents the flow already decided here.
+- Related docs: dashboard repo `docs/DASHBOARD_ONBOARDING_FLOW.md`, mobile repo `docs/MOBILE_MERCHANT_PROVISIONING_RUNBOOK.md`, `docs/cartaisy/ROADMAP.md`. Decided by Daniyal, 2026-07-23.
+
 ## Related docs/issues
 
 - GitHub issue: #52.
