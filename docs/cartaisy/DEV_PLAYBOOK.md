@@ -71,6 +71,8 @@ Business-strategy decisions — pricing, product scope, target market, merchant-
 
 Operational decisions — sequencing, ticket slicing, model routing, review verdicts — are delegated to the orchestrator within the approved roadmap.
 
+Strategy/architecture conversations happen in the dedicated Fable-model session when available and always conclude with a DECISIONS.md entry. Operational orchestration (status, reviews, dispatch, evidence checks) may run on any model — all sessions are bound by the same repo rules.
+
 ## When to interrupt Daniyal (only these)
 
 - An `[operator]` ticket is blocking the whole queue.
@@ -94,4 +96,4 @@ The agent commented on the issue and stopped (as instructed). Do not patch aroun
 
 ## Current phase
 
-Phase 1 of `docs/cartaisy/ROADMAP.md` (Phase 0 gate met 2026-07-22 - evidence linked in the roadmap). In flight: backend [agent] tickets #124 (Storefront token) and #126 (webhook address validation); both are high-risk PRs that Daniyal merges after orchestrator review. Phase 1 tickets are cut by the orchestrator.
+Phase 2 of `docs/cartaisy/ROADMAP.md` — the first branded Android app build (Phase 0 gate met 2026-07-22; Phase 1 gate met 2026-07-22, evidence linked in the roadmap). Phase 2 needs Daniyal's operator step first (interactive Android keystore/signing setup) before agent tickets can build on it. Phases 3 (runtime branding) and 4 (dashboard consolidation) are open as parallel tracks per the roadmap's sequencing and are cut by the orchestrator as capacity allows.
