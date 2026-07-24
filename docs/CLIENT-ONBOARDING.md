@@ -1,5 +1,16 @@
 # Client Onboarding Guide - Cartaisy Backend
 
+> **⚠️ SUPERSEDED (2026-07-23) — do not follow this guide.** It describes the
+> retired pre-SaaS model (per-client backend deployments, manually created
+> Shopify private apps, hand-entered Admin tokens, per-client cloud choices).
+> The current onboarding sources of truth are: dashboard repo
+> `docs/DASHBOARD_ONBOARDING_FLOW.md` (merchant-facing flow), mobile repo
+> `docs/MOBILE_MERCHANT_PROVISIONING_RUNBOOK.md` (Cartaisy-side provisioning),
+> and `docs/cartaisy/ROADMAP.md` Phase 6 (onboarding productization). See the
+> 2026-07-23 decision "Legacy CLIENT-ONBOARDING.md is superseded by the SaaS
+> onboarding flow" in `docs/DECISIONS.md`. A docs-only ticket will rewrite or
+> stub this file; until then this banner is the authoritative warning.
+
 This comprehensive guide walks clients through the complete onboarding process for deploying and configuring their Cartaisy Backend instance.
 
 ## Pre-Deployment Client Questionnaire

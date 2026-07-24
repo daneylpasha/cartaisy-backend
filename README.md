@@ -368,7 +368,7 @@ NODE_ENV=development npm run dev
 - [API Reference](docs/API-REFERENCE.md)
 - [Architecture Guide](docs/ARCHITECTURE.md)
 - [Deployment Guide](docs/DEPLOYMENT.md)
-- [Client Onboarding](docs/CLIENT-ONBOARDING.md)
+- [Client Onboarding](docs/CLIENT-ONBOARDING.md) — **superseded (2026-07-23)**; see `docs/DECISIONS.md`
 
 ### Support Channels
 - **Documentation**: Comprehensive guides and examples

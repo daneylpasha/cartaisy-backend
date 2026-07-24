@@ -243,7 +243,7 @@ Bundle Size:               Optimized
 - [Deployment Guide](DEPLOYMENT.md)
 - [Architecture Overview](ARCHITECTURE.md)
 - [Security Documentation](SECURITY.md)
-- [Client Onboarding](CLIENT-ONBOARDING.md)
+- [Client Onboarding](CLIENT-ONBOARDING.md) — **superseded (2026-07-23)**; see `DECISIONS.md`
 
 ---
 
