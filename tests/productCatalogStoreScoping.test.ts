@@ -342,6 +342,10 @@ describe('legacy local product catalog store scoping', () => {
     expect(zeroLimitRecommendations).toHaveLength(1);
     expect(zeroLimitRecommendations.every(product => product.storeId.toString() === storeAId)).toBe(true);
 
+    const nanLimitRecommendations = await generateProductRecommendations(productA._id.toString(), undefined, NaN, storeAId);
+    expect(nanLimitRecommendations.length).toBeGreaterThan(0);
+    expect(nanLimitRecommendations.every(product => product.storeId.toString() === storeAId)).toBe(true);
+
     const uncategorizedProduct = await Product.create(productFixture(storeAId, {
       title: 'Store A Uncategorized Shirt',
       handle: 'store-a-uncategorized-shirt',
