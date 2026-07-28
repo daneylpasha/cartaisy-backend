@@ -352,7 +352,7 @@ export const searchProducts = async (req: AuthenticatedRequest, res: Response): 
     const countResult = await Product.aggregate(countPipeline);
     const total = countResult.length > 0 ? countResult[0].total : 0;
 
-    // Save search history
+    // Save search history (best-effort analytics; must not fail the search response)
     const userId = req.user?._id;
     const sessionId = req.sessionID || 'anonymous';
     const searchHistorySortKey = (() => {
@@ -366,23 +366,29 @@ export const searchProducts = async (req: AuthenticatedRequest, res: Response): 
           return 'RELEVANCE';
       }
     })();
-    
-    await SearchHistory.create({
-      storeId,
-      userId: userId ? new mongoose.Types.ObjectId(userId.toString()) : undefined,
-      sessionId,
-      query: query as string,
-      searchType: 'text',
-      resultsCount: total,
-      hasResults: total > 0,
-      filters: {
-        sortKey: searchHistorySortKey,
-        minPrice: priceMin ? parseFloat(priceMin as string) : undefined,
-        maxPrice: priceMax ? parseFloat(priceMax as string) : undefined,
-        vendor: brand
-      },
-      userAgent: req.headers['user-agent']
-    });
+    const minPrice = priceMin ? parseFloat(priceMin as string) : undefined;
+    const maxPrice = priceMax ? parseFloat(priceMax as string) : undefined;
+
+    try {
+      await SearchHistory.create({
+        storeId,
+        userId: userId ? new mongoose.Types.ObjectId(userId.toString()) : undefined,
+        sessionId,
+        query: query as string,
+        searchType: 'text',
+        resultsCount: total,
+        hasResults: total > 0,
+        filters: {
+          sortKey: searchHistorySortKey,
+          minPrice: Number.isFinite(minPrice) && minPrice! >= 0 ? minPrice : undefined,
+          maxPrice: Number.isFinite(maxPrice) && maxPrice! >= 0 ? maxPrice : undefined,
+          vendor: brand ? (brand as string) : undefined
+        },
+        userAgent: req.headers['user-agent']?.slice(0, 500)
+      });
+    } catch (historyError) {
+      console.error('Error saving search history:', historyError);
+    }
 
     return res.json({
       success: true,
