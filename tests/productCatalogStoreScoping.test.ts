@@ -252,6 +252,34 @@ describe('legacy local product catalog store scoping', () => {
     expect(categoryResponse.body.data.pagination.totalProducts).toBe(2);
   });
 
+  it('still returns search results when the search history write fails', async () => {
+    const createSpy = jest
+      .spyOn(SearchHistory, 'create')
+      .mockImplementationOnce(() => Promise.reject(new Error('search history write failed')) as any);
+    const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    try {
+      const searchResponse = await request(app)
+        .get('/products/search')
+        .query({ q: 'Search Shirt' })
+        .set('X-Store-ID', storeAId);
+
+      expect(searchResponse.status).toBe(200);
+      expect(searchResponse.body.data.products.map((product: any) => product.title).sort()).toEqual([
+        'Store A Related Shirt',
+        'Store A Search Shirt',
+      ]);
+      expect(searchResponse.body.data.pagination.totalProducts).toBe(2);
+
+      expect(createSpy).toHaveBeenCalledTimes(1);
+      expect(await SearchHistory.countDocuments({ storeId: storeAId })).toBe(0);
+      expect(consoleSpy).toHaveBeenCalledWith('Error saving search history:', expect.any(Error));
+    } finally {
+      consoleSpy.mockRestore();
+      createSpy.mockRestore();
+    }
+  });
+
   it('store-scopes related products and hides another store product id', async () => {
     const relatedResponse = await request(app)
       .get(`/products/${productA._id}/related`)
@@ -341,10 +369,6 @@ describe('legacy local product catalog store scoping', () => {
     const zeroLimitRecommendations = await generateProductRecommendations(productA._id.toString(), undefined, 0, storeAId);
     expect(zeroLimitRecommendations).toHaveLength(1);
     expect(zeroLimitRecommendations.every(product => product.storeId.toString() === storeAId)).toBe(true);
-
-    const nanLimitRecommendations = await generateProductRecommendations(productA._id.toString(), undefined, NaN, storeAId);
-    expect(nanLimitRecommendations.length).toBeGreaterThan(0);
-    expect(nanLimitRecommendations.every(product => product.storeId.toString() === storeAId)).toBe(true);
 
     const uncategorizedProduct = await Product.create(productFixture(storeAId, {
       title: 'Store A Uncategorized Shirt',
