@@ -95,12 +95,12 @@ jobs:
           EOF
 
       - name: Run tests
-        run: npm test -- --runInBand --watchman=false --testPathIgnorePatterns tests/shopify.integration.test.ts
+        run: npm test -- --runInBand --watchman=false
         env:
           NODE_ENV: test
 
       - name: Generate coverage report
-        run: npm run test:coverage -- --runInBand --watchman=false --testPathIgnorePatterns tests/shopify.integration.test.ts
+        run: npm run test:coverage -- --runInBand --watchman=false
         env:
           NODE_ENV: test
 
