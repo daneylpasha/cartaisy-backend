@@ -48,6 +48,15 @@ const eslintConfig = [
       // edits by hand. The dashboard ignores its generated Orval client for
       // the same reason.
       'src/generated/**',
+      // ESLint's default traversal picks up `.cjs`, which `**/*.js` above does
+      // not cover, and the plugin's base config carries no `files` restriction
+      // so the TypeScript parser is applied to everything it visits. That means
+      // the vendored 2.2 MB `.yarn/releases/yarn-3.5.1.cjs` gets fully parsed on
+      // every run. No rule currently applies to `.cjs`, so it produces no
+      // violations and never entered the suppression baseline — but it does
+      // dominate the runtime, and it would start failing the moment any rule
+      // did apply to `.cjs`.
+      '.yarn/**',
     ],
   },
 
