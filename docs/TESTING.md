@@ -11,7 +11,7 @@ Current state: `package.json` declares `packageManager: yarn@1.22.19`, but the G
 Common scripts currently declared in `package.json`:
 
 - Type check: `npm run type-check` runs `tsc --noEmit`.
-- Test: `npm test` runs `jest`.
+- Test: `npm test` runs `jest`. Local baseline as of 2026-07-29: **27 suites passed, 308 tests passed, 0 failed.** Treat any deviation as a regression. Until 2026-07-29 the suite had one permanently failing file, which meant a genuine regression and the standing failure were indistinguishable.
 - Coverage: `npm run test:coverage` runs `jest --coverage`.
 - Build: `npm run build` runs OpenAPI generation and TypeScript build.
 - Generate OpenAPI/routes: `npm run generate`, `npm run generate:spec`, `npm run generate:routes`.
@@ -35,8 +35,8 @@ Target state: every backend behavior PR should run the smallest relevant command
 
 Known gap: tests exist, but they do not prove every tenant, Shopify, checkout, webhook, order, dashboard, or release scenario is covered.
 
-- CI ignores `tests/shopify.integration.test.ts` in the main Jest command.
-- Shopify integration tests may require credentials, network access, or explicit local setup. Do not run or rely on them without confirming requirements.
+- CI still ignores `tests/shopify.integration.test.ts` in the main Jest command (`--testPathIgnorePatterns`). That exclusion is why the file was able to drift as far as it did: it had not run anywhere for a long time. As of 2026-07-29 the file passes 31/31 locally, so removing the exclusion is now a live option and a deliberate follow-up decision, not a blocked one.
+- `tests/shopify.integration.test.ts` does **not** need Shopify credentials or network access, despite what this file previously claimed. It runs entirely against `mongodb-memory-server` via `tests/setup.ts`, and the handful of cases that would touch a real Shopify API assert `[200, 500]` precisely so they pass without one. The credentials caveat below still applies to any genuinely live Shopify test, but not to this file.
 - No package-level lint script is available at the time of this docs update.
 - The API contract job in `.github/workflows/ci.yml` is best-effort: it runs Newman only when `tests/postman/cartaisy-api.postman_collection.json` and `tests/postman/ci-environment.postman_environment.json` exist. Those files are not currently present, so the job writes a skipped result instead of implying Postman coverage exists.
 - The staging E2E job in `.github/workflows/cd.yml` is also best-effort: it runs only when a `tests/e2e/package.json` suite exists. That suite is not currently present, so the job records a skipped result rather than implying E2E coverage exists.
@@ -78,6 +78,16 @@ Known gap: the latest observed main-branch CI run before issue #86 failed at wor
 - Webhook and background job processing maps events to the correct store before mutation.
 
 ## Shopify integration test limitations
+
+Repaired 2026-07-29. `tests/shopify.integration.test.ts` had been failing every run, and it is the only test file that imports the **real** app (`src/app.ts`) rather than building a minimal local Express app around one router — so every request in it must match the app's real mounts. Five things had gone stale, and only the first was visible before the fix, because `beforeAll` threw and no test body ever ran:
+
+- Every non-webhook path was missing the `/v1` segment. Paths are now derived from `apiConfig.version` rather than hardcoded. The three `/api/webhooks/...` paths are deliberately unversioned — `webhookRoutes` is mounted without a version because Shopify calls those URLs directly — and must stay that way.
+- `POST /auth/register` now either creates a store (needs `storeName`) or accepts an invite (needs `inviteToken`). The fixture sent neither and got a 400 even at the correct path.
+- `requireOwnedStoreContext()` will not infer a super admin's store from their own record, so every authenticated request needs an explicit `X-Store-ID`.
+- Fixtures lived in `beforeAll`, but `tests/setup.ts` clears all collections in an `afterEach`; they had to move to `beforeEach` or every test after the first would 401 on a dangling token.
+- `afterAll` called `mongoose.connection.close()`, which killed the shared connection for the rest of the file and for `setup.ts`'s own teardown. Connection lifecycle belongs to `tests/setup.ts` alone; no test file should close it.
+
+Two assertions and one missing call were also stale: `enhance-seo` returns `data.productId`, not `data.seo`; product analytics returns the model's `viewCount`/`conversionRate`, not `views`/`conversions`; and `initializeBackgroundJobs()` was imported but never called, so `/admin/jobs/:name/run` looked up an empty job registry and always threw.
 
 - Prefer unit tests with mocked Shopify clients for tenant-safety and failure-path behavior.
 - Treat live Shopify tests as opt-in integration tests requiring safe credentials and isolated stores.
