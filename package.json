@@ -20,7 +20,8 @@
     "type-check": "tsc --noEmit",
     "clean": "rimraf dist",
     "prepare": "husky",
-    "prepush": "npm run generate:spec && git add public/swagger.json"
+    "prepush": "npm run generate:spec && git add public/swagger.json",
+    "lint": "eslint ."
   },
   "dependencies": {
     "@shopify/shopify-api": "^11.14.1",
