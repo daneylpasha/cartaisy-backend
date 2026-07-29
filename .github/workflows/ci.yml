@@ -41,6 +41,7 @@ jobs:
   # Unit and integration tests
   test:
     name: Test Suite
+    timeout-minutes: 20
     runs-on: ubuntu-latest
     
     services:

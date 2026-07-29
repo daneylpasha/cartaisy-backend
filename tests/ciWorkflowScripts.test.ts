@@ -22,7 +22,23 @@ describe('CI workflow scripts', () => {
     expect(workflow).toMatch(/\bnpm run type-check\b/);
     expect(workflow).toMatch(/\bnpm test\b/);
     expect(workflow).toMatch(/\bnpm run build\b/);
-    expect(workflow).toContain('--testPathIgnorePatterns tests/shopify.integration.test.ts');
+  });
+
+  it('does not exclude any suite from the CI Jest run', () => {
+    const workflow = fs.readFileSync(workflowPath, 'utf8');
+
+    // This assertion used to require the opposite: that the workflow *contained*
+    // `--testPathIgnorePatterns tests/shopify.integration.test.ts`. That exclusion
+    // is exactly why that suite was able to rot unnoticed — nothing ran it
+    // anywhere. It was repaired in PR #139 and the exclusion removed, so the
+    // invariant is now inverted: no suite may be skipped in CI.
+    expect(workflow).not.toContain('--testPathIgnorePatterns');
+  });
+
+  it('caps the test job so a hung run cannot burn the default six-hour timeout', () => {
+    const workflow = fs.readFileSync(workflowPath, 'utf8');
+
+    expect(workflow).toMatch(/timeout-minutes:\s+\d+/);
   });
 
   it('does not use unsupported expressions in service image fields', () => {
