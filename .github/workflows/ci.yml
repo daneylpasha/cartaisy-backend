@@ -41,6 +41,7 @@ jobs:
   # Unit and integration tests
   test:
     name: Test Suite
+    timeout-minutes: 20
     runs-on: ubuntu-latest
     
     services:
@@ -95,12 +96,12 @@ jobs:
           EOF
 
       - name: Run tests
-        run: npm test -- --runInBand --watchman=false --testPathIgnorePatterns tests/shopify.integration.test.ts
+        run: npm test -- --runInBand --watchman=false
         env:
           NODE_ENV: test
 
       - name: Generate coverage report
-        run: npm run test:coverage -- --runInBand --watchman=false --testPathIgnorePatterns tests/shopify.integration.test.ts
+        run: npm run test:coverage -- --runInBand --watchman=false
         env:
           NODE_ENV: test
 

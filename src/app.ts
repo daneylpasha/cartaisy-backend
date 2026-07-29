@@ -20,14 +20,20 @@ console.log('Firebase Status:', {
     : 'Push notifications disabled (no credentials) ⚠️'
 });
 
-// Start notification scheduler
-notificationScheduler.start();
-
-// Start image cleanup scheduler
-imageCleanupScheduler.start();
-
-// Start abandoned cart scheduler
-abandonedCartScheduler.start();
+// Start the background schedulers.
+//
+// These run as a side effect of importing this module and nothing can stop
+// them afterwards, so under Jest they keep the process alive after the run
+// finishes: any suite that imports `app` reports "Jest did not exit" and, in
+// CI, would hold the step open until the job timeout. Skipping them under
+// NODE_ENV=test keeps test processes exitable. Jest sets NODE_ENV=test itself,
+// and the CI workflow sets it explicitly, so this covers both. Production and
+// development behaviour is unchanged.
+if (process.env.NODE_ENV !== 'test') {
+  notificationScheduler.start();
+  imageCleanupScheduler.start();
+  abandonedCartScheduler.start();
+}
 
 // Security middleware imports
 import { strictStoreValidation } from './middleware/strictStoreValidation';
