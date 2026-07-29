@@ -1,0 +1,501 @@
+{
+  "src/app.ts": {
+    "@typescript-eslint/no-require-imports": {
+      "count": 3
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    },
+    "object-shorthand": {
+      "count": 1
+    }
+  },
+  "src/authentication.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    },
+    "prefer-const": {
+      "count": 1
+    }
+  },
+  "src/config/deployment.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "src/controllers/admin/abandonedCartController.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "src/controllers/admin/customerManagementController.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 6
+    }
+  },
+  "src/controllers/authController.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "src/controllers/authTsoaController.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    },
+    "object-shorthand": {
+      "count": 1
+    }
+  },
+  "src/controllers/checkoutController.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    },
+    "object-shorthand": {
+      "count": 8
+    },
+    "prefer-const": {
+      "count": 1
+    }
+  },
+  "src/controllers/collectionController.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "src/controllers/customerAddressTsoaController.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "src/controllers/customerAuthController.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    },
+    "prefer-template": {
+      "count": 1
+    }
+  },
+  "src/controllers/customerAuthTsoaController.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "src/controllers/customerOrderController.ts": {
+    "@typescript-eslint/no-require-imports": {
+      "count": 2
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    },
+    "prefer-template": {
+      "count": 1
+    }
+  },
+  "src/controllers/customerProductController.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    },
+    "object-shorthand": {
+      "count": 1
+    }
+  },
+  "src/controllers/customerReviewController.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 3
+    }
+  },
+  "src/controllers/orderController.ts": {
+    "@typescript-eslint/no-require-imports": {
+      "count": 3
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "src/controllers/orderManagementController.ts": {
+    "@typescript-eslint/no-require-imports": {
+      "count": 1
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 3
+    },
+    "object-shorthand": {
+      "count": 3
+    },
+    "prefer-const": {
+      "count": 8
+    }
+  },
+  "src/controllers/paymentMethodsController.ts": {
+    "object-shorthand": {
+      "count": 1
+    },
+    "prefer-const": {
+      "count": 1
+    }
+  },
+  "src/controllers/productController.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "src/controllers/pushNotificationController.ts": {
+    "prefer-template": {
+      "count": 1
+    }
+  },
+  "src/controllers/searchController.ts": {
+    "object-shorthand": {
+      "count": 1
+    }
+  },
+  "src/controllers/securityController.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    },
+    "prefer-template": {
+      "count": 1
+    }
+  },
+  "src/controllers/shopifyOAuthController.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    },
+    "object-shorthand": {
+      "count": 3
+    }
+  },
+  "src/controllers/webhookController.ts": {
+    "no-duplicate-imports": {
+      "count": 1
+    }
+  },
+  "src/controllers/wishlistController.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "src/middleware/auth.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 3
+    },
+    "prefer-const": {
+      "count": 1
+    }
+  },
+  "src/middleware/errorHandler.ts": {
+    "@typescript-eslint/no-require-imports": {
+      "count": 1
+    }
+  },
+  "src/middleware/monitoring.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    },
+    "prefer-template": {
+      "count": 3
+    }
+  },
+  "src/middleware/strictStoreValidation.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "src/middleware/unifiedCartAuth.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    },
+    "object-shorthand": {
+      "count": 2
+    }
+  },
+  "src/middleware/validation.ts": {
+    "no-useless-escape": {
+      "count": 7
+    }
+  },
+  "src/models/CalloutBanner.ts": {
+    "object-shorthand": {
+      "count": 2
+    }
+  },
+  "src/models/CategoryCollectionGrid.ts": {
+    "object-shorthand": {
+      "count": 1
+    }
+  },
+  "src/models/CheckoutSession.ts": {
+    "no-useless-escape": {
+      "count": 2
+    },
+    "object-shorthand": {
+      "count": 8
+    }
+  },
+  "src/models/CollectionShowcase.ts": {
+    "object-shorthand": {
+      "count": 1
+    }
+  },
+  "src/models/CollectionView.ts": {
+    "object-shorthand": {
+      "count": 3
+    }
+  },
+  "src/models/Order.ts": {
+    "no-useless-escape": {
+      "count": 2
+    },
+    "object-shorthand": {
+      "count": 7
+    }
+  },
+  "src/models/PaymentMethod.ts": {
+    "object-shorthand": {
+      "count": 9
+    }
+  },
+  "src/models/Product.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    },
+    "object-shorthand": {
+      "count": 3
+    },
+    "prefer-arrow-callback": {
+      "count": 1
+    },
+    "prefer-template": {
+      "count": 2
+    }
+  },
+  "src/models/Store.ts": {
+    "object-shorthand": {
+      "count": 1
+    }
+  },
+  "src/models/User.ts": {
+    "no-useless-escape": {
+      "count": 2
+    },
+    "object-shorthand": {
+      "count": 7
+    }
+  },
+  "src/routes/adminRoutes.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 4
+    },
+    "no-duplicate-imports": {
+      "count": 2
+    },
+    "prefer-template": {
+      "count": 1
+    }
+  },
+  "src/routes/authRoutes.ts": {
+    "@typescript-eslint/no-require-imports": {
+      "count": 2
+    }
+  },
+  "src/routes/customerRoutes.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 3
+    }
+  },
+  "src/routes/healthRoutes.ts": {
+    "no-duplicate-imports": {
+      "count": 1
+    },
+    "prefer-template": {
+      "count": 3
+    }
+  },
+  "src/routes/metricsRoutes.ts": {
+    "@typescript-eslint/no-require-imports": {
+      "count": 1
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    },
+    "no-duplicate-imports": {
+      "count": 1
+    }
+  },
+  "src/routes/productRoutes.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "src/routes/shopifyRoutes.ts": {
+    "@typescript-eslint/no-require-imports": {
+      "count": 1
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    },
+    "no-duplicate-imports": {
+      "count": 1
+    }
+  },
+  "src/scripts/bulkUpdateProductShipping.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 3
+    }
+  },
+  "src/scripts/checkShippingZones.ts": {
+    "prefer-template": {
+      "count": 1
+    }
+  },
+  "src/scripts/verifyCustomerMigration.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    },
+    "prefer-template": {
+      "count": 1
+    }
+  },
+  "src/server.ts": {
+    "no-empty": {
+      "count": 2
+    }
+  },
+  "src/services/abandonedCartService.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "src/services/backgroundJobService.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    }
+  },
+  "src/services/emailService.ts": {
+    "prefer-template": {
+      "count": 1
+    }
+  },
+  "src/services/firebaseNotificationService.ts": {
+    "@typescript-eslint/no-require-imports": {
+      "count": 2
+    },
+    "object-shorthand": {
+      "count": 1
+    },
+    "prefer-template": {
+      "count": 1
+    }
+  },
+  "src/services/inventoryService.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "src/services/notificationScheduler.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "src/services/orderService.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 4
+    }
+  },
+  "src/services/productEnhancementService.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 9
+    },
+    "prefer-const": {
+      "count": 1
+    },
+    "prefer-template": {
+      "count": 5
+    }
+  },
+  "src/services/productEnrichmentService.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "src/services/recommendationsService.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    }
+  },
+  "src/services/sessionTrackingService.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "src/services/shopifyOAuthService.ts": {
+    "object-shorthand": {
+      "count": 5
+    }
+  },
+  "src/services/shopifyService.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 13
+    },
+    "no-useless-escape": {
+      "count": 2
+    },
+    "object-shorthand": {
+      "count": 1
+    },
+    "prefer-const": {
+      "count": 5
+    },
+    "prefer-template": {
+      "count": 1
+    }
+  },
+  "src/services/shopifyStorefrontService.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "src/services/syncService.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    },
+    "prefer-template": {
+      "count": 1
+    }
+  },
+  "src/types/index.ts": {
+    "@typescript-eslint/no-empty-object-type": {
+      "count": 1
+    }
+  },
+  "src/utils/constants.ts": {
+    "no-useless-escape": {
+      "count": 2
+    }
+  },
+  "src/utils/currency.ts": {
+    "no-useless-escape": {
+      "count": 1
+    }
+  },
+  "src/utils/errors.ts": {
+    "@typescript-eslint/no-unsafe-function-type": {
+      "count": 1
+    }
+  },
+  "src/utils/shopifyTransformers.ts": {
+    "prefer-const": {
+      "count": 1
+    }
+  },
+  "tests/shopify.integration.test.ts": {
+    "@typescript-eslint/no-require-imports": {
+      "count": 4
+    }
+  },
+  "tests/storeOwnershipContext.test.ts": {
+    "no-duplicate-imports": {
+      "count": 1
+    }
+  }
+}
