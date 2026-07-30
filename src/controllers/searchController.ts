@@ -793,7 +793,7 @@ export class SearchController extends Controller {
           metadata: {
             productsCount: products.length,
             collectionsCount: collections.length,
-            hasFilters: hasFilters
+            hasFilters
           }
         }
       };

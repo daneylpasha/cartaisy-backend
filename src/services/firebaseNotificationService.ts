@@ -314,9 +314,9 @@ export class FirebaseNotificationService {
           // Add to failed tokens (cap at 50 to avoid huge documents)
           if (result.failedTokens.length < 50) {
             result.failedTokens.push({
-              token: validTokens[idx].substring(0, 30) + '...',
+              token: `${validTokens[idx].substring(0, 30)  }...`,
               error: errorMessage,
-              errorCode: errorCode,
+              errorCode,
             });
           }
 

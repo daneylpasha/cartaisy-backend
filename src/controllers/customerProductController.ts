@@ -316,7 +316,7 @@ export const trackProductView = async (req: CustomerRequest, res: Response): Pro
         reviewsViewed: false
       },
       viewContext: from,
-      searchQuery: searchQuery,
+      searchQuery,
       categoryId: categoryId ? new mongoose.Types.ObjectId(categoryId) : undefined
     });
 

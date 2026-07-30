@@ -1233,7 +1233,7 @@ export const getNotificationDiagnostic = async (
           if (sampleTokens.length < 5) {
             sampleTokens.push({
               email: customer.email,
-              token: dt.token.substring(0, 40) + '...',
+              token: `${dt.token.substring(0, 40)  }...`,
               type: isExpo ? 'EXPO' : 'NATIVE_FCM',
               platform: dt.platform,
             });

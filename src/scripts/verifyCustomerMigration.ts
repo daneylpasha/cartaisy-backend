@@ -207,7 +207,7 @@ async function verifyMigration() {
   // =============================================================================
   // SUMMARY
   // =============================================================================
-  console.log('\n\n' + '='.repeat(60));
+  console.log(`\n\n${  '='.repeat(60)}`);
   console.log('VERIFICATION COMPLETE');
   console.log('='.repeat(60));
   console.log(`

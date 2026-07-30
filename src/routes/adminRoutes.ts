@@ -781,7 +781,7 @@ router.put('/help-requests/:orderId/:helpRequestId', ...ownedStoreChainOptional,
     if (status && !validStatuses.includes(status)) {
       return res.status(400).json({
         success: false,
-        error: 'Invalid status. Must be one of: ' + validStatuses.join(', ')
+        error: `Invalid status. Must be one of: ${  validStatuses.join(', ')}`
       });
     }
 

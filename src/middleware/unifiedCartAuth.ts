@@ -256,7 +256,7 @@ export const authenticateCart = async (
       req.cartUser = {
         userType: 'guest',
         userId: session.sessionId,
-        storeId: storeId,
+        storeId,
         guestSession: session,
       };
       req.storeId = storeId;
@@ -362,7 +362,7 @@ export const optionalCartAuth = async (
         req.cartUser = {
           userType: 'guest',
           userId: session.sessionId,
-          storeId: storeId,
+          storeId,
           guestSession: session,
         };
         req.storeId = storeId;

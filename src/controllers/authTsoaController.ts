@@ -474,7 +474,7 @@ export class AuthController extends Controller {
         fullName: request.user.name || '',
         email: request.user.email,
         phoneNumber: request.user.phone || '',
-        country: country,
+        country,
         gender: request.user.profile?.gender || '',
         dateOfBirth: request.user.profile?.dateOfBirth ? new Date(request.user.profile.dateOfBirth).toISOString() : '',
         defaultAddress: defaultAddress || null,

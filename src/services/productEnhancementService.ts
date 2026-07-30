@@ -187,7 +187,7 @@ export const generateProductRecommendations = async (
       throw new Error('Product not found');
     }
 
-    let recommendations = [];
+    const recommendations = [];
 
     // 1. Collaborative Filtering (if user provided)
     if (userId) {
@@ -544,7 +544,7 @@ function generateShortDescription(bodyHtml?: string, title?: string): string {
   
   // Strip HTML and create short description
   const plainText = bodyHtml.replace(/<[^>]*>/g, '').trim();
-  return plainText.length > 100 ? plainText.substring(0, 97) + '...' : plainText;
+  return plainText.length > 100 ? `${plainText.substring(0, 97)  }...` : plainText;
 }
 
 function generateProductBadges(shopifyProduct: any): IProductBadge[] {
@@ -619,15 +619,15 @@ function optimizeSEOTitle(title: string, productType?: string): string {
     seoTitle = `${title} - ${productType}`;
   }
   
-  return seoTitle.length > 60 ? seoTitle.substring(0, 57) + '...' : seoTitle;
+  return seoTitle.length > 60 ? `${seoTitle.substring(0, 57)  }...` : seoTitle;
 }
 
 function generateSEODescription(shopifyProduct: any): string {
   const description = shopifyProduct.body_html?.replace(/<[^>]*>/g, '') || '';
-  const baseDesc = description.length > 155 ? description.substring(0, 152) + '...' : description;
+  const baseDesc = description.length > 155 ? `${description.substring(0, 152)  }...` : description;
   
   // Add call to action
-  return baseDesc + (baseDesc ? ' ' : '') + 'Shop now with fast shipping!';
+  return `${baseDesc + (baseDesc ? ' ' : '')  }Shop now with fast shipping!`;
 }
 
 function generateSEOKeywords(shopifyProduct: any): string[] {
@@ -683,7 +683,7 @@ function generateStructuredData(shopifyProduct: any): any {
 
 function generateSocialDescription(shopifyProduct: any): string {
   const desc = shopifyProduct.body_html?.replace(/<[^>]*>/g, '') || shopifyProduct.title;
-  return desc.length > 200 ? desc.substring(0, 197) + '...' : desc;
+  return desc.length > 200 ? `${desc.substring(0, 197)  }...` : desc;
 }
 
 function processImageGallery(images: any[]): any[] {

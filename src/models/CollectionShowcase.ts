@@ -64,7 +64,7 @@ const CollectionShowcaseSchema: Schema = new Schema(
       type: [ShowcaseCollectionItemSchema],
       required: true,
       validate: {
-        validator: function(v: IShowcaseCollectionItem[]) {
+        validator(v: IShowcaseCollectionItem[]) {
           return v && v.length > 0;
         },
         message: 'At least one collection is required'

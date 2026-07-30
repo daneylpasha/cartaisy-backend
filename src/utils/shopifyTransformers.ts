@@ -26,7 +26,7 @@ export function transformShopifyProduct(shopifyProduct: ShopifyProduct): Omit<Pr
 
   // Calculate total and available quantity from variants
   let availableQuantity = 0;
-  let totalQuantity = shopifyProduct.totalInventory || 0;
+  const totalQuantity = shopifyProduct.totalInventory || 0;
 
   if (shopifyProduct.variants?.edges) {
     shopifyProduct.variants.edges.forEach(edge => {

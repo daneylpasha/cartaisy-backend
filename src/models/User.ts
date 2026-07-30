@@ -148,7 +148,7 @@ const ProfileSchema = new Schema(
     avatar: {
       type: String,
       validate: {
-        validator: function (url: string): boolean {
+        validator (url: string): boolean {
           if (!url) return true; // Allow empty avatar
           return /^https?:\/\/.+\.(jpg|jpeg|png|gif|webp)$/i.test(url);
         },
@@ -158,7 +158,7 @@ const ProfileSchema = new Schema(
     dateOfBirth: {
       type: Date,
       validate: {
-        validator: function (date: Date): boolean {
+        validator (date: Date): boolean {
           if (!date) return true; // Allow null date
           return date < new Date() && date > new Date('1900-01-01');
         },
@@ -173,7 +173,7 @@ const ProfileSchema = new Schema(
       type: [String],
       default: [],
       validate: {
-        validator: function (interests: string[]): boolean {
+        validator (interests: string[]): boolean {
           return interests.length <= 20; // Limit to 20 interests
         },
         message: 'Cannot have more than 20 interests',
@@ -266,7 +266,7 @@ const UserSchema = new Schema<IUser>(
       trim: true,
       index: true,
       validate: {
-        validator: function (email: string): boolean {
+        validator (email: string): boolean {
           const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
           return emailRegex.test(email);
         },
@@ -283,7 +283,7 @@ const UserSchema = new Schema<IUser>(
       type: String,
       trim: true,
       validate: {
-        validator: function (phone: string): boolean {
+        validator (phone: string): boolean {
           if (!phone) return true; // Allow empty phone
           return /^\+?[\d\s\-\(\)]{10,}$/.test(phone);
         },
@@ -336,7 +336,7 @@ const UserSchema = new Schema<IUser>(
       type: [AddressSchema],
       default: [],
       validate: {
-        validator: function (addresses: IAddress[]): boolean {
+        validator (addresses: IAddress[]): boolean {
           return addresses.length <= 10; // Limit to 10 addresses
         },
         message: 'Cannot have more than 10 addresses',
@@ -385,7 +385,7 @@ const UserSchema = new Schema<IUser>(
     strict: false, // Allow dynamic fields not defined in schema
     toJSON: {
       virtuals: true,
-      transform: function (_doc, ret): any {
+      transform (_doc, ret): any {
         delete (ret as any).password;
         delete (ret as any).passwordResetToken;
         delete (ret as any).passwordResetExpires;

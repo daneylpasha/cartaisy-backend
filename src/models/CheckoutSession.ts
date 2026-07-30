@@ -174,7 +174,7 @@ const CheckoutSessionSchema = new Schema<ICheckoutSession>(
       required: [true, 'Shopify cart ID is required'],
       trim: true,
       validate: {
-        validator: function (id: string): boolean {
+        validator (id: string): boolean {
           // Shopify cart IDs start with 'gid://shopify/Cart/'
           return id.startsWith('gid://shopify/Cart/');
         },
@@ -196,7 +196,7 @@ const CheckoutSessionSchema = new Schema<ICheckoutSession>(
       type: String,
       trim: true,
       validate: {
-        validator: function (phone: string): boolean {
+        validator (phone: string): boolean {
           if (!phone) return true; // Optional field
           return /^\+?[\d\s\-\(\)]{10,}$/.test(phone);
         },
@@ -266,7 +266,7 @@ const CheckoutSessionSchema = new Schema<ICheckoutSession>(
       type: String,
       trim: true,
       validate: {
-        validator: function (id: string): boolean {
+        validator (id: string): boolean {
           if (!id) return true; // Optional field
           return id.startsWith('gid://shopify/DraftOrder/');
         },
@@ -279,7 +279,7 @@ const CheckoutSessionSchema = new Schema<ICheckoutSession>(
       type: String,
       trim: true,
       validate: {
-        validator: function (id: string): boolean {
+        validator (id: string): boolean {
           if (!id) return true; // Optional field
           return /^pi_[a-zA-Z0-9]+$/.test(id);
         },
@@ -315,7 +315,7 @@ const CheckoutSessionSchema = new Schema<ICheckoutSession>(
       type: String,
       trim: true,
       validate: {
-        validator: function (id: string): boolean {
+        validator (id: string): boolean {
           if (!id) return true; // Optional field
           return id.startsWith('gid://shopify/Order/');
         },
@@ -343,7 +343,7 @@ const CheckoutSessionSchema = new Schema<ICheckoutSession>(
       type: [Number],
       default: [],
       validate: {
-        validator: function (steps: number[]): boolean {
+        validator (steps: number[]): boolean {
           return steps.every((step) => step >= 1 && step <= 3);
         },
         message: 'Completed steps must contain only values 1, 2, or 3',
@@ -355,7 +355,7 @@ const CheckoutSessionSchema = new Schema<ICheckoutSession>(
       type: String,
       trim: true,
       validate: {
-        validator: function (ip: string): boolean {
+        validator (ip: string): boolean {
           if (!ip) return true;
           // Basic IPv4/IPv6 validation
           return /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$|^[0-9a-fA-F:]+$/.test(ip);
@@ -385,7 +385,7 @@ const CheckoutSessionSchema = new Schema<ICheckoutSession>(
     timestamps: true,
     toJSON: {
       virtuals: true,
-      transform: function (_doc, ret): any {
+      transform (_doc, ret): any {
         delete (ret as any).__v;
         // Mask sensitive data in API responses
         if (ret.stripeClientSecret) {

@@ -223,7 +223,7 @@ CollectionViewSchema.statics.getCollectionViews = function(
   endDate: Date
 ) {
   return this.countDocuments({
-    collectionId: collectionId,
+    collectionId,
     viewedAt: { $gte: startDate, $lte: endDate }
   });
 };
@@ -236,7 +236,7 @@ CollectionViewSchema.statics.getUniqueViewers = function(
   return this.aggregate([
     {
       $match: {
-        collectionId: collectionId,
+        collectionId,
         viewedAt: { $gte: startDate, $lte: endDate }
       }
     },
@@ -262,7 +262,7 @@ CollectionViewSchema.statics.getViewsByPlatform = function(
   return this.aggregate([
     {
       $match: {
-        collectionId: collectionId,
+        collectionId,
         viewedAt: { $gte: startDate, $lte: endDate }
       }
     },
