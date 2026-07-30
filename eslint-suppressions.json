@@ -291,7 +291,7 @@
   },
   "src/services/shopifyService.ts": {
     "@typescript-eslint/no-unused-vars": {
-      "count": 13
+      "count": 9
     },
     "no-useless-escape": {
       "count": 2
