@@ -46,7 +46,7 @@ export const authenticate = async (
     }
 
     // Find user by ID from token payload - check both User and Customer models
-    let user = await User.findById(decoded.userId).select('-password');
+    const user = await User.findById(decoded.userId).select('-password');
 
     if (!user) {
       // Not found in User model, try Customer model (mobile app users)

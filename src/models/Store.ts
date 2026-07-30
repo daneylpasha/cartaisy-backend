@@ -398,7 +398,7 @@ const StoreSchema = new Schema<IStore>(
   {
     timestamps: true,
     toJSON: {
-      transform: function (_doc, ret) {
+      transform (_doc, ret) {
         delete (ret as any).__v;
         // Don't include accessToken in JSON responses
         if (ret.shopify) {

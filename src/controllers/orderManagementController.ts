@@ -465,9 +465,9 @@ export const exportOrders = async (req: AuthenticatedRequest, res: Response): Pr
     const csv = await OrderExportService.exportToCSV(storeId, {
       startDate: startDate ? new Date(startDate) : undefined,
       endDate: endDate ? new Date(endDate) : undefined,
-      status: status,
-      paymentStatus: paymentStatus,
-      fulfillmentStatus: fulfillmentStatus,
+      status,
+      paymentStatus,
+      fulfillmentStatus,
     });
 
     res.setHeader('Content-Type', 'text/csv');

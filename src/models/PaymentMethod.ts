@@ -62,7 +62,7 @@ const PaymentMethodSchema = new Schema<IPaymentMethod>(
       unique: true,
       trim: true,
       validate: {
-        validator: function (id: string): boolean {
+        validator (id: string): boolean {
           // Stripe payment method IDs start with 'pm_'
           return /^pm_[a-zA-Z0-9]+$/.test(id);
         },
@@ -73,7 +73,7 @@ const PaymentMethodSchema = new Schema<IPaymentMethod>(
       type: String,
       trim: true,
       validate: {
-        validator: function (id: string): boolean {
+        validator (id: string): boolean {
           if (!id) return true; // Optional field
           // Stripe customer IDs start with 'cus_'
           return /^cus_[a-zA-Z0-9]+$/.test(id);
@@ -97,17 +97,17 @@ const PaymentMethodSchema = new Schema<IPaymentMethod>(
           values: ['visa', 'mastercard', 'amex', 'discover', 'diners', 'jcb', 'unionpay', 'unknown'],
           message: 'Invalid card brand',
         },
-        required: function (this: IPaymentMethod): boolean {
+        required (this: IPaymentMethod): boolean {
           return this.type === 'card';
         },
       },
       last4: {
         type: String,
-        required: function (this: IPaymentMethod): boolean {
+        required (this: IPaymentMethod): boolean {
           return this.type === 'card';
         },
         validate: {
-          validator: function (last4: string): boolean {
+          validator (last4: string): boolean {
             if (!last4) return true;
             return /^\d{4}$/.test(last4);
           },
@@ -116,7 +116,7 @@ const PaymentMethodSchema = new Schema<IPaymentMethod>(
       },
       expMonth: {
         type: Number,
-        required: function (this: IPaymentMethod): boolean {
+        required (this: IPaymentMethod): boolean {
           return this.type === 'card';
         },
         min: [1, 'Expiry month must be between 1 and 12'],
@@ -124,11 +124,11 @@ const PaymentMethodSchema = new Schema<IPaymentMethod>(
       },
       expYear: {
         type: Number,
-        required: function (this: IPaymentMethod): boolean {
+        required (this: IPaymentMethod): boolean {
           return this.type === 'card';
         },
         validate: {
-          validator: function (year: number): boolean {
+          validator (year: number): boolean {
             if (!year) return true;
             const currentYear = new Date().getFullYear();
             // Accept years from current year to 20 years in the future
@@ -204,7 +204,7 @@ const PaymentMethodSchema = new Schema<IPaymentMethod>(
     timestamps: true,
     toJSON: {
       virtuals: true,
-      transform: function (_doc, ret): any {
+      transform (_doc, ret): any {
         delete (ret as any).__v;
         // Never expose full payment method ID in API responses (security)
         if (ret.stripePaymentMethodId) {

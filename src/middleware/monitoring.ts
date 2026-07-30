@@ -294,9 +294,9 @@ export const memoryMonitor = (): void => {
     if (memoryUsagePercent > 90) {
       console.warn(`High memory usage detected: ${Math.round(memoryUsagePercent)}%`);
       console.warn('Memory details:', {
-        heapUsed: Math.round(usage.heapUsed / 1024 / 1024) + 'MB',
-        heapTotal: Math.round(usage.heapTotal / 1024 / 1024) + 'MB',
-        external: Math.round(usage.external / 1024 / 1024) + 'MB'
+        heapUsed: `${Math.round(usage.heapUsed / 1024 / 1024)  }MB`,
+        heapTotal: `${Math.round(usage.heapTotal / 1024 / 1024)  }MB`,
+        external: `${Math.round(usage.external / 1024 / 1024)  }MB`
       });
     }
   };

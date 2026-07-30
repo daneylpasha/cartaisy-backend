@@ -75,7 +75,7 @@ interface ShopifySession {
   accessToken: string;
 }
 
-let currentSession: ShopifySession | null = null;
+const currentSession: ShopifySession | null = null;
 
 /**
  * Get Shopify session for API calls
@@ -92,7 +92,7 @@ export const getShopifySession = () => {
 
   return {
     shop: shopName,
-    accessToken: accessToken
+    accessToken
   };
 };
 
@@ -100,7 +100,7 @@ export const getShopifySession = () => {
  * Legacy client getter - simplified for deployment
  */
 // Store-specific Shopify client cache
-let cachedClient: { storeId: string; client: AxiosInstance } | null = null;
+const cachedClient: { storeId: string; client: AxiosInstance } | null = null;
 
 /**
  * Get Shopify Admin API client for a specific store
@@ -406,7 +406,7 @@ export const syncProduct = async (productId: string, shopifyProduct?: IShopifyPr
     }
 
     // Check if product already exists in this store
-    let existingProduct = await Product.findOne({ storeId, shopifyProductId: productId });
+    const existingProduct = await Product.findOne({ storeId, shopifyProductId: productId });
 
     const productData: any = {
       storeId,
@@ -493,7 +493,7 @@ export const syncProduct = async (productId: string, shopifyProduct?: IShopifyPr
         priority: 1,
         isFeatured: false,
         shortDescription: shopifyProduct.body_html ? 
-          shopifyProduct.body_html.replace(/<[^>]*>/g, '').substring(0, 100) + '...' : ''
+          `${shopifyProduct.body_html.replace(/<[^>]*>/g, '').substring(0, 100)  }...` : ''
       },
       
       // Analytics (preserve existing or initialize)
@@ -561,7 +561,7 @@ export const syncCustomers = async (storeId: string): Promise<SyncResult> => {
           // Check if customer already exists within the synced store only;
           // the same email may exist in other stores and must never be
           // cross-linked
-          let existingUser = await User.findOne({ storeId, email: shopifyCustomer.email });
+          const existingUser = await User.findOne({ storeId, email: shopifyCustomer.email });
 
           const customerData = {
             storeId,
@@ -679,7 +679,7 @@ export const syncOrders = async (daysBack: number = 30, storeId?: string): Promi
           // Check if order already exists within the synced store only; the
           // same Shopify order ID may exist in other stores (compound index
           // { storeId, shopifyOrderId }) and must never collide
-          let existingOrder = await Order.findOne({ storeId, shopifyOrderId: shopifyOrder.id.toString() });
+          const existingOrder = await Order.findOne({ storeId, shopifyOrderId: shopifyOrder.id.toString() });
 
           if (!existingOrder) {
             // Find user by email within the synced store only

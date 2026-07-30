@@ -40,8 +40,8 @@ export const initiateOAuth = async (req: AuthenticatedRequest, res: Response) =>
     res.status(200).json({
       success: true,
       data: {
-        authorizationUrl: authorizationUrl,
-        state: state,
+        authorizationUrl,
+        state,
       },
     });
   } catch (error: any) {
@@ -251,7 +251,7 @@ export const getCollections = async (req: AuthenticatedRequest, res: Response) =
     res.status(200).json({
       success: true,
       data: {
-        collections: collections,
+        collections,
         count: collections.length,
       },
     });

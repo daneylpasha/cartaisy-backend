@@ -201,7 +201,7 @@ const ProductSchema = new Schema<IProduct>({
     type: [ProductImageSchema], 
     required: [true, 'At least one product image is required'],
     validate: {
-      validator: function(images: IProductImage[]): boolean {
+      validator(images: IProductImage[]): boolean {
         return images.length > 0;
       },
       message: 'At least one product image is required'
@@ -213,7 +213,7 @@ const ProductSchema = new Schema<IProduct>({
     type: [ProductVariantSchema], 
     required: [true, 'At least one product variant is required'],
     validate: {
-      validator: function(variants: IProductVariant[]): boolean {
+      validator(variants: IProductVariant[]): boolean {
         return variants.length > 0;
       },
       message: 'At least one product variant is required'
@@ -250,7 +250,7 @@ const ProductSchema = new Schema<IProduct>({
   timestamps: true,
   toJSON: { 
     virtuals: true,
-    transform: function(_doc, ret): any {
+    transform(_doc, ret): any {
       delete ret.__v;
       return ret;
     }
@@ -444,14 +444,14 @@ ProductSchema.pre('save', function(this: IProduct, next): void {
     }
     
     if (!this.mobileDisplay.shortDescription && this.description) {
-      this.mobileDisplay.shortDescription = this.description
+      this.mobileDisplay.shortDescription = `${this.description
         .replace(/<[^>]*>/g, '')
-        .substring(0, 200) + '...';
+        .substring(0, 200)  }...`;
     }
     
     if (!this.seo.title) {
       this.seo.title = this.title.length > 60 ? 
-        this.title.substring(0, 57) + '...' : 
+        `${this.title.substring(0, 57)  }...` : 
         this.title;
     }
   }
@@ -462,7 +462,7 @@ ProductSchema.pre('save', function(this: IProduct, next): void {
 /**
  * Pre-find middleware to populate commonly needed fields
  */
-ProductSchema.pre(['find', 'findOne', 'findOneAndUpdate'], function(): void {
+ProductSchema.pre(['find', 'findOne', 'findOneAndUpdate'], (): void => {
   // Add any common population logic here
 });
 

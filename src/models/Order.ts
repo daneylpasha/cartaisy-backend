@@ -67,7 +67,7 @@ const OrderLineItemSchema = new Schema({
   image: {
     type: String,
     validate: {
-      validator: function(url: string): boolean {
+      validator(url: string): boolean {
         if (!url) return true; // Allow empty image
         // Allow URLs with query parameters (e.g., ?v=123)
         return /^https?:\/\/.+\.(jpg|jpeg|png|gif|webp)(\?.*)?$/i.test(url) ||
@@ -161,7 +161,7 @@ const OrderAddressSchema = new Schema({
     type: String,
     trim: true,
     validate: {
-      validator: function(this: any, phone: string): boolean {
+      validator(this: any, phone: string): boolean {
         if (!phone) return true; // Allow empty phone
         // Webhook-sourced orders carry a phone Shopify already accepted; don't
         // re-impose the strict local format on it (issue #126)
@@ -199,7 +199,7 @@ const OrderShippingSchema = new Schema({
   trackingUrl: { 
     type: String,
     validate: {
-      validator: function(url: string): boolean {
+      validator(url: string): boolean {
         if (!url) return true; // Allow empty URL
         return /^https?:\/\/.+/.test(url);
       },
@@ -401,7 +401,7 @@ const ReturnExchangeSchema = new Schema({
     type: [ReturnItemSchema],
     required: [true, 'At least one item is required'],
     validate: {
-      validator: function(items: any[]): boolean {
+      validator(items: any[]): boolean {
         return items && items.length > 0;
       },
       message: 'At least one return item is required'
@@ -559,7 +559,7 @@ const OrderSchema = new Schema<IOrder>({
     lowercase: true,
     trim: true,
     validate: {
-      validator: function(email: string): boolean {
+      validator(email: string): boolean {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         return emailRegex.test(email);
       },
@@ -572,7 +572,7 @@ const OrderSchema = new Schema<IOrder>({
     type: [OrderLineItemSchema],
     required: [true, 'At least one line item is required'],
     validate: {
-      validator: function(items: IOrderLineItem[]): boolean {
+      validator(items: IOrderLineItem[]): boolean {
         return items && items.length > 0;
       },
       message: 'At least one line item is required'
@@ -806,7 +806,7 @@ const OrderSchema = new Schema<IOrder>({
   timestamps: true,
   toJSON: { 
     virtuals: true,
-    transform: function(_doc, ret): any {
+    transform(_doc, ret): any {
       delete (ret as any).__v;
       return ret;
     }

@@ -249,7 +249,7 @@ export const syncProductData = async (shopifyProduct: any, existingProduct?: any
       priority: 1,
       isFeatured: false,
       shortDescription: shopifyProduct.body_html ? 
-        shopifyProduct.body_html.replace(/<[^>]*>/g, '').substring(0, 100) + '...' : ''
+        `${shopifyProduct.body_html.replace(/<[^>]*>/g, '').substring(0, 100)  }...` : ''
     },
     
     // Analytics (preserve existing)

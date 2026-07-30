@@ -288,7 +288,7 @@ export class EmailService {
           <div style="color: #6B7280; line-height: 1.6;">
             ${order.shippingAddress?.firstName || ''} ${order.shippingAddress?.lastName || ''}<br>
             ${order.shippingAddress?.address1 || ''}<br>
-            ${order.shippingAddress?.address2 ? order.shippingAddress.address2 + '<br>' : ''}
+            ${order.shippingAddress?.address2 ? `${order.shippingAddress.address2  }<br>` : ''}
             ${order.shippingAddress?.city || ''}, ${order.shippingAddress?.province || ''} ${order.shippingAddress?.zip || ''}<br>
             ${order.shippingAddress?.country || ''}
           </div>

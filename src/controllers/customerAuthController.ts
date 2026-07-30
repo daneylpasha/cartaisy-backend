@@ -427,7 +427,7 @@ export const updateDeviceToken = async (
 
     console.log('📱 [PUSH] Step 1: Received device token registration');
     console.log('📱 [PUSH] Step 1a: Customer ID:', customerId);
-    console.log('📱 [PUSH] Step 1b: Token:', token ? token.substring(0, 40) + '...' : 'MISSING');
+    console.log('📱 [PUSH] Step 1b: Token:', token ? `${token.substring(0, 40)  }...` : 'MISSING');
     console.log('📱 [PUSH] Step 1c: Platform:', platform);
     console.log('📱 [PUSH] Step 1d: Token type:', token?.startsWith('ExponentPushToken') ? 'EXPO (WARNING: will not work with Firebase!)' : 'NATIVE_FCM');
 

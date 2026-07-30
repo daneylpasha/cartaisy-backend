@@ -23,7 +23,7 @@ import stripeService from '../services/stripeService';
  */
 async function findUserOrCustomer(userId: string) {
   // First try User model
-  let user = await User.findById(userId);
+  const user = await User.findById(userId);
   if (user) {
     return {
       _id: user._id,
@@ -46,7 +46,7 @@ async function findUserOrCustomer(userId: string) {
       name: customer.name,
       stripeCustomerId: customer.stripeCustomerId,
       isUser: false,
-      save: async function() {
+      async save() {
         await Customer.findByIdAndUpdate(userId, { stripeCustomerId: this.stripeCustomerId });
       }
     };

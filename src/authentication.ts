@@ -27,7 +27,7 @@ export async function expressAuthentication(
       const userId = decoded.userId || decoded.id;
 
       // First try to find in User model (admin/web users)
-      let user = await User.findById(userId).select('-password');
+      const user = await User.findById(userId).select('-password');
 
       if (user) {
         // Check if user is active

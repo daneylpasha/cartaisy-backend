@@ -33,12 +33,12 @@ const CalloutActionSchema: Schema = new Schema({
   collectionId: {
     type: String,
     trim: true,
-    required: function(this: ICalloutAction) { return this.type === 'collection'; }
+    required(this: ICalloutAction) { return this.type === 'collection'; }
   },
   navigateTo: {
     type: String,
     trim: true,
-    required: function(this: ICalloutAction) { return this.type === 'navigation'; }
+    required(this: ICalloutAction) { return this.type === 'navigation'; }
   }
 }, { _id: false });
 

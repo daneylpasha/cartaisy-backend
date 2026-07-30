@@ -923,7 +923,7 @@ export const createOrderHelpRequest = async (req: CustomerRequest, res: Response
     if (!reason || !validReasons.includes(reason)) {
       res.status(400).json({
         status: 'error',
-        message: 'Valid reason is required. Must be one of: ' + validReasons.join(', ')
+        message: `Valid reason is required. Must be one of: ${  validReasons.join(', ')}`
       });
       return;
     }

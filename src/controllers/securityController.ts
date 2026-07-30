@@ -104,7 +104,7 @@ export const getSecurityAlerts = async (
           serverErrors1h: serverErrors,
           totalRequests1h: totalRequestsLastHour,
           errorRate1h: totalRequestsLastHour > 0
-            ? ((serverErrors / totalRequestsLastHour) * 100).toFixed(2) + '%'
+            ? `${((serverErrors / totalRequestsLastHour) * 100).toFixed(2)  }%`
             : '0%',
         },
         suspiciousIPs: highVolumeIPs.map((ip) => ({

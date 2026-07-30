@@ -135,7 +135,7 @@ async function main() {
     });
   });
 
-  console.log('\n' + '='.repeat(60));
+  console.log(`\n${  '='.repeat(60)}`);
   console.log('\n💡 If you see no countries or no shipping methods, you need to:');
   console.log('   1. Go to Shopify Admin → Settings → Shipping and delivery');
   console.log('   2. Set up shipping zones for the countries you want to ship to');

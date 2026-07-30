@@ -57,7 +57,7 @@ const CategoryCollectionGridSchema: Schema = new Schema(
       type: [CollectionItemSchema],
       required: true,
       validate: {
-        validator: function(v: ICollectionItem[]) {
+        validator(v: ICollectionItem[]) {
           return v && v.length > 0;
         },
         message: 'At least one collection is required'

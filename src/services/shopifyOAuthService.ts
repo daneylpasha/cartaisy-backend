@@ -61,7 +61,7 @@ export const getAuthorizationUrl = (shop: string, state: string): string => {
     client_id: clientId,
     scope: scopes,
     redirect_uri: redirectUri,
-    state: state,
+    state,
   });
 
   return `${baseUrl}?${params.toString()}`;
@@ -95,7 +95,7 @@ export const exchangeCodeForToken = async (
       body: JSON.stringify({
         client_id: clientId,
         client_secret: clientSecret,
-        code: code,
+        code,
       }),
     });
 
@@ -184,7 +184,7 @@ export const getShopInfo = async (
     }
 
     return {
-      shop: shop,
+      shop,
       name: shopData.name || '',
       email: shopData.email || '',
       domain: shopData.primaryDomain?.host || shopData.myshopifyDomain || '',
@@ -697,8 +697,8 @@ export const generateStateToken = (shop: string, storeId?: string): string => {
   // Store state token with expiry
   stateTokens.set(state, {
     createdAt: Date.now(),
-    shop: shop,
-    storeId: storeId,
+    shop,
+    storeId,
   });
 
   // Clean up expired tokens

@@ -26,7 +26,7 @@ const DEFAULT_STORE_CURRENCY = process.env.STORE_CURRENCY || 'USD';
  */
 async function findUserOrCustomer(userId: string) {
   // First try User model
-  let user = await User.findById(userId);
+  const user = await User.findById(userId);
   if (user) {
     return {
       _id: user._id,
@@ -805,7 +805,7 @@ export class CheckoutController extends Controller {
           completedSteps: session.completedSteps,
           paymentMethod: {
             id: stripePaymentMethod.id,
-            displayName: displayName,
+            displayName,
             type: stripePaymentMethod.type,
           },
         },
@@ -882,7 +882,7 @@ export class CheckoutController extends Controller {
           subtotal: currentSubtotal,
           discountAmount: 0,
           tax: currentTax,
-          shippingCost: shippingCost
+          shippingCost
         });
         await session.save();
 
@@ -951,7 +951,7 @@ export class CheckoutController extends Controller {
             },
             pricing: {
               subtotal: currentSubtotal,
-              shippingCost: shippingCost,
+              shippingCost,
               discountAmount: 0,
               couponDiscount: 0,
               tax: currentTax,
@@ -1005,9 +1005,9 @@ export class CheckoutController extends Controller {
       // Update all pricing fields with current Shopify values
       session.updatePricing({
         subtotal: currentSubtotal,
-        discountAmount: discountAmount,
+        discountAmount,
         tax: currentTax,
-        shippingCost: shippingCost
+        shippingCost
       });
 
       await session.save();
@@ -1122,7 +1122,7 @@ export class CheckoutController extends Controller {
         subtotal: currentSubtotal,
         discountAmount: 0,
         tax: currentTax,
-        shippingCost: shippingCost
+        shippingCost
       });
 
       await session.save();
@@ -1308,7 +1308,7 @@ export class CheckoutController extends Controller {
           paymentMethod: paymentMethodData,
           pricing: {
             subtotal: currentSubtotal,
-            shippingCost: shippingCost,
+            shippingCost,
             discountAmount: currentDiscount,
             couponDiscount: currentDiscount,
             tax: currentTax,
@@ -1836,7 +1836,7 @@ export class CheckoutController extends Controller {
         totalPrice: session.grandTotal,
         currency: session.currency,
         paymentMethod: 'stripe',
-        paymentMethodType: paymentMethodType,
+        paymentMethodType,
         financial: {
           status: 'paid',
           method: 'stripe',

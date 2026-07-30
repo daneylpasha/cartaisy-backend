@@ -49,7 +49,7 @@ const app: Application = express();
 app.use(helmet()); // Adds security headers
 // CORS: Use function to allow all origins (required for React Native)
 app.use(cors({
-  origin: function (origin, callback) {
+  origin (origin, callback) {
     // Allow all origins (mobile apps don't have fixed origin)
     callback(null, true);
   },
