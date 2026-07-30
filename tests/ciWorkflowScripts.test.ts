@@ -20,6 +20,7 @@ describe('CI workflow scripts', () => {
     const workflow = fs.readFileSync(workflowPath, 'utf8');
 
     expect(workflow).toMatch(/\bnpm run type-check\b/);
+    expect(workflow).toMatch(/\bnpm run lint\b/);
     expect(workflow).toMatch(/\bnpm test\b/);
     expect(workflow).toMatch(/\bnpm run build\b/);
   });
