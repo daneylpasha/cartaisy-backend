@@ -1,4 +1,3 @@
-import { shopifyApi, ApiVersion } from '@shopify/shopify-api';
 import axios, { AxiosInstance } from 'axios';
 import { tenantConfig } from '../config/tenant';
 import Product from '../models/Product';
@@ -59,24 +58,6 @@ interface InventoryLevelsResponse {
   variants: InventoryLevel[];
 }
 
-// Initialize Shopify API - commented out to fix runtime error
-// const shopify = shopifyApi({
-//   apiKey: process.env.SHOPIFY_API_KEY || '',
-//   apiSecretKey: process.env.SHOPIFY_API_SECRET || '',
-//   scopes: ['read_products', 'write_products', 'read_orders', 'write_orders'],
-//   hostName: process.env.SHOPIFY_APP_URL || '',
-//   apiVersion: ApiVersion.October23,
-//   isEmbeddedApp: false
-// });
-
-// Shopify REST client
-interface ShopifySession {
-  shop: string;
-  accessToken: string;
-}
-
-const currentSession: ShopifySession | null = null;
-
 /**
  * Get Shopify session for API calls
  */
@@ -95,12 +76,6 @@ export const getShopifySession = () => {
     accessToken
   };
 };
-
-/**
- * Legacy client getter - simplified for deployment
- */
-// Store-specific Shopify client cache
-const cachedClient: { storeId: string; client: AxiosInstance } | null = null;
 
 /**
  * Get Shopify Admin API client for a specific store
