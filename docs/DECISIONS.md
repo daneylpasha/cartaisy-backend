@@ -219,6 +219,14 @@ Known gap: exact original decision dates are not known for most entries. Use "Da
 - Impact: No agent may follow `docs/CLIENT-ONBOARDING.md` as-is. A docs-only ticket rewrites or stubs it; until that lands, this entry is the authoritative warning. The rewrite must not introduce new onboarding behavior — it documents the flow already decided here.
 - Related docs: dashboard repo `docs/DASHBOARD_ONBOARDING_FLOW.md`, mobile repo `docs/MOBILE_MERCHANT_PROVISIONING_RUNBOOK.md`, `docs/cartaisy/ROADMAP.md`. Decided by Daniyal, 2026-07-23.
 
+### Firebase projects are per-merchant and Cartaisy-managed
+
+- Date: 2026-07-31.
+- Decision: Reaffirms the 2026-07-17 per-merchant Firebase decision and settles its management model. Every merchant app gets one dedicated Firebase project (never an app entry inside a shared Cartaisy project), and all merchant Firebase projects are created and administered centrally under Cartaisy's Google account — mirroring the Cartaisy-managed Expo organization model — with a standard naming convention (e.g. `cartaisy-<merchant-slug>`). Merchants never need their own Firebase billing account: push (FCM), Analytics, and Crashlytics run on the free Spark tier. A merchant who asks for visibility receives read-only IAM access to their own project only. Offboarding transfers ownership of the merchant's Firebase project to the merchant's Google account, alongside the EAS keystore handover.
+- Reason: Firebase IAM is project-scoped, so a shared project cannot grant a merchant access to only their app's data and would mix push tokens, analytics audiences, and crash data across tenants, contradicting the tenancy model. Per-merchant projects give a blast radius of one merchant, clean churn (delete one project deletes that merchant's data), and clean takeover (ownership transfer). The scale cost is Google Cloud's project-creation quota (defaults in the dozens; raised by routine request) — a paperwork step, not an architecture limit — and the runbook's planned Firebase Management API automation removes the per-project manual overhead.
+- Impact: Sample and real merchants alike get a dedicated project (the Acme Outfitters throwaway project was policy-compliant). Provisioning automation targets the Firebase Management API under Cartaisy's account. Backend Phase 5 per-store Firebase Admin credential resolution maps one-to-one to per-merchant projects. Request a GCP project-quota increase before onboarding volume requires it. The mobile provisioning runbook's Step 4 gains the management-model, access-grant, and offboarding notes (follow-up docs ticket in the mobile repo).
+- Related docs: mobile repo `docs/MOBILE_MERCHANT_PROVISIONING_RUNBOOK.md` (Step 4), `docs/cartaisy/ROADMAP.md` (Phase 5), `docs/cartaisy/TENANCY_MODEL.md`. Decided by Daniyal, 2026-07-31.
+
 ## Related docs/issues
 
 - GitHub issue: #52.
