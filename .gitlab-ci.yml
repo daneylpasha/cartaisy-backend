@@ -75,8 +75,12 @@ test:unit:
     JWT_SECRET: "test-jwt-secret"
   script:
     - npm ci --cache .npm --prefer-offline
-    - npm run test:unit
-    - npm run test:coverage
+    # `npm run test:coverage` (jest --coverage, no path filter) would re-pull
+    # in tests/shopify.integration.test.ts here, defeating the point of a
+    # dedicated unit job — forward --coverage onto the already-scoped
+    # test:unit invocation instead of running coverage unrestricted.
+    # Caught in review (Greptile + Codex) on PR #149.
+    - npm run test:unit -- --coverage
   coverage: '/Lines\s*:\s*(\d+\.\d+)%/'
   artifacts:
     reports:

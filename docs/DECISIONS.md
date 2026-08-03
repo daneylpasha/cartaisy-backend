@@ -227,6 +227,14 @@ Known gap: exact original decision dates are not known for most entries. Use "Da
 - Impact: Sample and real merchants alike get a dedicated project (the Acme Outfitters throwaway project was policy-compliant). Provisioning automation targets the Firebase Management API under Cartaisy's account. Backend Phase 5 per-store Firebase Admin credential resolution maps one-to-one to per-merchant projects. Request a GCP project-quota increase before onboarding volume requires it. The mobile provisioning runbook's Step 4 gains the management-model, access-grant, and offboarding notes (follow-up docs ticket in the mobile repo).
 - Related docs: mobile repo `docs/MOBILE_MERCHANT_PROVISIONING_RUNBOOK.md` (Step 4), `docs/cartaisy/ROADMAP.md` (Phase 5), `docs/cartaisy/TENANCY_MODEL.md`. Decided by Daniyal, 2026-07-31.
 
+### `no-console` lint rule stays at `warn`, not escalated to a hard CI gate
+
+- Date: 2026-08-03.
+- Decision: `no-console` stays at `warn` in `eslint.config.mjs`, not escalated to a hard CI-blocking error.
+- Reason: 1,479 existing warnings across the backend were judged not worth blocking work over at this time.
+- Impact: No CI behavior change today. Revisit if real console output starts leaking into production logs or becomes a recurring complaint.
+- Related docs: `eslint.config.mjs`. Decided by Daniyal, 2026-08-03.
+
 ## Related docs/issues
 
 - GitHub issue: #52.
