@@ -218,6 +218,29 @@ describe('updateStoreBranding', () => {
     expect(mockedStore.findByIdAndUpdate).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['a bare number', 42],
+    ['a bare boolean', false],
+    ['a bare string', 'hello'],
+    ['a null body', null],
+  ])('400s "No valid fields provided for update" on a primitive body (%s), instead of 500ing', async (_label, primitiveBody) => {
+    const res = createResponse();
+
+    await updateStoreBranding(createRequest({ storeId }, primitiveBody), res);
+
+    // Regression guard: `'primaryColor' in req.body` throws a TypeError
+    // when req.body isn't an object, which previously reached this
+    // function's catch block and 500'd instead of the same 400 a body
+    // with no valid fields already gets. Caught in review (Greptile) on
+    // PR #148.
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({
+      success: false,
+      error: 'No valid fields provided for update',
+    });
+    expect(mockedStore.findByIdAndUpdate).not.toHaveBeenCalled();
+  });
+
   it('combines a set on one field with a clear on the other in a single update', async () => {
     mockUpdateResult({
       _id: storeId,

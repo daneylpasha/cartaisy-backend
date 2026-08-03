@@ -98,6 +98,21 @@ export const updateStoreBranding = async (req: Request, res: Response): Promise<
       return;
     }
 
+    // Guard before the `in` checks below: `in` throws a TypeError on a
+    // non-object right-hand side (a primitive JSON body like `42`, `false`,
+    // `"hello"`, or a bare `null` all reach here as-is, not coerced to
+    // `{}`). Without this, any of those bodies would throw, land in this
+    // function's catch block, and 500 instead of the same 400 a body with
+    // no valid fields already gets below — caught in review (Greptile) on
+    // PR #148, confirmed via a probe test before this fix.
+    if (typeof req.body !== 'object' || req.body === null) {
+      res.status(400).json({
+        success: false,
+        error: 'No valid fields provided for update',
+      });
+      return;
+    }
+
     const colorRegex = /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/;
 
     const setFields: Record<string, string> = {};
