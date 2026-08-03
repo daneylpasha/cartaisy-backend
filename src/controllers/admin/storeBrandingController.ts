@@ -70,11 +70,25 @@ export const getStoreBranding = async (req: Request, res: Response): Promise<voi
  *
  * Update store branding settings (colors)
  * Note: Use POST /branding/logo for logo upload
+ *
+ * Contract for `primaryColor`/`secondaryColor` in the request body, each
+ * evaluated independently (see cartaisy-dashboard PR #13's
+ * docs/ARCHITECTURE.md known-gap entry this closes):
+ *   - Key absent from the body entirely  -> field is left untouched (today's
+ *     existing "not provided" behavior, unchanged).
+ *   - Key present, a valid hex string    -> field is set to that value
+ *     (today's existing behavior, unchanged).
+ *   - Key present, JSON `null`           -> field is explicitly cleared via
+ *     `$unset` (new — this is what this ticket adds).
+ *   - Key present, any other falsy value ("", 0, false) -> 400, same as the
+ *     existing hex-validation-failure path for a malformed string. Empty
+ *     string is deliberately NOT treated as "clear" — only an explicit
+ *     `null` means that, so there's no ambiguity between "the caller
+ *     cleared the input" and "the caller sent nothing."
  */
 export const updateStoreBranding = async (req: Request, res: Response): Promise<void> => {
   try {
     const { storeId } = req.params;
-    const { primaryColor, secondaryColor } = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(storeId)) {
       res.status(400).json({
@@ -84,31 +98,42 @@ export const updateStoreBranding = async (req: Request, res: Response): Promise<
       return;
     }
 
-    // Validate colors if provided
     const colorRegex = /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/;
 
-    if (primaryColor && !colorRegex.test(primaryColor)) {
-      res.status(400).json({
-        success: false,
-        error: 'Primary color must be a valid hex color (e.g., #FF6B6B)',
-      });
-      return;
+    const setFields: Record<string, string> = {};
+    const unsetFields: Record<string, 1> = {};
+
+    if ('primaryColor' in req.body) {
+      const { primaryColor } = req.body;
+      if (primaryColor === null) {
+        unsetFields['branding.primaryColor'] = 1;
+      } else if (colorRegex.test(primaryColor)) {
+        setFields['branding.primaryColor'] = primaryColor;
+      } else {
+        res.status(400).json({
+          success: false,
+          error: 'Primary color must be a valid hex color (e.g., #FF6B6B)',
+        });
+        return;
+      }
     }
 
-    if (secondaryColor && !colorRegex.test(secondaryColor)) {
-      res.status(400).json({
-        success: false,
-        error: 'Secondary color must be a valid hex color (e.g., #4ECDC4)',
-      });
-      return;
+    if ('secondaryColor' in req.body) {
+      const { secondaryColor } = req.body;
+      if (secondaryColor === null) {
+        unsetFields['branding.secondaryColor'] = 1;
+      } else if (colorRegex.test(secondaryColor)) {
+        setFields['branding.secondaryColor'] = secondaryColor;
+      } else {
+        res.status(400).json({
+          success: false,
+          error: 'Secondary color must be a valid hex color (e.g., #4ECDC4)',
+        });
+        return;
+      }
     }
 
-    // Build update object
-    const updateFields: Record<string, string> = {};
-    if (primaryColor) updateFields['branding.primaryColor'] = primaryColor;
-    if (secondaryColor) updateFields['branding.secondaryColor'] = secondaryColor;
-
-    if (Object.keys(updateFields).length === 0) {
+    if (Object.keys(setFields).length === 0 && Object.keys(unsetFields).length === 0) {
       res.status(400).json({
         success: false,
         error: 'No valid fields provided for update',
@@ -116,11 +141,20 @@ export const updateStoreBranding = async (req: Request, res: Response): Promise<
       return;
     }
 
-    const store = await Store.findByIdAndUpdate(
-      storeId,
-      { $set: updateFields },
-      { new: true }
-    ).select('branding name');
+    // Only include $set/$unset when non-empty — a request can be a pure
+    // clear (only $unset), a pure set (only $set), or a mix of both across
+    // the two fields, as long as no single field appears in both.
+    const update: Record<string, Record<string, unknown>> = {};
+    if (Object.keys(setFields).length > 0) {
+      update.$set = setFields;
+    }
+    if (Object.keys(unsetFields).length > 0) {
+      update.$unset = unsetFields;
+    }
+
+    const store = await Store.findByIdAndUpdate(storeId, update, { new: true }).select(
+      'branding name'
+    );
 
     if (!store) {
       res.status(404).json({
