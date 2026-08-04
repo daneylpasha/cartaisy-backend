@@ -9,7 +9,7 @@ This is the shared cross-repo roadmap from current state to first-merchant readi
 - Backend, mobile, and dashboard repos exist with substantial implementation and a strong docs/audit discipline (see each repo's `docs/STATUS.md`).
 - No reachable deployed backend exists; the Railway production URL returns platform 404. Nearly every open verification chain is blocked on this.
 - A merchant-branded Android build artifact was produced and verified on a physical device (2026-08-04, Phase 2 gate met — see below); iOS build proof and the full provisioning-runbook rehearsal remain outstanding.
-- Runtime branding is documented as a contract but not implemented; branding is bundled Cartaisy assets.
+- Runtime branding is implemented end-to-end: `primaryColor`, `secondaryColor`, and `logoUrl` are dashboard-editable and apply on next app launch without a rebuild, with a bundled on-brand fallback for a fresh install (Phase 3 gate met 2026-08-04 — see below). Two disclosed coverage gaps remain open and don't block the gate: the hardcoded `t("common.companyName")` string (5 UI locations) isn't wired to dashboard branding yet, and a handful of `getTokenValue()`/`AppImage` tint call sites don't pick up a runtime color change until the next full app restart.
 - The dashboard duplicates backend schemas and performs Shopify OAuth/token storage locally (to be consolidated).
 - No merchant billing code exists (intentional; billing is manual for early merchants).
 - No real merchant exists; a Shopify Partners development store will serve as test and demo tenant.
@@ -65,6 +65,10 @@ Principle (decision 2026-07-17): build-time defaults are the merchant's brand; r
 4. Author a branding split matrix: for every brandable surface, whether it is dashboard-editable (runtime), onboarding-set (build-time), or both.
 
 Gate: change color/logo in dashboard → app reflects it on next launch without rebuild; fresh install is on-brand from the first frame.
+
+**Gate met 2026-08-04.** Evidence: backend `/store/config` serves validated `primaryColor`, `secondaryColor`, and `logoUrl` (PR #137); mobile applies both colors live via Tamagui's `updateTheme` — no rebuild required — with WCAG accessibility contrast guardrails on both fields (PRs #115, #116), and renders the logo across all 7 mobile surfaces with a bundled build-time fallback so a fresh install is on-brand from the first frame (PRs #104–#111); the dashboard's color/logo editor writes through the backend API only, no local schema duplication (PR #13). Full surface-by-surface accounting: `Cartaisy` repo's `docs/MOBILE_BRANDING_SPLIT_MATRIX.md` (added in #116).
+
+Remaining Phase 3 work (not gate-blocking, deferred not abandoned): two disclosed coverage gaps, both recorded in the split matrix — the hardcoded `t("common.companyName")` string (5 UI locations) is not yet wired to dashboard branding, and a handful of `getTokenValue()`/`AppImage` `tintColor` call sites read a separate, non-reactive token registry and don't pick up a runtime color change until the next full app restart. Neither blocks the gate itself — dashboard edits still reflect on next launch without a rebuild, and fresh installs are still on-brand from the first frame — both are tracked as open follow-ups.
 
 ### Phase 4 — Dashboard consolidation (parallel track, small PRs)
 
