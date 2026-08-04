@@ -51,6 +51,10 @@ Remaining Phase 1 validation (not gate-blocking): mobile-on-staging device/simul
 
 Gate: installable branded Android app on a physical device, produced from env config alone.
 
+**Gate met 2026-08-04.** Evidence: `sample-merchant-development` EAS profile build installed via the EAS-hosted APK download link on a physical Android device; verified on-device — launcher icon (gold "AO"), launcher name ("Acme Outfitters"), native splash screen (icon + `#0A2540` background), and the `acmeoutfitters://` deep-link scheme (opened via a QR code through the phone's Camera app) — zero Cartaisy identity leakage in any build-time surface. Full record: `Cartaisy` repo's `docs/MOBILE_BRANDED_BUILD_CHECKLIST.md`, "Physical Device Install Verification (2026-08-04)" entry.
+
+Remaining Phase 2 work (not gate-blocking, deferred not abandoned): item 2 (rehearse `docs/MOBILE_MERCHANT_PROVISIONING_RUNBOOK.md` end-to-end for the sample merchant) and item 3 (scope the iOS path) above are carried forward as open follow-up work.
+
 ### Phase 3 — Runtime branding, the non-laggy way (parallel with Phase 1)
 
 Principle (decision 2026-07-17): build-time defaults are the merchant's brand; runtime is a silent, cached override. No unbranded first paint, no rebuild for color/logo changes.
