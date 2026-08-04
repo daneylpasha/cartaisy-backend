@@ -8,7 +8,7 @@ This is the shared cross-repo roadmap from current state to first-merchant readi
 
 - Backend, mobile, and dashboard repos exist with substantial implementation and a strong docs/audit discipline (see each repo's `docs/STATUS.md`).
 - No reachable deployed backend exists; the Railway production URL returns platform 404. Nearly every open verification chain is blocked on this.
-- No merchant-branded build artifact has ever been produced (Android EAS blocked at non-interactive keystore init).
+- A merchant-branded Android build artifact was produced and verified on a physical device (2026-08-04, Phase 2 gate met — see below); iOS build proof and the full provisioning-runbook rehearsal remain outstanding.
 - Runtime branding is documented as a contract but not implemented; branding is bundled Cartaisy assets.
 - The dashboard duplicates backend schemas and performs Shopify OAuth/token storage locally (to be consolidated).
 - No merchant billing code exists (intentional; billing is manual for early merchants).
