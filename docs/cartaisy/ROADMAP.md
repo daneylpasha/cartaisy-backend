@@ -8,7 +8,7 @@ This is the shared cross-repo roadmap from current state to first-merchant readi
 
 - Backend, mobile, and dashboard repos exist with substantial implementation and a strong docs/audit discipline (see each repo's `docs/STATUS.md`).
 - No reachable deployed backend exists; the Railway production URL returns platform 404. Nearly every open verification chain is blocked on this.
-- No merchant-branded build artifact has ever been produced (Android EAS blocked at non-interactive keystore init).
+- A merchant-branded Android build artifact was produced and verified on a physical device (2026-08-04, Phase 2 gate met — see below); iOS build proof and the full provisioning-runbook rehearsal remain outstanding.
 - Runtime branding is documented as a contract but not implemented; branding is bundled Cartaisy assets.
 - The dashboard duplicates backend schemas and performs Shopify OAuth/token storage locally (to be consolidated).
 - No merchant billing code exists (intentional; billing is manual for early merchants).
@@ -50,6 +50,10 @@ Remaining Phase 1 validation (not gate-blocking): mobile-on-staging device/simul
 3. Scope the iOS path (merchant-owned Apple Developer account per `docs/DECISIONS.md`; document enrollment lead time). iOS build proof waits for an available Apple account.
 
 Gate: installable branded Android app on a physical device, produced from env config alone.
+
+**Gate met 2026-08-04.** Evidence: `sample-merchant-development` EAS profile build installed via the EAS-hosted APK download link on a physical Android device; verified on-device — launcher icon (gold "AO"), launcher name ("Acme Outfitters"), native splash screen (icon + `#0A2540` background), and the `acmeoutfitters://` deep-link scheme (opened via a QR code through the phone's Camera app) — zero Cartaisy identity leakage in any build-time surface. Full record: `Cartaisy` repo's `docs/MOBILE_BRANDED_BUILD_CHECKLIST.md`, "Physical Device Install Verification (2026-08-04)" entry.
+
+Remaining Phase 2 work (not gate-blocking, deferred not abandoned): item 2 (rehearse `docs/MOBILE_MERCHANT_PROVISIONING_RUNBOOK.md` end-to-end for the sample merchant) and item 3 (scope the iOS path) above are carried forward as open follow-up work.
 
 ### Phase 3 — Runtime branding, the non-laggy way (parallel with Phase 1)
 
