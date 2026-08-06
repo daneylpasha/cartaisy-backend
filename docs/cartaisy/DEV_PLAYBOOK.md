@@ -114,4 +114,4 @@ The agent commented on the issue and stopped (as instructed). Do not patch aroun
 
 ## Current phase
 
-Phase 2 of `docs/cartaisy/ROADMAP.md` — the first branded Android app build (Phase 0 gate met 2026-07-22; Phase 1 gate met 2026-07-22, evidence linked in the roadmap). Phase 2 needs Daniyal's operator step first (interactive Android keystore/signing setup) before agent tickets can build on it. Phases 3 (runtime branding) and 4 (dashboard consolidation) are open as parallel tracks per the roadmap's sequencing and are cut by the orchestrator as capacity allows.
+Phases 0-3 of `docs/cartaisy/ROADMAP.md` have met gates: Phase 0 (2026-07-22), Phase 1 (2026-07-22), Phase 2 — the first branded Android app build — (2026-08-04), and Phase 3 (runtime branding, 2026-08-04), evidence linked in the roadmap. Phase 2 and 3 both carry open, non-blocking follow-up items (see the roadmap for each). Phase 4 (dashboard consolidation) and Phase 5 (per-merchant push, unblocked now that Phase 2's gate is met) are open as parallel tracks per the roadmap's sequencing and are cut by the orchestrator as capacity allows. Phase 6 needs all prior phases and is not yet open.
