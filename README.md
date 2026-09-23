@@ -213,7 +213,12 @@ curl http://localhost:3000/api/health
 | `PORT` | Server port | No | 3000 |
 | `MONGODB_URI` | Database connection | Yes | - |
 | `JWT_SECRET` | JWT signing key | Yes | - |
-| `SHOPIFY_API_KEY` | Shopify app key | No | - |
+| `SHOPIFY_API_KEY` | Legacy fallback for the Partner app client ID | No | - |
+| `SHOPIFY_CLIENT_ID` | Partner app client ID for merchant OAuth | Yes for connect | - |
+| `SHOPIFY_CLIENT_SECRET` | Partner app secret (callback HMAC and code exchange) | Yes for connect | - |
+| `SHOPIFY_REDIRECT_URI` | Backend OAuth callback URL registered on the Partner app | Yes for connect | - |
+| `SHOPIFY_SCOPES` | Comma-separated Admin scopes requested at connect | Yes for connect | - |
+| `SHOPIFY_OAUTH_RETURN_URL` | Dashboard URL the browser returns to after connect | No | - |
 | `EMAIL_API_KEY` | Email service key | No | - |
 
 See [Environment Templates](docs/environment-templates.md) for complete reference.

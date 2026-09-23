@@ -1,29 +1,32 @@
 import { Router } from 'express';
 import { authenticate } from '../middleware/auth';
-import { storeAuth } from '../middleware/storeAuth';
+import { storeAuth, storeAdmin } from '../middleware/storeAuth';
 import * as shopifyOAuthController from '../controllers/shopifyOAuthController';
 
 const router = Router();
 
 /**
+ * Dashboard Shopify connect contract. Tokens are stored only on the backend
+ * Store record. These handlers never return shopify.accessToken.
+ *
+ * POST /oauth/connect  — start connect, returns the Shopify authorize URL
+ * GET  /oauth/callback — Shopify browser redirect; completes the grant
+ * GET  /status         — connected | disconnected for the authenticated store
+ * POST /disconnect     — revoke the Shopify token, then clear it
+ * POST /sync           — trigger a store-scoped sync with the backend token
+ */
+
+const dashboardGuard = [authenticate as any, storeAuth as any, storeAdmin as any];
+
+/**
  * Initiate Shopify OAuth flow
  * GET /oauth/connect?shop=store-name.myshopify.com
  * POST /oauth/connect with body { shop: "store-name.myshopify.com" }
- * Protected: Requires authentication and store context
+ * Protected: store admin. Client storeId is ignored.
  */
-router.get(
-  '/oauth/connect',
-  authenticate as any,
-  storeAuth as any,
-  shopifyOAuthController.initiateOAuth as any
-);
+router.get('/oauth/connect', ...dashboardGuard, shopifyOAuthController.initiateOAuth as any);
 
-router.post(
-  '/oauth/connect',
-  authenticate as any,
-  storeAuth as any,
-  shopifyOAuthController.initiateOAuth as any
-);
+router.post('/oauth/connect', ...dashboardGuard, shopifyOAuthController.initiateOAuth as any);
 
 /**
  * Handle Shopify OAuth callback
@@ -41,35 +44,28 @@ router.get(
  * GET /status
  * Protected: Requires authentication and store context
  */
-router.get(
-  '/status',
-  authenticate as any,
-  storeAuth as any,
-  shopifyOAuthController.getConnectionStatus as any
-);
+router.get('/status', ...dashboardGuard, shopifyOAuthController.getConnectionStatus as any);
 
 /**
  * Disconnect Shopify store
  * POST /disconnect
- * Protected: Requires authentication and store context
+ * Revokes the Shopify access token, then clears it on this store only.
  */
-router.post(
-  '/disconnect',
-  authenticate as any,
-  storeAuth as any,
-  shopifyOAuthController.disconnectStore as any
-);
+router.post('/disconnect', ...dashboardGuard, shopifyOAuthController.disconnectStore as any);
+
+/**
+ * Trigger a full sync for the authenticated store.
+ * POST /sync
+ * Uses the backend token for that storeId. Refuses when disconnected.
+ * Durable sync status and build eligibility are issue #154.
+ */
+router.post('/sync', ...dashboardGuard, shopifyOAuthController.triggerSync as any);
 
 /**
  * Get collections from connected Shopify store
  * GET /collections
- * Protected: Requires authentication and store context
+ * Protected: store admin, scoped to the authenticated store
  */
-router.get(
-  '/collections',
-  authenticate as any,
-  storeAuth as any,
-  shopifyOAuthController.getCollections as any
-);
+router.get('/collections', ...dashboardGuard, shopifyOAuthController.getCollections as any);
 
 export default router;

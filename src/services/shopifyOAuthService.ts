@@ -9,11 +9,136 @@ import { getShopifyClientForStore } from './shopifyService';
  * Handles OAuth flow and credential management for Shopify store connections
  */
 
-const SHOPIFY_API_VERSION = '2024-01';
-const STATE_TOKEN_EXPIRY = 10 * 60 * 1000; // 10 minutes in milliseconds
+const STATE_TOKEN_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
 
-// In-memory storage for state tokens (consider Redis in production)
-const stateTokens = new Map<string, { createdAt: number; shop: string; storeId?: string }>();
+const SHOP_DOMAIN_PATTERN = /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/;
+
+/**
+ * Dashboard-facing OAuth failure. `reasonCode` is safe to put on the browser
+ * return URL; it never includes tokens, secrets, or Shopify response bodies.
+ */
+export class ShopifyOAuthError extends Error {
+  statusCode: number;
+  reasonCode: string;
+
+  constructor(message: string, statusCode: number, reasonCode: string) {
+    super(message);
+    this.name = 'ShopifyOAuthError';
+    this.statusCode = statusCode;
+    this.reasonCode = reasonCode;
+  }
+}
+
+const shopifyApiVersion = (): string =>
+  (process.env.SHOPIFY_API_VERSION || '2024-01').trim() || '2024-01';
+
+/**
+ * Partner app credentials. `SHOPIFY_CLIENT_ID` / `SHOPIFY_CLIENT_SECRET` are
+ * the names this flow owns. `SHOPIFY_API_KEY` / `SHOPIFY_API_SECRET` are
+ * accepted only as a fallback so an existing Partner app install keeps working.
+ * Per-store access tokens are never read from the environment.
+ */
+const getPartnerAppCredentials = (): { clientId: string; clientSecret: string } => {
+  const clientId = (process.env.SHOPIFY_CLIENT_ID || process.env.SHOPIFY_API_KEY || '').trim();
+  const clientSecret = (
+    process.env.SHOPIFY_CLIENT_SECRET || process.env.SHOPIFY_API_SECRET || ''
+  ).trim();
+
+  if (!clientId || !clientSecret) {
+    throw new ShopifyOAuthError(
+      'Shopify OAuth credentials not configured',
+      500,
+      'oauth_not_configured'
+    );
+  }
+
+  return { clientId, clientSecret };
+};
+
+const getOAuthRedirectConfig = (): { redirectUri: string; scopes: string } => {
+  const redirectUri = (process.env.SHOPIFY_REDIRECT_URI || '').trim();
+  const scopes = (process.env.SHOPIFY_SCOPES || '').trim();
+
+  if (!redirectUri || !scopes) {
+    throw new ShopifyOAuthError(
+      'Shopify OAuth environment variables not configured',
+      500,
+      'oauth_not_configured'
+    );
+  }
+
+  return { redirectUri, scopes };
+};
+
+/**
+ * Canonical `*.myshopify.com` shop domain. Rejects custom domains and any
+ * value that is not a single shop host.
+ */
+export const normalizeShopDomain = (shop: unknown): string => {
+  if (typeof shop !== 'string') {
+    throw new ShopifyOAuthError(
+      'Shop parameter is required',
+      400,
+      'invalid_shop'
+    );
+  }
+
+  const normalized = shop.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+
+  if (!SHOP_DOMAIN_PATTERN.test(normalized)) {
+    throw new ShopifyOAuthError(
+      'Invalid shop format. Expected format: shop-name.myshopify.com',
+      400,
+      'invalid_shop'
+    );
+  }
+
+  return normalized;
+};
+
+const hashOAuthState = (state: string): string =>
+  crypto.createHash('sha256').update(state).digest('hex');
+
+const OAUTH_STATE_SELECT =
+  '+shopify.oauthStateHash +shopify.oauthStateShop +shopify.oauthStateExpiresAt';
+
+/**
+ * A shop domain may belong to only one connected store. Webhook delivery
+ * resolves shop → Store and fails closed when that mapping is ambiguous.
+ */
+const assertShopAvailableForStore = async (shop: string, storeId: string): Promise<void> => {
+  const conflict = await Store.findOne({
+    _id: { $ne: storeId },
+    'shopify.shop': shop,
+    'shopify.isConnected': true,
+  }).select('_id');
+
+  if (conflict) {
+    throw new ShopifyOAuthError(
+      'This Shopify shop is already connected to another store',
+      409,
+      'shop_taken'
+    );
+  }
+
+  const current = await Store.findById(storeId).select('shopify.shop shopify.isConnected');
+  if (!current) {
+    throw new ShopifyOAuthError('Store not found', 404, 'store_not_found');
+  }
+
+  const connectedShop = current.shopify?.shop;
+  if (
+    current.shopify?.isConnected &&
+    connectedShop &&
+    connectedShop !== shop
+  ) {
+    throw new ShopifyOAuthError(
+      'Disconnect the current Shopify shop before connecting a different one',
+      409,
+      'shop_switch_required'
+    );
+  }
+};
 
 export interface TokenResponse {
   accessToken: string;
@@ -43,20 +168,11 @@ export interface Collection {
  * Gets Shopify authorization URL for starting OAuth flow
  */
 export const getAuthorizationUrl = (shop: string, state: string): string => {
-  const clientId = process.env.SHOPIFY_CLIENT_ID;
-  const scopes = process.env.SHOPIFY_SCOPES || '';
-  const redirectUri = process.env.SHOPIFY_REDIRECT_URI || '';
+  const normalizedShop = normalizeShopDomain(shop);
+  const { clientId } = getPartnerAppCredentials();
+  const { redirectUri, scopes } = getOAuthRedirectConfig();
 
-  if (!clientId || !scopes || !redirectUri) {
-    throw new Error('Shopify OAuth environment variables not configured');
-  }
-
-  // Validate shop format
-  if (!shop.includes('.')) {
-    throw new Error('Invalid shop format. Expected format: shop-name.myshopify.com');
-  }
-
-  const baseUrl = `https://${shop}/admin/oauth/authorize`;
+  const baseUrl = `https://${normalizedShop}/admin/oauth/authorize`;
   const params = new URLSearchParams({
     client_id: clientId,
     scope: scopes,
@@ -68,26 +184,98 @@ export const getAuthorizationUrl = (shop: string, state: string): string => {
 };
 
 /**
+ * Verify the Shopify OAuth callback query HMAC.
+ *
+ * Shopify signs every callback parameter except `hmac` (and legacy `signature`)
+ * with the Partner app secret. Comparison is timing-safe. The raw query values
+ * must be used; do not normalize the shop before this check.
+ */
+export const verifyOAuthCallbackHmac = (query: Record<string, unknown>): boolean => {
+  const { clientSecret } = getPartnerAppCredentials();
+  const hmac = query.hmac;
+
+  if (typeof hmac !== 'string' || !/^[a-f0-9]+$/i.test(hmac)) {
+    return false;
+  }
+
+  const pairs: Array<[string, string]> = [];
+  for (const [key, value] of Object.entries(query)) {
+    if (key === 'hmac' || key === 'signature') {
+      continue;
+    }
+    if (typeof value !== 'string') {
+      return false;
+    }
+    pairs.push([key, value]);
+  }
+
+  pairs.sort((left, right) => (left[0] < right[0] ? -1 : left[0] > right[0] ? 1 : 0));
+  const message = pairs.map(([key, value]) => `${key}=${value}`).join('&');
+  const digest = crypto.createHmac('sha256', clientSecret).update(message).digest('hex');
+
+  const expected = Buffer.from(digest, 'utf8');
+  const provided = Buffer.from(hmac, 'utf8');
+  if (expected.length !== provided.length) {
+    return false;
+  }
+
+  return crypto.timingSafeEqual(expected, provided);
+};
+
+/**
+ * Browser return URL after the public OAuth callback. Built only from
+ * `SHOPIFY_OAUTH_RETURN_URL`. Caller-supplied return URLs are ignored so the
+ * callback cannot be turned into an open redirect, and the token is never
+ * copied onto the query string.
+ */
+export const buildOAuthReturnUrl = (
+  outcome: 'connected' | 'error',
+  details: { shop?: string; reason?: string } = {}
+): string | null => {
+  const raw = (process.env.SHOPIFY_OAUTH_RETURN_URL || '').trim();
+  if (!raw) {
+    return null;
+  }
+
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return null;
+  }
+
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+    return null;
+  }
+
+  url.searchParams.set('shopify', outcome);
+  if (details.shop && SHOP_DOMAIN_PATTERN.test(details.shop)) {
+    url.searchParams.set('shop', details.shop);
+  }
+  if (outcome === 'error' && details.reason && /^[a-z0-9_]+$/.test(details.reason)) {
+    url.searchParams.set('reason', details.reason);
+  }
+
+  const serialized = url.toString();
+  if (/access[_-]?token|shpat_|shpss_|client_secret/i.test(serialized)) {
+    return null;
+  }
+
+  return serialized;
+};
+
+/**
  * Exchanges authorization code for access token
  */
 export const exchangeCodeForToken = async (
   shop: string,
   code: string
 ): Promise<TokenResponse> => {
-  const clientId = process.env.SHOPIFY_CLIENT_ID;
-  const clientSecret = process.env.SHOPIFY_CLIENT_SECRET;
-
-  if (!clientId || !clientSecret) {
-    throw new Error('Shopify OAuth credentials not configured');
-  }
-
-  // Validate shop format
-  if (!shop.includes('.')) {
-    throw new Error('Invalid shop format');
-  }
+  const normalizedShop = normalizeShopDomain(shop);
+  const { clientId, clientSecret } = getPartnerAppCredentials();
 
   try {
-    const response = await fetch(`https://${shop}/admin/oauth/access_token`, {
+    const response = await fetch(`https://${normalizedShop}/admin/oauth/access_token`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -100,8 +288,7 @@ export const exchangeCodeForToken = async (
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Shopify token exchange failed:', response.status, errorText);
+      console.error('Shopify token exchange failed:', response.status);
       throw new Error(`Shopify API error: ${response.statusText}`);
     }
 
@@ -109,7 +296,7 @@ export const exchangeCodeForToken = async (
     const data = (await response.json()) as { access_token: string; scope: string };
 
     if (!data.access_token || !data.scope) {
-      console.error('Invalid token response:', data);
+      console.error('Invalid token response from Shopify');
       throw new Error('Invalid token response from Shopify');
     }
 
@@ -119,8 +306,18 @@ export const exchangeCodeForToken = async (
       scope: data.scope,
     };
   } catch (error) {
-    console.error('Token exchange error:', error);
-    throw new Error('Failed to exchange code for access token');
+    console.error(
+      'Token exchange error:',
+      error instanceof Error ? error.message : 'unknown'
+    );
+    if (error instanceof ShopifyOAuthError) {
+      throw error;
+    }
+    throw new ShopifyOAuthError(
+      'Failed to exchange code for access token',
+      400,
+      'token_exchange_failed'
+    );
   }
 };
 
@@ -131,13 +328,11 @@ export const getShopInfo = async (
   shop: string,
   accessToken: string
 ): Promise<ShopInfo> => {
-  if (!shop.includes('.')) {
-    throw new Error('Invalid shop format');
-  }
+  const normalizedShop = normalizeShopDomain(shop);
 
   try {
     const response = await fetch(
-      `https://${shop}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`,
+      `https://${normalizedShop}/admin/api/${shopifyApiVersion()}/graphql.json`,
       {
         method: 'POST',
         headers: {
@@ -184,7 +379,7 @@ export const getShopInfo = async (
     }
 
     return {
-      shop,
+      shop: normalizedShop,
       name: shopData.name || '',
       email: shopData.email || '',
       domain: shopData.primaryDomain?.host || shopData.myshopifyDomain || '',
@@ -214,7 +409,7 @@ export const getPrimaryLocationId = async (
       console.log(`[LocationID] Fetching location for ${shop} (attempt ${attempt}/${retries})`);
 
       const response = await fetch(
-        `https://${shop}/admin/api/${SHOPIFY_API_VERSION}/locations.json`,
+        `https://${shop}/admin/api/${shopifyApiVersion()}/locations.json`,
         {
           headers: {
             'X-Shopify-Access-Token': accessToken,
@@ -274,15 +469,18 @@ export const saveCredentials = async (
   accessToken: string,
   scope: string
 ): Promise<void> => {
+  const normalizedShop = normalizeShopDomain(shop);
+  await assertShopAvailableForStore(normalizedShop, storeId);
+
   try {
-    // Encrypt the access token before saving
+    // Encrypt the access token before saving. The plaintext token is never written.
     const encryptedToken = encrypt(accessToken);
 
     // Fetch primary location ID for inventory management
-    const locationId = await getPrimaryLocationId(shop, accessToken);
+    const locationId = await getPrimaryLocationId(normalizedShop, accessToken);
 
-    const updateData: any = {
-      'shopify.shop': shop,
+    const updateData: Record<string, unknown> = {
+      'shopify.shop': normalizedShop,
       'shopify.accessToken': encryptedToken,
       'shopify.scope': scope,
       'shopify.isConnected': true,
@@ -295,35 +493,40 @@ export const saveCredentials = async (
       updateData['shopify.locationId'] = locationId;
       console.log(`✅ [Shopify Connect] Store connected with locationId: ${locationId}`);
     } else {
-      console.warn(`⚠️ [Shopify Connect] Store connected but locationId could not be fetched!`);
-      console.warn(`⚠️ [Shopify Connect] Inventory sync will NOT work until locationId is set.`);
-      console.warn(`⚠️ [Shopify Connect] Use POST /api/v1/admin/shopify/fetch-location to retry.`);
+      console.warn('⚠️ [Shopify Connect] Store connected but locationId could not be fetched!');
+      console.warn('⚠️ [Shopify Connect] Inventory sync will NOT work until locationId is set.');
+      console.warn('⚠️ [Shopify Connect] Use POST /api/v1/admin/shopify/fetch-location to retry.');
     }
 
-    // Use upsert to create Store if it doesn't exist (fallback for legacy data)
+    // The store must already exist. OAuth must not create a tenant.
     const store = await Store.findByIdAndUpdate(
       storeId,
       {
         $set: updateData,
-        $setOnInsert: {
-          name: `Store ${storeId.toString().slice(-6)}`, // Fallback name
-          slug: `store-${storeId.toString().slice(-6)}-${Date.now()}`, // Unique slug
-          isActive: true,
-          plan: { type: 'free', maxMembers: 5 },
-          settings: { timezone: 'UTC', currency: 'USD', language: 'en' }
-        }
+        $unset: {
+          'shopify.oauthStateHash': '',
+          'shopify.oauthStateShop': '',
+          'shopify.oauthStateExpiresAt': '',
+        },
       },
-      { new: true, upsert: true }
+      { new: true }
     );
 
     if (!store) {
-      throw new Error('Failed to create or update store');
+      throw new ShopifyOAuthError('Store not found', 404, 'store_not_found');
     }
 
     console.log(`✅ [Shopify Connect] Store ${storeId} credentials saved successfully`);
   } catch (error) {
+    if (error instanceof ShopifyOAuthError) {
+      throw error;
+    }
     console.error('Save credentials error:', error);
-    throw new Error('Failed to save Shopify credentials');
+    throw new ShopifyOAuthError(
+      'Failed to save Shopify credentials',
+      500,
+      'credential_save_failed'
+    );
   }
 };
 
@@ -575,31 +778,105 @@ export const getAccessToken = async (storeId: string): Promise<string | null> =>
   }
 };
 
-/**
- * Disconnects Shopify store by clearing credentials
- */
-export const disconnect = async (storeId: string): Promise<void> => {
-  try {
-    const store = await Store.findByIdAndUpdate(
-      storeId,
-      {
-        'shopify.shop': undefined,
-        'shopify.accessToken': undefined,
-        'shopify.scope': undefined,
-        'shopify.isConnected': false,
-        'shopify.connectedAt': undefined,
-        'shopify.lastSyncAt': undefined,
-      },
-      { new: true }
-    );
-
-    if (!store) {
-      throw new Error('Store not found');
-    }
-  } catch (error) {
-    console.error('Disconnect error:', error);
-    throw new Error('Failed to disconnect Shopify store');
+const readStoredAdminToken = (stored: string): string => {
+  const isEncrypted = stored.includes(':') && stored.split(':').length === 3;
+  if (!isEncrypted) {
+    return stored;
   }
+  return decrypt(stored);
+};
+
+/**
+ * Ask Shopify to revoke the current offline access token. A 401/404 means the
+ * install is already gone, which is a successful revoke for our purposes.
+ */
+const revokeShopifyAccessToken = async (shop: string, accessToken: string): Promise<void> => {
+  const response = await fetch(`https://${shop}/admin/api_permissions/current.json`, {
+    method: 'DELETE',
+    headers: {
+      'X-Shopify-Access-Token': accessToken,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+  });
+
+  if (response.ok || response.status === 401 || response.status === 404) {
+    return;
+  }
+
+  console.error(`[Shopify Disconnect] Token revoke failed for ${shop} with status ${response.status}`);
+  throw new ShopifyOAuthError(
+    'Failed to revoke Shopify access. The store is still connected; retry disconnect.',
+    502,
+    'revoke_failed'
+  );
+};
+
+const clearShopifyCredentials = async (storeId: string): Promise<void> => {
+  const store = await Store.findByIdAndUpdate(
+    storeId,
+    {
+      $set: { 'shopify.isConnected': false },
+      $unset: {
+        'shopify.shop': '',
+        'shopify.accessToken': '',
+        'shopify.storefrontAccessToken': '',
+        'shopify.scope': '',
+        'shopify.connectedAt': '',
+        'shopify.lastSyncAt': '',
+        'shopify.locationId': '',
+        'shopify.oauthStateHash': '',
+        'shopify.oauthStateShop': '',
+        'shopify.oauthStateExpiresAt': '',
+      },
+    },
+    { new: true }
+  );
+
+  if (!store) {
+    throw new ShopifyOAuthError('Store not found', 404, 'store_not_found');
+  }
+};
+
+/**
+ * Disconnects a Shopify store.
+ *
+ * When a shop domain and token are both stored, Shopify is asked to revoke the
+ * token before the backend copy is cleared. A revoke failure leaves the token
+ * in place so a retry can still revoke it. A token with no shop domain cannot
+ * be revoked, so it is cleared locally and `shopifyRevoked` is false. Status
+ * is `disconnected` only after the clear.
+ */
+export const disconnect = async (storeId: string): Promise<{ shopifyRevoked: boolean }> => {
+  const store = await Store.findById(storeId).select('+shopify.accessToken');
+
+  if (!store) {
+    throw new ShopifyOAuthError('Store not found', 404, 'store_not_found');
+  }
+
+  const shop = store.shopify?.shop;
+  const storedToken = store.shopify?.accessToken;
+  let shopifyRevoked = false;
+
+  if (storedToken && shop) {
+    let accessToken: string;
+    try {
+      accessToken = readStoredAdminToken(storedToken);
+    } catch {
+      console.error(`[Shopify Disconnect] Could not decrypt token for store ${storeId}`);
+      throw new ShopifyOAuthError(
+        'Failed to decrypt Shopify access token for revoke',
+        502,
+        'revoke_failed'
+      );
+    }
+
+    await revokeShopifyAccessToken(shop, accessToken);
+    shopifyRevoked = true;
+  }
+
+  await clearShopifyCredentials(storeId);
+  return { shopifyRevoked };
 };
 
 /**
@@ -634,7 +911,7 @@ export const getCollections = async (storeId: string): Promise<Collection[]> => 
     }
 
     const response = await fetch(
-      `https://${shop}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`,
+      `https://${shop}/admin/api/${shopifyApiVersion()}/graphql.json`,
       {
         method: 'POST',
         headers: {
@@ -689,55 +966,76 @@ export const getCollections = async (storeId: string): Promise<Collection[]> => 
 };
 
 /**
- * Generates and stores a state token for CSRF protection
+ * Generates a one-time OAuth state token and stores only its hash on the store.
+ * The raw state is returned to be placed on Shopify's authorize URL. It is not
+ * an access token and must not be persisted by the dashboard.
  */
-export const generateStateToken = (shop: string, storeId?: string): string => {
+export const generateStateToken = async (shop: string, storeId: string): Promise<string> => {
+  if (!storeId) {
+    throw new ShopifyOAuthError('Store authentication required', 401, 'store_required');
+  }
+
+  const normalizedShop = normalizeShopDomain(shop);
+  await assertShopAvailableForStore(normalizedShop, storeId);
+
   const state = crypto.randomBytes(32).toString('hex');
-
-  // Store state token with expiry
-  stateTokens.set(state, {
-    createdAt: Date.now(),
-    shop,
+  const updated = await Store.findByIdAndUpdate(
     storeId,
-  });
+    {
+      $set: {
+        'shopify.oauthStateHash': hashOAuthState(state),
+        'shopify.oauthStateShop': normalizedShop,
+        'shopify.oauthStateExpiresAt': new Date(Date.now() + STATE_TOKEN_EXPIRY_MS),
+      },
+    },
+    { new: true }
+  );
 
-  // Clean up expired tokens
-  cleanupExpiredTokens();
+  if (!updated) {
+    throw new ShopifyOAuthError('Store not found', 404, 'store_not_found');
+  }
 
   return state;
 };
 
 /**
- * Validates state token and returns shop and storeId if valid
+ * Validates a callback state token. The token is single-use: a matching,
+ * unexpired hash is cleared before the shop and storeId are returned.
  */
-export const validateStateToken = (state: string): { shop: string; storeId?: string } | null => {
-  const tokenData = stateTokens.get(state);
-
-  if (!tokenData) {
+export const validateStateToken = async (
+  state: string
+): Promise<{ shop: string; storeId: string } | null> => {
+  if (!state || typeof state !== 'string') {
     return null;
   }
 
-  // Check if token has expired
-  if (Date.now() - tokenData.createdAt > STATE_TOKEN_EXPIRY) {
-    stateTokens.delete(state);
+  const hash = hashOAuthState(state);
+  const pending = await Store.findOne({
+    'shopify.oauthStateHash': hash,
+    'shopify.oauthStateExpiresAt': { $gt: new Date() },
+  }).select(OAUTH_STATE_SELECT);
+
+  if (!pending?.shopify?.oauthStateShop) {
     return null;
   }
 
-  // Token is valid, delete it (one-time use)
-  stateTokens.delete(state);
-
-  return { shop: tokenData.shop, storeId: tokenData.storeId };
-};
-
-/**
- * Cleans up expired state tokens
- */
-const cleanupExpiredTokens = (): void => {
-  const now = Date.now();
-
-  for (const [state, data] of stateTokens.entries()) {
-    if (now - data.createdAt > STATE_TOKEN_EXPIRY) {
-      stateTokens.delete(state);
+  const consumed = await Store.updateOne(
+    { _id: pending._id, 'shopify.oauthStateHash': hash },
+    {
+      $unset: {
+        'shopify.oauthStateHash': '',
+        'shopify.oauthStateShop': '',
+        'shopify.oauthStateExpiresAt': '',
+      },
     }
+  );
+
+  if (consumed.modifiedCount !== 1) {
+    return null;
   }
+
+  return {
+    shop: pending.shopify.oauthStateShop,
+    storeId: pending._id.toString(),
+  };
 };
