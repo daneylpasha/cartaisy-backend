@@ -1,7 +1,13 @@
 import { Response } from 'express';
 import { AuthenticatedRequest } from '../types';
 import * as shopifyOAuth from '../services/shopifyOAuthService';
-import { performFullSync } from '../services/syncService';
+import {
+  CatalogSyncInProgressError,
+  CatalogSyncNotConnectedError,
+  CatalogSyncStoreNotFoundError,
+  getCatalogSyncStatus,
+  syncCatalogForStore,
+} from '../services/catalogSyncService';
 import Store from '../models/Store';
 
 /**
@@ -12,7 +18,8 @@ import Store from '../models/Store';
  * - GET  /shopify/oauth/callback completes OAuth and stores the token.
  * - GET  /shopify/status reports connected or disconnected.
  * - POST /shopify/disconnect revokes and clears the backend token.
- * - POST /shopify/sync triggers a store-scoped catalog sync.
+ * - GET  /shopify/sync reads durable catalog sync status for this store only.
+ * - POST /shopify/sync is Sync again: the same in-request sync, with durable status.
  *
  * Client-supplied storeId values are ignored. The store comes from the
  * authenticated user, except the public callback, which trusts the signed
@@ -336,50 +343,136 @@ export const disconnectStore = async (req: AuthenticatedRequest, res: Response) 
   }
 };
 
+const catalogSyncStoreId = (req: AuthenticatedRequest, res: Response): string | null => {
+  if (!req.storeId) {
+    res.status(401).json({
+      success: false,
+      error: 'Store authentication required',
+    });
+    return null;
+  }
+  return req.storeId.toString();
+};
+
 /**
- * Triggers a full Shopify sync for the authenticated store only.
- * POST /shopify/sync
+ * Reads durable catalog sync status for the authenticated store only.
+ * GET /shopify/sync
  *
- * Durable sync status and the build-eligibility gate are issue #154.
- * This endpoint is the dashboard trigger that uses the backend token.
+ * A client storeId is ignored. The status describes this store's catalog sync
+ * and whether that store may request a build.
  */
-export const triggerSync = async (req: AuthenticatedRequest, res: Response) => {
+export const getCatalogSync = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    if (!req.storeId) {
-      return res.status(401).json({
+    const storeId = catalogSyncStoreId(req, res);
+    if (!storeId) {
+      return;
+    }
+
+    const status = await getCatalogSyncStatus(storeId);
+    if (!status) {
+      return res.status(404).json({
         success: false,
-        error: 'Store authentication required',
+        error: 'Store not found',
       });
     }
 
-    const storeId = req.storeId.toString();
+    return res.status(200).json({
+      success: true,
+      data: {
+        ...status,
+        storeId,
+        tokenOwner: 'backend',
+      },
+    });
+  } catch {
+    console.error('Get catalog sync status error: Failed to get catalog sync status');
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to get catalog sync status',
+    });
+  }
+};
+
+/**
+ * Sync again for the authenticated store only.
+ * POST /shopify/sync
+ *
+ * Runs the existing in-request full sync and persists `idle|syncing|succeeded|failed`
+ * on this store. A fresh in-progress sync returns 409 without starting another run.
+ * Quiet automatic retries stay inside this request. Uses the backend token.
+ */
+export const triggerSync = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const storeId = catalogSyncStoreId(req, res);
+    if (!storeId) {
+      return;
+    }
+
     const connected = await shopifyOAuth.isConnected(storeId);
     if (!connected) {
       return res.status(409).json({
         success: false,
         error: 'Store is not connected to Shopify',
+        code: 'SHOPIFY_NOT_CONNECTED',
       });
     }
 
-    const result = await performFullSync(storeId);
+    const result = await syncCatalogForStore(storeId);
+    if (result.outcome === 'failed') {
+      return res.status(502).json({
+        success: false,
+        error: result.errorSummary || 'Catalog sync failed. Use Sync again.',
+        code: 'CATALOG_SYNC_FAILED',
+        data: {
+          ...result.data,
+          storeId,
+          tokenOwner: 'backend',
+        },
+      });
+    }
 
     return res.status(200).json({
       success: true,
       data: {
-        status: 'completed',
+        ...result.data,
         storeId,
         stats: result.stats,
-        errors: result.errors,
-        lastFullSync: result.lastFullSync ?? null,
         tokenOwner: 'backend',
       },
     });
-  } catch (error: any) {
-    const inProgress = error?.message === 'Sync already in progress';
-    console.error('Trigger sync error:', inProgress ? error.message : 'Failed to sync Shopify store');
-    return res.status(inProgress ? 409 : 500).json({
+  } catch (error: unknown) {
+    if (error instanceof CatalogSyncInProgressError) {
+      return res.status(409).json({
+        success: false,
+        error: 'Sync already in progress',
+        code: error.code,
+        data: {
+          ...error.catalogSync,
+          storeId: req.storeId?.toString(),
+          tokenOwner: 'backend',
+        },
+      });
+    }
+
+    if (error instanceof CatalogSyncNotConnectedError) {
+      return res.status(409).json({
+        success: false,
+        error: 'Store is not connected to Shopify',
+        code: error.code,
+      });
+    }
+
+    if (error instanceof CatalogSyncStoreNotFoundError) {
+      return res.status(404).json({
+        success: false,
+        error: 'Store not found',
+      });
+    }
+
+    console.error('Trigger sync error: Failed to sync Shopify store');
+    return res.status(500).json({
       success: false,
-      error: inProgress ? 'Sync already in progress' : 'Failed to sync Shopify store',
+      error: 'Failed to sync Shopify store',
     });
   }
 };

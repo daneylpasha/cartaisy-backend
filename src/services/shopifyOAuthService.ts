@@ -3,6 +3,7 @@ import fetch from 'node-fetch';
 import Store from '../models/Store';
 import { encrypt, decrypt } from '../utils/encryption';
 import { getShopifyClientForStore } from './shopifyService';
+import { catalogSyncShopChangeUpdate } from './catalogSyncService';
 
 /**
  * Shopify OAuth Service
@@ -479,6 +480,13 @@ export const saveCredentials = async (
     // Fetch primary location ID for inventory management
     const locationId = await getPrimaryLocationId(normalizedShop, accessToken);
 
+    const existing = await Store.findById(storeId).select('shopify.shop catalogSync.shop');
+    const shopChange = catalogSyncShopChangeUpdate(
+      existing?.catalogSync?.shop,
+      existing?.shopify?.shop,
+      normalizedShop
+    );
+
     const updateData: Record<string, unknown> = {
       'shopify.shop': normalizedShop,
       'shopify.accessToken': encryptedToken,
@@ -486,6 +494,7 @@ export const saveCredentials = async (
       'shopify.isConnected': true,
       'shopify.connectedAt': new Date(),
       'shopify.lastSyncAt': new Date(),
+      ...(shopChange?.set ?? {}),
     };
 
     // Add locationId if found
@@ -507,6 +516,7 @@ export const saveCredentials = async (
           'shopify.oauthStateHash': '',
           'shopify.oauthStateShop': '',
           'shopify.oauthStateExpiresAt': '',
+          ...(shopChange?.unset ?? {}),
         },
       },
       { new: true }

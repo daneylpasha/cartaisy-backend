@@ -448,18 +448,69 @@ describe('Shopify OAuth token ownership (issue #153)', () => {
       .send({ storeId: storeBId });
 
     expect(synced.status).toBe(200);
-    expect(synced.body.data.status).toBe('completed');
+    expect(synced.body.data.status).toBe('succeeded');
     expect(synced.body.data.storeId).toBe(storeAId);
     expect(synced.body.data.stats.productsSync).toBe(3);
+    expect(synced.body.data.primaryAction).toBe('Sync again');
+    expect(synced.body.data.eligibleForBuild).toBe(true);
     expectNoToken(synced.body);
     expect(performFullSyncMock).toHaveBeenCalledTimes(1);
     expect(performFullSyncMock).toHaveBeenCalledWith(storeAId);
+
+    const ownStatus = await request(app)
+      .get('/api/v1/shopify/sync')
+      .set('Authorization', `Bearer ${adminAToken}`)
+      .query({ storeId: storeBId });
+    expect(ownStatus.status).toBe(200);
+    expect(ownStatus.body.data.status).toBe('succeeded');
+    expect(ownStatus.body.data.storeId).toBe(storeAId);
+    expectNoToken(ownStatus.body);
 
     const otherStore = await request(app)
       .post('/api/v1/shopify/sync')
       .set('Authorization', `Bearer ${adminBToken}`);
     expect(otherStore.status).toBe(409);
     expect(performFullSyncMock).toHaveBeenCalledTimes(1);
+
+    const otherStatus = await request(app)
+      .get('/api/v1/shopify/sync')
+      .set('Authorization', `Bearer ${adminBToken}`);
+    expect(otherStatus.status).toBe(200);
+    expect(otherStatus.body.data.status).toBe('idle');
+    expect(otherStatus.body.data.storeId).toBe(storeBId);
+    expect(otherStatus.body.data.eligibleForBuild).toBe(false);
+    expect(JSON.stringify(otherStatus.body)).not.toContain(SHOP_A);
+  });
+
+  test('connecting a different shop clears the previous catalog sync success', async () => {
+    await connectShop(adminAToken, SHOP_A);
+    await Store.updateOne(
+      { _id: storeAId },
+      {
+        $set: {
+          catalogSync: {
+            status: 'succeeded',
+            shop: SHOP_A,
+            lastSucceededAt: new Date('2026-09-23T00:00:00.000Z'),
+            attempts: 1,
+          },
+        },
+      }
+    );
+
+    const disconnected = await request(app)
+      .post('/api/v1/shopify/disconnect')
+      .set('Authorization', `Bearer ${adminAToken}`);
+    expect(disconnected.status).toBe(200);
+
+    await connectShop(adminAToken, SHOP_B);
+
+    const stored = await Store.findById(storeAId).select('shopify.shop shopify.isConnected catalogSync');
+    expect(stored?.shopify?.shop).toBe(SHOP_B);
+    expect(stored?.catalogSync?.status).toBe('idle');
+    expect(stored?.catalogSync?.shop).toBe(SHOP_B);
+    expect(stored?.catalogSync?.lastSucceededAt).toBeUndefined();
+    expect(stored?.shopify?.isConnected).toBe(true);
   });
 
   test('disconnect clears a token that has no shop domain without calling Shopify', async () => {

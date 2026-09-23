@@ -28,6 +28,27 @@ export interface IShopifyConnection {
   oauthStateExpiresAt?: Date;
 }
 
+/**
+ * Durable catalog sync state for one store (issue #154).
+ * `idle` means this shop has not completed a catalog sync.
+ * Missing documents are treated as `idle` by the catalog sync service.
+ */
+export type CatalogSyncState = 'idle' | 'syncing' | 'succeeded' | 'failed';
+
+export interface ICatalogSync {
+  status: CatalogSyncState;
+  /** Shop domain this status describes. A success for another shop does not count. */
+  shop?: string;
+  startedAt?: Date;
+  finishedAt?: Date;
+  /** Set when a run finishes as `succeeded`. Not cleared by a later failure. */
+  lastSucceededAt?: Date;
+  /** Short, redacted summary safe to show in the dashboard. Tokens are never stored here. */
+  errorSummary?: string;
+  /** Attempts used by the latest run, including quiet automatic retries. */
+  attempts?: number;
+}
+
 export interface IStorePlan {
   type: 'free' | 'starter' | 'pro' | 'enterprise';
   maxMembers: number;
@@ -91,6 +112,7 @@ export interface IStore extends Document {
   email: IStoreEmail;
   branding: IStoreBranding;
   abandonedCartSettings: IAbandonedCartSettings;
+  catalogSync?: ICatalogSync;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -299,6 +321,35 @@ const StoreEmailSchema = new Schema<IStoreEmail>(
   { _id: false }
 );
 
+const CatalogSyncSchema = new Schema<ICatalogSync>(
+  {
+    status: {
+      type: String,
+      enum: ['idle', 'syncing', 'succeeded', 'failed'],
+      default: 'idle',
+    },
+    shop: {
+      type: String,
+      trim: true,
+      lowercase: true,
+    },
+    startedAt: Date,
+    finishedAt: Date,
+    lastSucceededAt: Date,
+    errorSummary: {
+      type: String,
+      trim: true,
+      maxlength: [180, 'Sync error summary cannot exceed 180 characters'],
+    },
+    attempts: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
+  },
+  { _id: false }
+);
+
 const StoreBrandingSchema = new Schema<IStoreBranding>(
   {
     logoUrl: {
@@ -390,6 +441,12 @@ const StoreSchema = new Schema<IStore>(
       default: () => ({
         primaryColor: '#FF6B6B',
       }),
+    },
+
+    // Durable per-store catalog sync status (issue #154). Store-scoped by living
+    // on this document. Queries always address one store _id.
+    catalogSync: {
+      type: CatalogSyncSchema,
     },
 
     // Abandoned Cart Notification Settings
