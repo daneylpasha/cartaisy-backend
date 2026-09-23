@@ -252,6 +252,7 @@ import storeAdminRoutes from './routes/storeAdminRoutes';
 import storeSettingsRoutes from './routes/storeSettingsRoutes';
 import storeBrandingRoutes from './routes/storeBrandingRoutes';
 import storeConfigRoutes from './routes/storeConfigRoutes';
+import buildRequestRoutes from './routes/buildRequestRoutes';
 
 // API Routes with versioning
 app.use(`/api/${apiConfig.version}/auth`, authRoutes);
@@ -268,6 +269,10 @@ app.use(`/api/${apiConfig.version}/shopify`, shopifyRoutes);
 // Shopify OAuth callback route (matches Shopify Partner Dashboard redirect URL)
 app.use('/api/auth/shopify', shopifyOAuthRoutes);
 app.use(`/api/webhooks`, webhookRoutes);
+// Build requests: store-admin create/list/get, platform-admin status updates.
+// Mounted before the general admin router so /admin/build-requests is not
+// treated as a store-admin analytics route.
+app.use(`/api/${apiConfig.version}`, buildRequestRoutes);
 app.use(`/api/${apiConfig.version}/admin`, adminRoutes);
 // Order management routes (admin)
 app.use(`/api/${apiConfig.version}/admin`, orderManagementRoutes);

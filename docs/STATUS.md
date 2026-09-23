@@ -59,6 +59,14 @@ Issue #154 (parent epic #152) stores per-store catalog sync status on `Store.cat
 
 Pull request: https://github.com/daneylpasha/cartaisy-backend/pull/158
 
+## Build request API
+
+Issue #155 (parent epic #152, dashboard `daneylpasha/cartaisy-dashboard#17`) adds a tracked "Build my app" request. v1 does not start an EAS build. Store admins create, list, and read requests for the authenticated store only, and may update the short access-note checklist. Android and iOS statuses are stored separately. Only a platform admin (`super_admin`) can change platform status.
+
+Creation calls `assertBuildEligible(storeId)` from `src/services/catalogSyncService.ts` before insert. Failure is HTTP 409 with `buildEligibilityErrorBody`. This API does not write `Store.catalogSync` and does not use `shopify.lastSyncAt`. Contract: `docs/cartaisy/BUILD_REQUEST_API.md`.
+
+Pull request: https://github.com/daneylpasha/cartaisy-backend/pull/159
+
 ## What appears complete
 
 - Backend context entrypoint and shared SaaS context docs now exist.

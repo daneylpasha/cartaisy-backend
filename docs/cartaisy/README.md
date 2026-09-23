@@ -33,7 +33,7 @@ Planned features must not be treated as implemented unless verified in code. Do 
 ## Related docs/issues
 
 - GitHub issue: #50.
-- Backend docs: `AGENTS.md`, `CLAUDE.md`, `docs/STORE_OWNERSHIP_VALIDATION_POLICY.md`, `docs/SHOPIFY_TENANT_CLIENT_AUDIT.md`, `docs/HOME_MODULE_CONFIG_AUDIT.md`.
+- Backend docs: `AGENTS.md`, `CLAUDE.md`, `docs/STORE_OWNERSHIP_VALIDATION_POLICY.md`, `docs/SHOPIFY_TENANT_CLIENT_AUDIT.md`, `docs/HOME_MODULE_CONFIG_AUDIT.md`, `docs/cartaisy/BUILD_REQUEST_API.md`.
 - Context files in this folder, suggested reading order:
   1. `PRODUCT_NORTH_STAR.md`
   2. `SAAS_SCOPE.md`
