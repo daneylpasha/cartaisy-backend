@@ -57,6 +57,8 @@ Pull request: https://github.com/daneylpasha/cartaisy-backend/pull/157
 
 Issue #154 (parent epic #152) stores per-store catalog sync status on `Store.catalogSync`: `idle`, `syncing`, `succeeded`, or `failed`, with timestamps and a redacted error summary. The dashboard reads it with `GET /api/v1/shopify/sync` and runs Sync again through the existing `POST /api/v1/shopify/sync` (no second sync entrypoint). A failure is retried quietly up to two more times in that same request before status becomes `failed`. A store may request a build only when Shopify is connected and the latest sync for that shop succeeded. `assertBuildEligible(storeId)` throws `BuildNotEligibleError` with code `BUILD_NOT_ELIGIBLE` for sibling build-request creation (issue #155). The primary dashboard button label is Sync again. Contract and UI copy: `docs/cartaisy/SHOPIFY_API_POLICY.md`.
 
+Pull request: https://github.com/daneylpasha/cartaisy-backend/pull/158
+
 ## What appears complete
 
 - Backend context entrypoint and shared SaaS context docs now exist.
