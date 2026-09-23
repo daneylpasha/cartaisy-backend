@@ -37,10 +37,54 @@ The backend is the only owner of Shopify access tokens for new merchant connects
 | Start connect | `POST /api/v1/shopify/oauth/connect` with `{ "shop": "store.myshopify.com" }` | Store admin JWT | `{ authorizationUrl, state, tokenOwner: "backend" }`. Redirect the merchant's browser to `authorizationUrl`. `state` is CSRF material, not a Shopify token. |
 | Complete connect | `GET /api/v1/shopify/oauth/callback` | Public. Shopify redirects the browser here. | Exchanges the code, encrypts the Admin token onto that store only, and best-effort provisions the Storefront token. Response and optional browser redirect never include the token. |
 | Connection status | `GET /api/v1/shopify/status` | Store admin JWT | `status` is `connected` or `disconnected` for the authenticated store. A client `storeId` is ignored. |
+| Catalog sync status | `GET /api/v1/shopify/sync` | Store admin JWT | Durable status for the authenticated store only: `idle`, `syncing`, `succeeded`, or `failed`, plus timestamps, a safe `errorSummary`, and `eligibleForBuild`. A client `storeId` is ignored. |
+| Sync again | `POST /api/v1/shopify/sync` | Store admin JWT | Same in-request full sync, using the backend token for that store only. Refuses when disconnected. Persists the status above. A fresh `syncing` run returns 409 `CATALOG_SYNC_IN_PROGRESS` and does not start a second sync. |
 | Disconnect | `POST /api/v1/shopify/disconnect` | Store admin JWT | Revokes the token at Shopify, then clears it. Status becomes `disconnected`. If revoke fails, the token stays so disconnect can be retried. |
-| Trigger sync | `POST /api/v1/shopify/sync` | Store admin JWT | Runs a full sync with the backend token for that store only. Refuses when disconnected. Durable sync status and build eligibility are issue #154. |
 
-`GET /api/v1/shopify/oauth/connect` accepts the same `shop` query parameter. Existing `POST /api/v1/shopify/sync/full` remains for older admin callers.
+`GET /api/v1/shopify/oauth/connect` accepts the same `shop` query parameter. Existing `POST /api/v1/shopify/sync/full` remains for older admin callers. It does not write this durable catalog sync status. Build eligibility follows `POST /api/v1/shopify/sync` only.
+
+## Catalog sync status and build eligibility
+
+Issue #154. Status is stored on `Store.catalogSync` and is readable only for the authenticated store.
+
+| Status | Meaning |
+| --- | --- |
+| `idle` | This shop has not completed a catalog sync. |
+| `syncing` | Sync again is running, including quiet automatic retries. |
+| `succeeded` | The latest run for this shop finished. |
+| `failed` | The latest run failed after quiet retries. `errorSummary` is safe to show. |
+
+Quiet retries: a thrown sync error is retried immediately up to two more times in the same request (three attempts total). The same happens when the sync returns without throwing but imported zero products and reported errors (Shopify fetch failures are returned that way). An empty catalog with no errors is `succeeded`. Status stays `syncing` during retries. The dashboard does not show attempt numbers. There is no background queue. A `syncing` record older than 15 minutes can be claimed again so a restarted process does not leave Sync again stuck. That reclaim is per process; two servers can both pass it.
+
+Stores connected before this status existed read as `idle` and are not build-eligible until Sync again succeeds. The older admin and scheduled sync paths do not write `Store.catalogSync`.
+
+Build eligibility minimal bar: the store is eligible only when Shopify is connected and `catalogSync.status` is `succeeded` for that same shop domain. `idle`, `syncing`, `failed`, a success for a different shop, and a disconnected store are rejected. `shopify.lastSyncAt` is not the bar — connect stamps it before any catalog sync. A later failure stays ineligible even if `lastSucceededAt` is still set.
+
+Sibling build-request creation (issue #155) must call `assertBuildEligible(storeId)` from `src/services/catalogSyncService.ts` before inserting a request. On failure it throws `BuildNotEligibleError` (`code` `BUILD_NOT_ELIGIBLE`, HTTP 409). `reason` is `shopify_not_connected` or `catalog_sync_not_succeeded`. Use `buildEligibilityErrorBody(error)` for the response:
+
+```json
+{
+  "success": false,
+  "error": "Sync the catalog successfully before requesting a build. Use Sync again.",
+  "code": "BUILD_NOT_ELIGIBLE",
+  "reason": "catalog_sync_not_succeeded"
+}
+```
+
+OAuth refuses to switch shops until the current shop is disconnected. After that, connecting a different shop resets catalog sync to `idle`. Reconnecting the same shop keeps a prior `succeeded` status, and build eligibility returns once Shopify is connected again.
+
+### Dashboard UI copy
+
+The primary call-to-action label is **Sync again**. Do not label it "Sync now" or "Retry".
+
+| Status | Copy | Sync again | Build |
+| --- | --- | --- | --- |
+| `idle` | Catalog has not synced yet. Sync again to import your products. | Enabled | Disabled |
+| `syncing` | Syncing your catalog… | Busy, disabled | Disabled |
+| `succeeded` | Catalog synced. | Enabled, to run again | Enabled when Shopify is connected |
+| `failed` | Sync failed. Show `errorSummary`, then Sync again. | Enabled | Disabled |
+
+Do not mention the automatic retries. If the button is pressed while status is already `syncing`, keep showing the syncing state. The API returns 409 `CATALOG_SYNC_IN_PROGRESS`. A finished failure returns 502 `CATALOG_SYNC_FAILED` with the same status object the GET returns, so the screen can render `failed` without a second request. `primaryAction` in the payload is always `Sync again`.
 
 When `SHOPIFY_OAUTH_RETURN_URL` is set, the callback redirects the browser there with `shopify=connected` or `shopify=error` and a short `reason`. The return URL is taken only from that environment variable.
 

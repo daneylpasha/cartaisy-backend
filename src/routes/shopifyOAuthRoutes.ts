@@ -13,7 +13,8 @@ const router = Router();
  * GET  /oauth/callback — Shopify browser redirect; completes the grant
  * GET  /status         — connected | disconnected for the authenticated store
  * POST /disconnect     — revoke the Shopify token, then clear it
- * POST /sync           — trigger a store-scoped sync with the backend token
+ * GET  /sync           — durable catalog sync status for the authenticated store
+ * POST /sync           — Sync again: store-scoped sync with the backend token
  */
 
 const dashboardGuard = [authenticate as any, storeAuth as any, storeAdmin as any];
@@ -54,10 +55,17 @@ router.get('/status', ...dashboardGuard, shopifyOAuthController.getConnectionSta
 router.post('/disconnect', ...dashboardGuard, shopifyOAuthController.disconnectStore as any);
 
 /**
- * Trigger a full sync for the authenticated store.
+ * Durable catalog sync status for the authenticated store.
+ * GET /sync
+ * Does not accept a client storeId. Includes build eligibility for this store.
+ */
+router.get('/sync', ...dashboardGuard, shopifyOAuthController.getCatalogSync as any);
+
+/**
+ * Sync again for the authenticated store.
  * POST /sync
  * Uses the backend token for that storeId. Refuses when disconnected.
- * Durable sync status and build eligibility are issue #154.
+ * Persists idle | syncing | succeeded | failed and retries a failure quietly.
  */
 router.post('/sync', ...dashboardGuard, shopifyOAuthController.triggerSync as any);
 
