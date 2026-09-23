@@ -22,6 +22,10 @@ export interface IShopifyConnection {
   connectedAt?: Date;
   lastSyncAt?: Date;
   locationId?: string; // Shopify location ID for inventory management
+  // One-time OAuth CSRF state. The raw state is never stored; only its hash is.
+  oauthStateHash?: string;
+  oauthStateShop?: string;
+  oauthStateExpiresAt?: Date;
 }
 
 export interface IStorePlan {
@@ -124,6 +128,18 @@ const ShopifyConnectionSchema = new Schema<IShopifyConnection>(
     locationId: {
       type: String,
       sparse: true,
+    },
+    oauthStateHash: {
+      type: String,
+      select: false,
+    },
+    oauthStateShop: {
+      type: String,
+      select: false,
+    },
+    oauthStateExpiresAt: {
+      type: Date,
+      select: false,
     },
   },
   { _id: false }
@@ -400,9 +416,15 @@ const StoreSchema = new Schema<IStore>(
     toJSON: {
       transform (_doc, ret) {
         delete (ret as any).__v;
-        // Don't include accessToken in JSON responses
+        // Shopify credentials stay on the backend. JSON sent to dashboard or
+        // mobile clients must not include admin tokens, storefront tokens, or
+        // the pending OAuth state hash.
         if (ret.shopify) {
           delete (ret.shopify as any).accessToken;
+          delete (ret.shopify as any).storefrontAccessToken;
+          delete (ret.shopify as any).oauthStateHash;
+          delete (ret.shopify as any).oauthStateShop;
+          delete (ret.shopify as any).oauthStateExpiresAt;
         }
         return ret;
       },
@@ -419,6 +441,9 @@ const StoreSchema = new Schema<IStore>(
 // StoreSchema.index({ 'shopify.isConnected': 1 }); // Already has index: true
 StoreSchema.index({ 'plan.type': 1 });
 StoreSchema.index({ createdAt: -1 });
+// Pending OAuth state hashes are unique while present. Disconnect and callback
+// unset the field, so disconnected stores are not part of the index.
+StoreSchema.index({ 'shopify.oauthStateHash': 1 }, { unique: true, sparse: true });
 
 // Compound indexes
 StoreSchema.index({ isActive: 1, 'plan.type': 1 });

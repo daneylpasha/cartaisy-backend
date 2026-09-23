@@ -109,11 +109,6 @@
       "count": 1
     }
   },
-  "src/controllers/shopifyOAuthController.ts": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
   "src/controllers/webhookController.ts": {
     "no-duplicate-imports": {
       "count": 1

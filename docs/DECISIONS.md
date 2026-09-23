@@ -235,6 +235,14 @@ Known gap: exact original decision dates are not known for most entries. Use "Da
 - Impact: No CI behavior change today. Revisit if real console output starts leaking into production logs or becomes a recurring complaint.
 - Related docs: `eslint.config.mjs`. Decided by Daniyal, 2026-08-03.
 
+### Backend is the sole owner of Shopify OAuth tokens for new connects
+
+- Date: 2026-09-23.
+- Decision: New merchant Shopify connects complete only on this backend. The Admin access token is encrypted on `Store.shopify.accessToken` for that `storeId` and is never returned to the dashboard or mobile app. The dashboard starts connect, reads status, disconnects, and triggers sync through the backend APIs in `docs/cartaisy/SHOPIFY_API_POLICY.md`. Disconnect revokes the token at Shopify, then clears it, and connection status becomes `disconnected`. A shop domain can be connected to only one store. Webhook HMAC and shop-to-Store mapping stay store-scoped.
+- Reason: Dual token ownership (dashboard Mongo plus backend) causes bugs and blocks simple onboarding. Phase 4 starts by making the backend the source of truth for new connects (issue #153, parent epic #152).
+- Impact: Dashboard work for this flow must not persist `shopify.accessToken`. Tokens already stored in the dashboard database are not migrated here; that needs a later migration if any historical install still depends on the dashboard copy. Durable sync status and build eligibility remain issue #154. Partner app configuration is `SHOPIFY_CLIENT_ID`, `SHOPIFY_CLIENT_SECRET`, `SHOPIFY_REDIRECT_URI`, and `SHOPIFY_SCOPES` (with `SHOPIFY_API_KEY` / `SHOPIFY_API_SECRET` as fallbacks for the id and secret only).
+- Related docs: `docs/cartaisy/SHOPIFY_API_POLICY.md`, `docs/STATUS.md`, `docs/cartaisy/ROADMAP.md` (Phase 4). GitHub issue: #153. Pull request: https://github.com/daneylpasha/cartaisy-backend/pull/157.
+
 ## Related docs/issues
 
 - GitHub issue: #52.
