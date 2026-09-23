@@ -86,6 +86,8 @@ The primary call-to-action label is **Sync again**. Do not label it "Sync now" o
 
 Do not mention the automatic retries. If the button is pressed while status is already `syncing`, keep showing the syncing state. The API returns 409 `CATALOG_SYNC_IN_PROGRESS`. A finished failure returns 502 `CATALOG_SYNC_FAILED` with the same status object the GET returns, so the screen can render `failed` without a second request. `primaryAction` in the payload is always `Sync again`.
 
+Build my app is a separate tracked request, not this sync route (issue #155, dashboard `daneylpasha/cartaisy-dashboard#17`). `POST /api/v1/build-requests` calls `assertBuildEligible(storeId)` before insert and returns `buildEligibilityErrorBody` at HTTP 409 when it throws. It does not write `Store.catalogSync`. Contract: `docs/cartaisy/BUILD_REQUEST_API.md`.
+
 When `SHOPIFY_OAUTH_RETURN_URL` is set, the callback redirects the browser there with `shopify=connected` or `shopify=error` and a short `reason`. The return URL is taken only from that environment variable.
 
 Webhook HMAC verification and shop-domain-to-Store mapping are unchanged and stay store-scoped. Disconnect clears `shopify.shop` and `shopify.isConnected`, so a disconnected shop no longer resolves to a store.
@@ -115,3 +117,5 @@ These are the Shopify Partner app credentials for the OAuth flow. They are app-l
 - `docs/cartaisy/TENANCY_MODEL.md`
 - `docs/cartaisy/DEFINITION_OF_DONE.md`
 - GitHub issue: #153 (backend sole owner of Shopify OAuth tokens for new connects).
+- GitHub issue: #154 (durable catalog sync status and build eligibility).
+- GitHub issue: #155 and `docs/cartaisy/BUILD_REQUEST_API.md` (tracked build request; dashboard `daneylpasha/cartaisy-dashboard#17`).
