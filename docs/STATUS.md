@@ -51,7 +51,7 @@ Issue #153 (parent epic #152) moves new merchant Shopify connect onto the backen
 
 This slice does not migrate tokens already stored in the dashboard database, and it does not add the durable sync-status or build-eligibility gate (issue #154). The dashboard UI that stops storing tokens is a separate change in the dashboard repo.
 
-Pull request: recorded with this slice once the PR is open.
+Pull request: https://github.com/daneylpasha/cartaisy-backend/pull/157
 
 ## What appears complete
 
