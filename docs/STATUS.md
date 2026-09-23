@@ -67,7 +67,7 @@ Pull request: https://github.com/daneylpasha/cartaisy-backend/pull/158
 - CI workflow is intended to include type checking, tests, coverage, build, Docker build, security scanning, API contract testing, and dependency checks. Issue #86 fixes startup-blocking workflow configuration so GitHub can schedule those jobs again.
 - Tests exist for several tenant-scoped Storefront paths, CI workflow script references, and generated TSOA route mounting for representative mobile smoke-test routes.
 - Railway staging service, environment variables, dedicated staging MongoDB, staging `Store` record, `/api/health`/`/api/ready` responses, and a live Shopify OAuth connection are recorded and verified for issue #116 (see `docs/RELEASE_CHECKLIST.md`).
-- New Shopify connects store the Admin token only on the backend (issue #153, PR #157). The dashboard UI that stops writing tokens is [cartaisy-dashboard#15](https://github.com/daneylpasha/cartaisy-dashboard/issues/15), not this repo.
+- New Shopify connects store the Admin token only on the backend (issue #153, PR #157). The dashboard UI that stops writing tokens landed in [cartaisy-dashboard#19](https://github.com/daneylpasha/cartaisy-dashboard/pull/19) (closes #15 and #16).
 - Durable catalog sync status and `assertBuildEligible` exist (issue #154, PR #158). Build stays blocked until sync has succeeded for the same connected shop.
 
 ## What appears partial
@@ -113,8 +113,8 @@ Recorded 2026-09-23 in `docs/DECISIONS.md` ("Cartaisy v1 merchant onboarding is 
 
 Do not reopen:
 
-1. The backend is the sole owner of Shopify OAuth tokens for new connects. The dashboard never stores `shopify.accessToken` for the new flow. Contract: connect, status, disconnect, sync. #153 landed ([PR #157](https://github.com/daneylpasha/cartaisy-backend/pull/157)). Dashboard UI: [cartaisy-dashboard#15](https://github.com/daneylpasha/cartaisy-dashboard/issues/15).
-2. Order: invite-only signup → Connect Shopify first → branding (most fields editable) → smart-default home preview → tracked "Build my app". Full self-serve EAS is outside the epic. Wizard: [cartaisy-dashboard#16](https://github.com/daneylpasha/cartaisy-dashboard/issues/16). Smart default home: [Cartaisy#121](https://github.com/daneylpasha/Cartaisy/issues/121).
+1. The backend is the sole owner of Shopify OAuth tokens for new connects. The dashboard never stores `shopify.accessToken` for the new flow. Contract: connect, status, disconnect, sync. #153 landed ([PR #157](https://github.com/daneylpasha/cartaisy-backend/pull/157)). Dashboard UI landed in [cartaisy-dashboard#19](https://github.com/daneylpasha/cartaisy-dashboard/pull/19) (closes #15).
+2. Order: invite-only signup → Connect Shopify first → branding (most fields editable) → smart-default home preview → tracked "Build my app". Full self-serve EAS is outside the epic. Wizard landed in [cartaisy-dashboard#19](https://github.com/daneylpasha/cartaisy-dashboard/pull/19) (closes #16). Smart default home: [Cartaisy#121](https://github.com/daneylpasha/Cartaisy/issues/121).
 3. Locked (Shopify source of truth): shop domain / myshopify URL, Shopify shop id, products, orders, collection contents. Editable: app display name, logo, brand colors, splash and icon, which collections to feature on home, home module layout later. Splash and icon stay build-time.
 4. Sync UX: primary "Sync again" plus quiet auto-retry (`docs/cartaisy/SHOPIFY_API_POLICY.md`). Branding may continue with a warning. Build stays blocked until catalog sync succeeded for the same connected shop (`Store.catalogSync` and `assertBuildEligible`). #154 landed ([PR #158](https://github.com/daneylpasha/cartaisy-backend/pull/158)).
 5. Platforms: Android and iOS. Android may ship first. Independent per-platform status. Build request API: #155. Dashboard UI: [cartaisy-dashboard#17](https://github.com/daneylpasha/cartaisy-dashboard/issues/17).
@@ -123,7 +123,7 @@ Do not reopen:
 
 **Superseded (2026-09-23):** a required home-module builder during onboarding; dashboard storage of `shopify.accessToken` for new connects; public open signup; product billing code; full automated EAS or app-store submission as the v1 build.
 
-On main when this section was written: #153 (PR #157) and #154 (PR #158). Issue #155 remains the build-request API ticket. This section does not claim that API has merged. Dashboard #15–#17 and mobile #121–#122 are outside this repo.
+On main when this section was written: #153 (PR #157) and #154 (PR #158). Issue #155 remains the build-request API ticket. This section does not claim that API has merged. Dashboard #15 and #16 landed in [cartaisy-dashboard#19](https://github.com/daneylpasha/cartaisy-dashboard/pull/19). Dashboard #17 is still open. Mobile #121 and #122 are outside this repo.
 
 ## Related docs/issues
 
