@@ -1,6 +1,6 @@
 # Backend Status
 
-Last updated: 2026-09-23.
+Last updated: 2026-09-23 (v1 onboarding decisions, issue #156).
 
 This file is a human/agent-maintained snapshot, not an automatically guaranteed source of truth. Verify current behavior in code, tests, CI, and deployed environments before making implementation decisions.
 
@@ -67,6 +67,8 @@ Pull request: https://github.com/daneylpasha/cartaisy-backend/pull/158
 - CI workflow is intended to include type checking, tests, coverage, build, Docker build, security scanning, API contract testing, and dependency checks. Issue #86 fixes startup-blocking workflow configuration so GitHub can schedule those jobs again.
 - Tests exist for several tenant-scoped Storefront paths, CI workflow script references, and generated TSOA route mounting for representative mobile smoke-test routes.
 - Railway staging service, environment variables, dedicated staging MongoDB, staging `Store` record, `/api/health`/`/api/ready` responses, and a live Shopify OAuth connection are recorded and verified for issue #116 (see `docs/RELEASE_CHECKLIST.md`).
+- New Shopify connects store the Admin token only on the backend (issue #153, PR #157). The dashboard UI that stops writing tokens is [cartaisy-dashboard#15](https://github.com/daneylpasha/cartaisy-dashboard/issues/15), not this repo.
+- Durable catalog sync status and `assertBuildEligible` exist (issue #154, PR #158). Build stays blocked until sync has succeeded for the same connected shop.
 
 ## What appears partial
 
@@ -81,8 +83,8 @@ Pull request: https://github.com/daneylpasha/cartaisy-backend/pull/158
 ## What is not verified or not started
 
 - Full public SaaS readiness.
-- End-to-end first merchant onboarding readiness.
-- Automated mobile app build or app-store submission readiness.
+- End-to-end first merchant onboarding readiness. The target flow is the locked order in `docs/DECISIONS.md` (epic #152): invite-only signup, Connect Shopify, branding, smart-default home preview, tracked "Build my app". The older required home-modules checklist is superseded (2026-09-23).
+- Automated mobile app build and app-store submission. **Superseded as a v1 requirement (2026-09-23).** v1 build is a tracked "Build my app" request with independent Android and iOS status. Full self-serve EAS and store-submission automation are outside epic #152. The request API is issue #155. The dashboard UI is [cartaisy-dashboard#17](https://github.com/daneylpasha/cartaisy-dashboard/issues/17).
 - Complete checkout strategy documentation and production validation.
 - First-merchant Shopify-hosted checkout/order webhook smoke execution against
   an approved development or generated-test-data store. Issue #109 records a
@@ -103,10 +105,31 @@ Pull request: https://github.com/daneylpasha/cartaisy-backend/pull/158
 5. Home module validation and Shopify ID ownership checks.
 6. Release readiness and rollback verification.
 7. Railway staging provisioning and smoke-test evidence.
+8. v1 onboarding follows the locked decisions in `docs/DECISIONS.md` (epic #152). Do not reopen token ownership, step order, locked versus editable fields, the sync/build gate, platform rules, the premium bar, invite-only signup, or manual billing.
+
+## Locked v1 onboarding decisions
+
+Recorded 2026-09-23 in `docs/DECISIONS.md` ("Cartaisy v1 merchant onboarding is locked") and `docs/cartaisy/ROADMAP.md` (Phase 4 notes and Phase 6). These are product rules. They are not evidence that the dashboard or mobile UI is finished. Issue #156 is this record. Parent epic: [#152](https://github.com/daneylpasha/cartaisy-backend/issues/152).
+
+Do not reopen:
+
+1. The backend is the sole owner of Shopify OAuth tokens for new connects. The dashboard never stores `shopify.accessToken` for the new flow. Contract: connect, status, disconnect, sync. #153 landed ([PR #157](https://github.com/daneylpasha/cartaisy-backend/pull/157)). Dashboard UI: [cartaisy-dashboard#15](https://github.com/daneylpasha/cartaisy-dashboard/issues/15).
+2. Order: invite-only signup → Connect Shopify first → branding (most fields editable) → smart-default home preview → tracked "Build my app". Full self-serve EAS is outside the epic. Wizard: [cartaisy-dashboard#16](https://github.com/daneylpasha/cartaisy-dashboard/issues/16). Smart default home: [Cartaisy#121](https://github.com/daneylpasha/Cartaisy/issues/121).
+3. Locked (Shopify source of truth): shop domain / myshopify URL, Shopify shop id, products, orders, collection contents. Editable: app display name, logo, brand colors, splash and icon, which collections to feature on home, home module layout later. Splash and icon stay build-time.
+4. Sync UX: primary "Sync again" plus quiet auto-retry (`docs/cartaisy/SHOPIFY_API_POLICY.md`). Branding may continue with a warning. Build stays blocked until catalog sync succeeded for the same connected shop (`Store.catalogSync` and `assertBuildEligible`). #154 landed ([PR #158](https://github.com/daneylpasha/cartaisy-backend/pull/158)).
+5. Platforms: Android and iOS. Android may ship first. Independent per-platform status. Build request API: #155. Dashboard UI: [cartaisy-dashboard#17](https://github.com/daneylpasha/cartaisy-dashboard/issues/17).
+6. Premium white-label bar for the dashboard and the shopper app. Launch waits on both. Shopper pass: [Cartaisy#122](https://github.com/daneylpasha/Cartaisy/issues/122).
+7. Invite-only. Manual billing unchanged (decision 2026-07-17, reaffirmed).
+
+**Superseded (2026-09-23):** a required home-module builder during onboarding; dashboard storage of `shopify.accessToken` for new connects; public open signup; product billing code; full automated EAS or app-store submission as the v1 build.
+
+On main when this section was written: #153 (PR #157) and #154 (PR #158). Issue #155 remains the build-request API ticket. This section does not claim that API has merged. Dashboard #15–#17 and mobile #121–#122 are outside this repo.
 
 ## Related docs/issues
 
 - GitHub issue: #52.
+- v1 onboarding epic: #152. Docs record: #156. Children: #153, #154, #155. Dashboard #15–#17. Mobile #121–#122.
+- `docs/DECISIONS.md`
 - `CARTAISY_CONTEXT.md`
 - `docs/ARCHITECTURE.md`
 - `docs/STORE_OWNERSHIP_VALIDATION_POLICY.md`

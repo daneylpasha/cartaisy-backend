@@ -1,17 +1,17 @@
 # Cartaisy Roadmap
 
-Last updated: 2026-07-17. Owner: Daniyal Pasha. Maintained by the orchestrator (planning agent) and updated in place as phases complete.
+Last updated: 2026-09-23. Owner: Daniyal Pasha. Maintained by the orchestrator (planning agent) and updated in place as phases complete.
 
-This is the shared cross-repo roadmap from current state to first-merchant readiness. It is a plan, not proof of implementation. Do not assume any phase is complete unless its gate evidence is recorded here or in the linked docs. Decisions backing this roadmap are recorded in `docs/DECISIONS.md` (entries dated 2026-07-17).
+This is the shared cross-repo roadmap from current state to first-merchant readiness. It is a plan, not proof of implementation. Do not assume any phase is complete unless its gate evidence is recorded here or in the linked docs. Decisions backing this roadmap are recorded in `docs/DECISIONS.md` (entries dated 2026-07-17, plus the locked v1 onboarding entry dated 2026-09-23). Do not reopen the 2026-09-23 onboarding rules without a new decision recorded there.
 
 ## Current state
 
 - Backend, mobile, and dashboard repos exist with substantial implementation and a strong docs/audit discipline (see each repo's `docs/STATUS.md`).
 - No reachable deployed backend exists; the Railway production URL returns platform 404. Nearly every open verification chain is blocked on this.
-- A merchant-branded Android build artifact was produced and verified on a physical device (2026-08-04, Phase 2 gate met — see below); iOS build proof and the full provisioning-runbook rehearsal remain outstanding.
+- A merchant-branded Android build artifact was produced and verified on a physical device (2026-08-04, Phase 2 gate met — see below); iOS build proof and the full provisioning-runbook rehearsal remain outstanding. Locked 2026-09-23: v1 still includes Android and iOS, Android may ship first, and each platform has its own status.
 - Runtime branding is implemented end-to-end and the Phase 3 gate is met (2026-08-06, live run against the "Cartaisy Staging" store — see Phase 3 below): `primaryColor`, `secondaryColor`, and `logoUrl` are dashboard-editable, apply on next app launch without a rebuild, and a fresh install is on-brand from the first frame with no flash. Two coverage gaps remain open (don't block the gate): the hardcoded `t("common.companyName")` string (5 UI locations) isn't wired to dashboard branding yet; and a number of `getTokenValue()`/`AppImage` tint call sites read a separate, static token registry and never pick up a runtime color change (reproduced live 2026-08-06 — the Sign In button and footer wordmark stayed on the old color while the header updated), closed only by a code fix or a rebuild (exact call-site count tracked in the `Cartaisy` repo's `docs/STATUS.md`). The two dashboard (`cartaisy-dashboard`) client-side auth bugs found during the same run — a hardcoded production API URL and a stale-session-cache bug — are fixed and merged: [PR #14](https://github.com/daneylpasha/cartaisy-dashboard/pull/14), verified 2026-08-07 by logging into a local backend and confirming the session survives a page refresh without reverting store.
-- The dashboard duplicates backend schemas and performs Shopify OAuth/token storage locally (to be consolidated).
-- No merchant billing code exists (intentional; billing is manual for early merchants).
+- **Superseded for new connects (2026-09-23):** the dashboard must not store `shopify.accessToken` on the new Connect Shopify flow. The backend is the sole token owner (issue #153, [PR #157](https://github.com/daneylpasha/cartaisy-backend/pull/157)). The dashboard still duplicates other tenant schemas, and tokens already stored in the dashboard database are not migrated. Both remain Phase 4 work ([cartaisy-dashboard#15](https://github.com/daneylpasha/cartaisy-dashboard/issues/15)).
+- No merchant billing code exists. That is intentional. Manual billing was reaffirmed 2026-09-23, and signup stays invite-only. See `docs/DECISIONS.md`.
 - No real merchant exists; a Shopify Partners development store will serve as test and demo tenant.
 
 ## Target state
@@ -78,13 +78,15 @@ Remaining Phase 3 work (tracked as open, does not block the gate above): two dis
 
 ### Phase 4 — Dashboard consolidation (parallel track, small PRs)
 
-1. Move Shopify OAuth/token handling to the backend first (highest risk); retire the dashboard `Store.shopify.accessToken` field.
+1. Move Shopify OAuth/token handling to the backend first (highest risk); retire the dashboard `Store.shopify.accessToken` field. **Backend slice landed 2026-09-23** for new connects (issue #153, [PR #157](https://github.com/daneylpasha/cartaisy-backend/pull/157)). The dashboard contract is connect, status, disconnect, and sync (`docs/cartaisy/SHOPIFY_API_POLICY.md`). The reading that the dashboard may keep storing `shopify.accessToken` for new connects is superseded. Retiring copies already in the dashboard database, and the dashboard UI ([cartaisy-dashboard#15](https://github.com/daneylpasha/cartaisy-dashboard/issues/15)), are still open.
 2. Migrate remaining tenant-data routes to the generated backend API client, route by route: store settings → branding → home modules/app-builder → team → orders/customers/analytics. Delete each dashboard model with its last consumer.
 3. Align dashboard auth to backend JWT/roles; remove the hard-coded master-admin email list.
 4. Marketing content (blog, newsletter, contact) stays dashboard-local.
 5. Add dashboard CI (lint, typecheck, tests) — currently none.
 
 Gate: no dashboard Mongoose model for tenant-owned data; no Shopify token in the dashboard DB; dashboard CI green.
+
+**Phase 4 progress (2026-09-23). The gate is not met.** Item 1's backend slice is on main. Catalog sync status and the build gate (issue #154, [PR #158](https://github.com/daneylpasha/cartaisy-backend/pull/158)) support onboarding and do not close this phase. Items 2–5 are unchanged. The v1 onboarding product rules that sit on this slice are locked in `docs/DECISIONS.md` ("Cartaisy v1 merchant onboarding is locked", epic [#152](https://github.com/daneylpasha/cartaisy-backend/issues/152)).
 
 ### Phase 5 — Per-merchant push architecture (after Phase 2)
 
@@ -97,15 +99,23 @@ Gate: test push delivered to the sample-merchant Android build, scoped to its st
 ### Phase 6 — Sell it: demo and onboarding productization
 
 1. Demo polish: dev store + branded sample app + dashboard walkthrough rehearsed as the sales demo.
-2. Dashboard onboarding readiness checklist (account → Shopify connected → branding → modules → preview → build requested) per `docs/DASHBOARD_ONBOARDING_FLOW.md` target state.
-3. Billing-lite: `Store.plan` set manually by super admin as a record; no payment code (per decision 2026-07-17).
+2. **Superseded checklist (2026-09-23).** The earlier order "account → Shopify connected → branding → modules → preview → build requested" treated a home-module builder as a required onboarding step. That reading is superseded. Locked order: invite-only signup → Connect Shopify first → branding (most fields editable) → smart-default home preview → tracked "Build my app". Home module layout is editable later. "Build my app" is a tracked request with live per-platform status. Full self-serve EAS is outside epic #152. Child issues: backend #153 (tokens, landed), #154 (sync gate, landed), #155 (build request API), #156 (this record); dashboard [#15](https://github.com/daneylpasha/cartaisy-dashboard/issues/15) connect, [#16](https://github.com/daneylpasha/cartaisy-dashboard/issues/16) wizard, [#17](https://github.com/daneylpasha/cartaisy-dashboard/issues/17) build UI; mobile [#121](https://github.com/daneylpasha/Cartaisy/issues/121) smart default home, [#122](https://github.com/daneylpasha/Cartaisy/issues/122) premium shopper UX.
+3. Billing-lite: `Store.plan` set manually by super admin as a record; no payment code (decision 2026-07-17, reaffirmed 2026-09-23). Signup stays invite-only.
 4. Ops basics scoped to a single operator: monitoring/alerting, secrets rotation notes, incident basics from `docs/cartaisy/MVP_RELEASE_PLAN.md`.
+5. Platforms: Android and iOS. Android may ship first. Status is independent per platform. An Apple enrollment delay does not drop iOS from v1 and does not hold an Android ship.
+6. Premium bar: dashboard onboarding and the shopper app both have to feel premium before launch. Dashboard chrome stays neutral. The shopper UI follows the merchant brand.
 
-Gate: a prospect can be demoed today and onboarded this week without improvising.
+Locked field split for this phase (Shopify is the source of truth): locked shop domain / myshopify URL, Shopify shop id, products, orders, and collection contents. Editable: app display name, logo, brand colors, splash and icon, which collections to feature on home, and home module layout later. Splash and icon stay build-time. Colors and logo stay runtime-overridable (decision 2026-07-17).
+
+Sync UX for this phase: primary "Sync again" plus the quiet auto-retry in `docs/cartaisy/SHOPIFY_API_POLICY.md`. Branding may continue with a warning. Build stays blocked until catalog sync has succeeded for the same connected shop (`Store.catalogSync` and `assertBuildEligible`).
+
+Gate: a prospect can be demoed today and onboarded this week without improvising. The gate is not met. The 2026-09-23 rules above are the shape that onboarding must follow.
 
 ## Sequencing
 
 Critical path: Phase 0 → 1 → 2. Phase 3 runs parallel with Phase 1 (different surfaces). Phase 4 is an independent parallel track suited to delegated small PRs. Phase 5 needs Phase 2. Phase 6 needs all prior phases.
+
+Epic [#152](https://github.com/daneylpasha/cartaisy-backend/issues/152) is the v1 onboarding slice: the Phase 4 token-ownership slice plus the Phase 6 merchant flow. It does not close either phase gate. Build order recorded on the epic: #153 → #154 and #155 → dashboard #15 → #16 → #17. Mobile #121 and #122 can run in parallel once branding APIs are stable. Phase 5 push stays outside the epic unless a later decision pulls it in.
 
 ## Workflow
 
@@ -120,11 +130,13 @@ Critical path: Phase 0 → 1 → 2. Phase 3 runs parallel with Phase 1 (differen
 
 - This roadmap is not evidence. Each gate requires recorded verification (URLs, artifacts, test output, or dated evidence notes in the linked docs).
 - Operator-only steps (accounts, credentials, deployments, live Shopify actions, keystore init) cannot be performed by agents and are the most common blockers; they are called out per phase.
-- iOS readiness depends on merchant Apple Developer enrollment timelines outside Cartaisy's control.
+- iOS readiness depends on merchant Apple Developer enrollment timelines outside Cartaisy's control. Locked 2026-09-23: v1 still includes Android and iOS, Android may ship first, and each platform has its own status. Enrollment delay is not a reason to drop iOS or to hold Android.
+- **Superseded (2026-09-23):** a required home-module builder during onboarding, dashboard storage of `shopify.accessToken` for new connects, public open signup, product billing code, and full self-serve EAS or app-store submission as the v1 build. The replacement is `docs/DECISIONS.md` ("Cartaisy v1 merchant onboarding is locked") and Phase 6 above. Epic #152 leaves those items out of v1.
 
 ## Related docs/issues
 
-- `docs/DECISIONS.md` (2026-07-17 entries)
+- `docs/DECISIONS.md` (2026-07-17 entries, and the locked v1 onboarding entry dated 2026-09-23)
+- Epic [#152](https://github.com/daneylpasha/cartaisy-backend/issues/152); children #153–#156; dashboard [#15](https://github.com/daneylpasha/cartaisy-dashboard/issues/15)–[#17](https://github.com/daneylpasha/cartaisy-dashboard/issues/17); mobile [#121](https://github.com/daneylpasha/Cartaisy/issues/121)–[#122](https://github.com/daneylpasha/Cartaisy/issues/122)
 - `docs/cartaisy/PRODUCT_NORTH_STAR.md`
 - `docs/cartaisy/SAAS_SCOPE.md`
 - `docs/cartaisy/MVP_RELEASE_PLAN.md`
