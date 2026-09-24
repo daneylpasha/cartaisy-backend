@@ -46,6 +46,9 @@ class ShopifyStorefrontService {
   private apiVersion: string;
 
   constructor() {
+    // Process-wide credentials are a single-tenant/dev convenience only.
+    // Request handlers must use *ForStore methods. query() and queryAdmin()
+    // fail closed in SaaS/production before these clients can be used.
     this.shopDomain = process.env.SHOPIFY_SHOP_DOMAIN || '';
     this.storefrontToken = process.env.SHOPIFY_STOREFRONT_ACCESS_TOKEN || '';
     this.adminToken = process.env.SHOPIFY_ADMIN_ACCESS_TOKEN || '';
@@ -92,6 +95,10 @@ class ShopifyStorefrontService {
    * Execute a GraphQL query against Shopify Storefront API
    */
   private async query<T>(graphqlQuery: string, variables: any = {}): Promise<T> {
+    // Choke point for every singleton Storefront call, including cart helpers
+    // that do not assert on their own before falling through to this.query.
+    this.assertGlobalStorefrontReadsAllowed();
+
     if (!this.client) {
       throw new Error('Shopify Storefront API not configured. Check environment variables.');
     }
@@ -118,19 +125,45 @@ class ShopifyStorefrontService {
     return ['1', 'true', 'yes', 'on'].includes(value?.toLowerCase() || '');
   }
 
-  private assertGlobalStorefrontReadsAllowed(): void {
-    const isProduction = process.env.NODE_ENV === 'production';
-    const isSaasMode = this.isTruthyEnv(process.env.SAAS_MODE) || this.isTruthyEnv(process.env.MULTI_TENANT_MODE);
+  /**
+   * SaaS/multi-tenant and production must not serve tenant traffic from
+   * process-wide Shopify env credentials. Single-tenant local development
+   * can still use the singleton client.
+   */
+  private isGlobalShopifyCredentialUseDisallowed(): boolean {
+    return (
+      process.env.NODE_ENV === 'production' ||
+      this.isTruthyEnv(process.env.SAAS_MODE) ||
+      this.isTruthyEnv(process.env.MULTI_TENANT_MODE)
+    );
+  }
 
-    if (isProduction || isSaasMode) {
-      throw new ApiError(
-        'Storefront store context is required for this request',
-        400,
-        true,
-        undefined,
-        true
-      );
+  private assertGlobalStorefrontReadsAllowed(): void {
+    if (!this.isGlobalShopifyCredentialUseDisallowed()) {
+      return;
     }
+
+    throw new ApiError(
+      'Storefront store context is required for this request',
+      400,
+      true,
+      undefined,
+      true
+    );
+  }
+
+  private assertGlobalAdminCredentialsAllowed(): void {
+    if (!this.isGlobalShopifyCredentialUseDisallowed()) {
+      return;
+    }
+
+    throw new ApiError(
+      'Admin store context is required for this request',
+      400,
+      true,
+      undefined,
+      true
+    );
   }
 
   private assertTenantStorefrontClientConfigured(storeClient: ShopifyStorefrontClient): void {
@@ -703,6 +736,9 @@ class ShopifyStorefrontService {
    * Execute a GraphQL query against Shopify Admin API
    */
   private async queryAdmin<T>(graphqlQuery: string, variables: any = {}): Promise<T> {
+    // Choke point for singleton Admin calls (metafields, metaobjects, draft orders).
+    this.assertGlobalAdminCredentialsAllowed();
+
     if (!this.adminClient) {
       throw new Error('Shopify Admin API not configured. Check environment variables.');
     }
@@ -1971,13 +2007,21 @@ class ShopifyStorefrontService {
    * Check if service is properly configured
    */
   isConfigured(): boolean {
+    if (this.isGlobalShopifyCredentialUseDisallowed()) {
+      return false;
+    }
     return !!(this.shopDomain && this.storefrontToken);
   }
 
   /**
-   * Check if Admin API is configured
+   * Check if Admin API is configured.
+   * Returns false in SaaS/production so request handlers cannot treat
+   * process-wide Admin env credentials as usable.
    */
   isAdminConfigured(): boolean {
+    if (this.isGlobalShopifyCredentialUseDisallowed()) {
+      return false;
+    }
     return !!(this.storeUrl && this.adminToken);
   }
 

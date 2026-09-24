@@ -252,4 +252,34 @@ describe('CartController tenant-scoped Storefront cart operations', () => {
       message: 'Cart cleared successfully',
     });
   });
+
+  it('does not enrich cart lines from process-wide Admin credentials in SaaS mode', async () => {
+    const originalSaasMode = process.env.SAAS_MODE;
+    const originalAdminToken = process.env.SHOPIFY_ADMIN_ACCESS_TOKEN;
+    const originalStoreUrl = process.env.SHOPIFY_STORE_URL;
+    process.env.SAAS_MODE = 'true';
+    process.env.SHOPIFY_ADMIN_ACCESS_TOKEN = 'global-admin-token';
+    process.env.SHOPIFY_STORE_URL = 'https://global-shop.myshopify.com';
+
+    try {
+      const controller = new CartController();
+      mockedShopifyStorefront.isAdminConfigured.mockReturnValue(true);
+      mockedShopifyStorefront.getProductMetafields.mockResolvedValue({
+        data: { product: { metafields: { edges: [{ node: { key: 'care', value: 'cold' } }] } } },
+      });
+      mockedShopifyStorefront.getCartForStore.mockResolvedValue({ data: { cart } });
+
+      const response = await controller.getCart(cartId, 'US', storeId);
+
+      expect(mockedShopifyStorefront.getCartForStore).toHaveBeenCalledWith(storeId, cartId, 'US');
+      expect(mockedShopifyStorefront.getCart).not.toHaveBeenCalled();
+      expect(mockedShopifyStorefront.isAdminConfigured).not.toHaveBeenCalled();
+      expect(mockedShopifyStorefront.getProductMetafields).not.toHaveBeenCalled();
+      expect(response.data.items[0].metafields).toEqual([]);
+    } finally {
+      process.env.SAAS_MODE = originalSaasMode;
+      process.env.SHOPIFY_ADMIN_ACCESS_TOKEN = originalAdminToken;
+      process.env.SHOPIFY_STORE_URL = originalStoreUrl;
+    }
+  });
 });

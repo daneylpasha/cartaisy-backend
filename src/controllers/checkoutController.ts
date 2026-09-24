@@ -127,6 +127,8 @@ export class CheckoutController extends Controller {
    * closed in production/SaaS mode. Shopify-hosted checkout handoff
    * (POST /checkout/handoff) is the SaaS checkout v1 path.
    * See docs/CHECKOUT_TENANT_SAFETY_AUDIT.md and issue #68.
+   * Issue #165 keeps this gate (no handoff behavior change) and the
+   * singleton helpers fail closed again inside the Storefront service.
    */
   private assertNativeCheckoutAllowed(): void {
     const isProduction = process.env.NODE_ENV === 'production';
