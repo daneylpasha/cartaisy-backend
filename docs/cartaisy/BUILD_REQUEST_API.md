@@ -1,10 +1,10 @@
 # Build request API
 
-Dashboard contract for "Build my app" (dashboard issue `daneylpasha/cartaisy-dashboard#17`, backend issue #155, parent epic #152).
+Dashboard contract for "Build my app" (dashboard issue `daneylpasha/cartaisy-dashboard#17`, backend issue #155, parent epic #152). Platform ops queue: backend issue #164, dashboard `daneylpasha/cartaisy-dashboard#24`. Store owners are not platform operators: backend issue #170.
 
 v1 stores a request and live per-platform status. It does not start EAS, App Store Connect, or Play Console. Android and iOS are independent: Android can be `ready` while iOS is still `waiting_on_merchant`.
 
-Poll `GET /api/v1/build-requests/:id` for status. There is no push channel in v1.
+Poll `GET /api/v1/build-requests/:id` for status. There is no push channel in v1. Platform ops list every store with `GET /api/v1/admin/build-requests`.
 
 ## Auth
 
@@ -16,11 +16,30 @@ Merchant routes require a store-admin JWT (`admin` or `super_admin` on that stor
 | List own store | `GET /api/v1/build-requests` | Store admin. Newest first, at most 50. |
 | Get one | `GET /api/v1/build-requests/:id` | Store admin. Another store's id is `404`. |
 | Update checklist | `PATCH /api/v1/build-requests/:id` | Store admin. Access notes only. |
-| Update status | `PATCH /api/v1/admin/build-requests/:id/status` | Platform admin (`super_admin`) only. |
+| List all stores | `GET /api/v1/admin/build-requests` | Platform operator only. Newest first, paginated. |
+| Update status | `PATCH /api/v1/admin/build-requests/:id/status` | Platform operator only. |
 
-Customers and signed-out callers cannot use these routes. A store admin who calls the status route gets `403` with `"Platform admin access required"`.
+Customers and signed-out callers cannot use these routes. A store admin, including a store owner whose role is `super_admin`, who calls the list-all or status route gets `403` with `"Platform admin access required"`. That body does not include another store's notes or ids.
 
-Missing or invalid tokens use the existing auth envelope (`401`, `status: "error"`). Store-admin rejection uses `{ "success": false, "error": "Admin access required" }` (`403`).
+Missing or invalid tokens use the existing auth envelope (`401`, `status: "error"`). Store-admin rejection on merchant routes uses `{ "success": false, "error": "Admin access required" }` (`403`).
+
+### Granting platform ops (issue #170)
+
+Both admin build routes use the same gate. It does **not** check `role === "super_admin"`. A caller is a platform operator only when at least one of these is true:
+
+1. `User.isPlatformOperator` is `true` on that account.
+2. The account email is verified (`isVerified: true`) and matches an entry in the `PLATFORM_OPS_EMAILS` environment variable.
+
+If neither matches, the request fails closed with `403`. An unset, empty, or whitespace-only allowlist matches nobody. An unverified account does not match the allowlist. Role `super_admin` stays the store-owner role for store-scoped admin routes. That role alone does not unlock these two routes.
+
+Signup never grants platform ops. New-store registration still creates the owner as `super_admin` and sets `isPlatformOperator: false`, even if the body asks for the flag or another role. Google sign-in does not create accounts and does not set the flag. Shopify customer import does not set it. `PATCH /api/v1/auth/profile` rejects `isPlatformOperator`.
+
+How to grant access:
+
+- **Manual flag.** Set `isPlatformOperator` to `true` on that user document in the database. This is the grant for one specific account. Do not do it through signup.
+- **Allowlist.** Set `PLATFORM_OPS_EMAILS` on the API process to a comma-separated list of operator emails, then restart so the process sees it. Matching ignores case and surrounding spaces. Example: `PLATFORM_OPS_EMAILS=ops@cartaisy.com, other@cartaisy.com`. The signed-in account's email must already be verified. The same verified email on more than one account would match each of those accounts, so prefer the flag when an address is shared across stores.
+
+Merchant create, list, get, and checklist routes are unchanged. They still use store-admin auth (`admin` or `super_admin` on that store).
 
 ## Eligibility
 
@@ -162,6 +181,93 @@ For iOS, show `waiting_on_merchant` as **Waiting on Apple** when the blocker is 
 
 Invalid status is `400` `BUILD_REQUEST_INVALID` and names the allowed values.
 
+## Platform queue
+
+`GET /api/v1/admin/build-requests`
+
+Platform operator only. The gate matches the status update: `isPlatformOperator: true`, or a verified email in `PLATFORM_OPS_EMAILS`. Role `super_admin`, `admin`, `moderator`, and `customer` receive `403` with `"Platform admin access required"` when they have neither marker. A missing token receives the existing `401` auth envelope. A store owner created by signup cannot call this route. See "Granting platform ops" above (issue #170).
+
+The list is every store, newest first (`createdAt`, then id). `X-Store-ID` and a query `storeId` do not select a store. Unknown query keys are `400` `BUILD_REQUEST_INVALID`.
+
+| Query | Default | Rules |
+| --- | --- | --- |
+| `page` | `1` | Positive integer, at most 1000. |
+| `limit` | `20` | Positive integer, at most 50. |
+| `status` | omitted | One status, or a comma-separated list. A request matches when Android or iOS has one of those statuses. |
+| `platform` | omitted | `android` or `ios`. With `status`, only that platform is compared. Without `status`, the request matches when that platform was requested (its status is not `not_requested`). |
+
+Work queue for manual builds:
+
+`GET /api/v1/admin/build-requests?status=queued,building,waiting_on_merchant`
+
+Android builds that are queued:
+
+`GET /api/v1/admin/build-requests?platform=android&status=queued`
+
+`200`:
+
+```json
+{
+  "success": true,
+  "data": {
+    "requests": [
+      {
+        "id": "66f1c2e0a1b2c3d4e5f60718",
+        "storeId": "66f1c2e0a1b2c3d4e5f60710",
+        "store": {
+          "id": "66f1c2e0a1b2c3d4e5f60710",
+          "name": "Northwind",
+          "domain": "northwind.myshopify.com"
+        },
+        "requestedBy": "66f1c2e0a1b2c3d4e5f60711",
+        "platforms": {
+          "android": {
+            "status": "queued",
+            "updatedAt": "2026-09-23T20:00:00.000Z"
+          },
+          "ios": {
+            "status": "waiting_on_merchant",
+            "updatedAt": "2026-09-23T21:00:00.000Z"
+          }
+        },
+        "checklist": {
+          "accessNotes": "Apple developer invite sent."
+        },
+        "createdAt": "2026-09-23T20:00:00.000Z",
+        "updatedAt": "2026-09-23T21:00:00.000Z"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "limit": 20,
+      "total": 1,
+      "pages": 1
+    }
+  }
+}
+```
+
+Each item is the same build-request object as create and get, plus `store`. `store.id` equals `storeId`. `store.name` is the Cartaisy store name. `store.domain` is the Shopify shop domain (`shopify.shop`), or null when the store has no shop. A request whose store record is gone stays in the list with `store.name` and `store.domain` null. A platform is requested when its status is not `not_requested`. `checklist.accessNotes` is the merchant note ops need for a manual build.
+
+Empty queue:
+
+```json
+{
+  "success": true,
+  "data": {
+    "requests": [],
+    "pagination": {
+      "page": 1,
+      "limit": 20,
+      "total": 0,
+      "pages": 0
+    }
+  }
+}
+```
+
+A page past the end returns `requests: []` and the real `total`. This route does not start a build. Status changes stay on `PATCH /api/v1/admin/build-requests/:id/status`.
+
 ## UI rules for dashboard #17
 
 - One screen: platform checkboxes (Android, iOS, or both) and the short access note. No build log, EAS id, or runbook.
@@ -173,4 +279,5 @@ Invalid status is `400` `BUILD_REQUEST_INVALID` and names the allowed values.
 
 - Starting or hiding an EAS build.
 - App Store Connect or Play Console automation.
-- Dashboard UI (issue #17 in the dashboard repo consumes this contract).
+- Merchant dashboard UI (issue #17 in the dashboard repo consumes the store-admin contract).
+- Ops queue UI (dashboard issue #24 consumes the platform list and the existing status PATCH).

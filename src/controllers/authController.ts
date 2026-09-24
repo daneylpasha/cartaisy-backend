@@ -150,13 +150,15 @@ export const register = async (req: Request, res: Response): Promise<void> => {
 
     await newStore.save();
 
-    // Create new user with super_admin role, linked to the Store
+    // Store owner is super_admin for this store's admin routes only.
+    // isPlatformOperator stays false: signup must not grant cross-store ops (issue #170).
     const newUser = new User({
       email: email.toLowerCase(),
       password,
       name,
       storeId: newStore._id, // Use Store's ObjectId
       role: 'super_admin',
+      isPlatformOperator: false,
       isActive: true,
       isVerified: true, // Auto-verify for store creators
       profile: {
@@ -301,6 +303,7 @@ const DASHBOARD_SIGN_IN_ROLES = ['super_admin', 'admin', 'moderator'] as const;
 /**
  * Sign in a merchant dashboard user with a Google Identity Services ID token.
  * Does not create accounts. Invite-only signup is unchanged.
+ * Does not grant isPlatformOperator. Google sign-in is not a platform-ops path.
  * POST /api/v1/auth/google
  */
 export const googleLogin = async (req: Request, res: Response): Promise<void> => {
@@ -619,6 +622,7 @@ export const updateProfile = async (req: AuthRequest, res: Response): Promise<vo
       'role',
       'isVerified',
       'isActive',
+      'isPlatformOperator',
       'passwordResetToken',
       'passwordResetExpires',
       'createdAt',

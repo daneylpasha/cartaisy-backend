@@ -583,7 +583,9 @@ export const syncCustomers = async (storeId: string): Promise<SyncResult> => {
               password: randomPassword,
               role: 'customer',
               isActive: true,
-              importedFromShopify: true
+              importedFromShopify: true,
+              // Shopify customer import is not store-owner or platform-ops creation.
+              isPlatformOperator: false,
             });
             await newUser.save();
           }

@@ -61,7 +61,7 @@ Pull request: https://github.com/daneylpasha/cartaisy-backend/pull/158
 
 ## Build request API
 
-Issue #155 (parent epic #152, dashboard `daneylpasha/cartaisy-dashboard#17`) adds a tracked "Build my app" request. v1 does not start an EAS build. Store admins create, list, and read requests for the authenticated store only, and may update the short access-note checklist. Android and iOS statuses are stored separately. Only a platform admin (`super_admin`) can change platform status.
+Issue #155 (parent epic #152, dashboard `daneylpasha/cartaisy-dashboard#17`) adds a tracked "Build my app" request. v1 does not start an EAS build. Store admins create, list, and read requests for the authenticated store only, and may update the short access-note checklist. Android and iOS statuses are stored separately. Only a platform operator can list every store or change platform status. Store-owner `super_admin` is not enough (issue #170). Grant the flag or `PLATFORM_OPS_EMAILS` by hand, never via signup.
 
 Creation calls `assertBuildEligible(storeId)` from `src/services/catalogSyncService.ts` before insert. Failure is HTTP 409 with `buildEligibilityErrorBody`. This API does not write `Store.catalogSync` and does not use `shopify.lastSyncAt`. Contract: `docs/cartaisy/BUILD_REQUEST_API.md`.
 

@@ -9,6 +9,7 @@ import {
   BuildRequestValidationError,
   createStoreBuildRequest,
   getStoreBuildRequest,
+  listPlatformBuildRequests,
   listStoreBuildRequests,
   updateBuildRequestPlatformStatus,
   updateStoreBuildRequestChecklist,
@@ -161,8 +162,24 @@ export const updateBuildRequestChecklist = async (
 };
 
 /**
+ * GET /api/v1/admin/build-requests
+ * Platform operator. Lists requests across stores. Store owners cannot call this.
+ */
+export const listAdminBuildRequests = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const data = await listPlatformBuildRequests(req.query);
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    sendBuildRequestError(res, error, 'Failed to list build requests');
+  }
+};
+
+/**
  * PATCH /api/v1/admin/build-requests/:id/status
- * Platform admin. Updates Android and/or iOS status. Store admins cannot call this.
+ * Platform operator. Updates Android and/or iOS status. Store owners cannot call this.
  */
 export const updateBuildRequestStatus = async (
   req: AuthenticatedRequest,

@@ -378,7 +378,9 @@ export const handleCustomerCreate = async (req: Request, res: Response): Promise
         password: crypto.randomBytes(16).toString('hex'),
         role: 'customer',
         isActive: true,
-        importedFromShopify: true
+        importedFromShopify: true,
+        // Shopify customer webhooks must not grant platform ops (issue #170).
+        isPlatformOperator: false,
       });
       await newUser.save();
       console.log(`🆕 Created new user: ${shopifyCustomer.email} (store: ${storeId})`);
