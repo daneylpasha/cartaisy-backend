@@ -193,6 +193,31 @@ describe('Shopify-hosted checkout handoff (SaaS checkout v1)', () => {
       expectNoGlobalStorefrontCalls();
     });
 
+    test('getShippingRates fails closed in SaaS mode before buyer-identity updates', async () => {
+      process.env.SAAS_MODE = 'true';
+      const controller = new CheckoutController();
+
+      await expect(
+        controller.getShippingRates('s1', 0, { user: { _id: 'u1' } })
+      ).rejects.toThrow('Native checkout is disabled');
+
+      expect(mockedStorefront.updateCartBuyerIdentity).not.toHaveBeenCalled();
+      expect(mockedStorefront.getCart).not.toHaveBeenCalled();
+      expect(mockedStorefront.getCheckoutUrlForStore).not.toHaveBeenCalled();
+    });
+
+    test('saveShipping fails closed in SaaS mode before buyer-identity updates', async () => {
+      process.env.MULTI_TENANT_MODE = 'yes';
+      const controller = new CheckoutController();
+
+      await expect(
+        controller.saveShipping({ sessionId: 's1' } as any, { user: { _id: 'u1' } })
+      ).rejects.toThrow('Native checkout is disabled');
+
+      expect(mockedStorefront.updateCartBuyerIdentity).not.toHaveBeenCalled();
+      expectNoGlobalStorefrontCalls();
+    });
+
     test('applyPromoCode fails closed in SaaS mode before any Storefront call', async () => {
       process.env.SAAS_MODE = 'true';
       const controller = new CheckoutController();

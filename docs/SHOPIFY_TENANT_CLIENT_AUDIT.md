@@ -2,6 +2,15 @@
 
 GitHub issue: #1 — Audit backend Shopify API usage and identify non-tenant-specific calls.
 
+> Update (2026-09-24, issue #165): mobile and dashboard HTTP handlers no longer use process-wide `SHOPIFY_STOREFRONT_ACCESS_TOKEN`, `SHOPIFY_ADMIN_ACCESS_TOKEN`, `SHOPIFY_SHOP_DOMAIN`, or `SHOPIFY_STORE_URL` for tenant traffic.
+>
+> - Favorites product hydration (`GET /customer/favorites/detailed`) calls `getProductByIdForStore` with the authenticated account's `storeId` (the customer principal, or `User.storeId` when a dashboard principal omits it). `request.storeId` is not used: `strictStoreValidation` copies a caller `x-store-id` there when the JWT has no store claim.
+> - Cart create/read/update paths were already store-scoped. Line-item metafield enrichment no longer calls `isAdminConfigured()` / `getProductMetafields()` (global Admin token). Cart responses still include `metafields: []`, matching product detail v1.
+> - Legacy native checkout helpers (`getCart` without a store client, `updateCartBuyerIdentity`, `applyDiscountCodes`, and every other singleton `query` / `queryAdmin` method) fail closed in SaaS/production (`SAAS_MODE`, `MULTI_TENANT_MODE`, or `NODE_ENV=production`) before those env credentials are sent. `isConfigured()` and `isAdminConfigured()` return false in that same mode. `POST /checkout/handoff` is unchanged and still uses `getCheckoutUrlForStore`.
+> - Out of scope, operator scripts only: `src/scripts/bulkUpdateProductShipping.ts`, `src/scripts/verifyProductShipping.ts`, `src/scripts/checkShippingZones.ts`, `src/scripts/checkShippingZonesREST.ts`, and `sync-products-now.js` still read process-wide Shopify env credentials. They are not HTTP request handlers.
+>
+> The table below is the original audit and is kept as history. Prefer this update for current request-path behavior.
+
 ## Scope and method
 
 This audit searched the backend for Shopify Admin API and Storefront API usage, singleton/global clients, and direct `process.env` Shopify credentials. It is intentionally documentation-only and does not refactor checkout, auth refresh logic, dashboard, backend architecture, or other flows.

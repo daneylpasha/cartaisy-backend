@@ -29,12 +29,18 @@ const createStore = (overrides: Record<string, unknown> = {}) => {
 
 describe('ShopifyStorefrontService tenant-scoped client contract', () => {
   const originalStorefrontToken = process.env.SHOPIFY_STOREFRONT_ACCESS_TOKEN;
+  const originalAdminToken = process.env.SHOPIFY_ADMIN_ACCESS_TOKEN;
+  const originalShopDomain = process.env.SHOPIFY_SHOP_DOMAIN;
+  const originalStoreUrl = process.env.SHOPIFY_STORE_URL;
   const originalNodeEnv = process.env.NODE_ENV;
   const originalSaasMode = process.env.SAAS_MODE;
   const originalMultiTenantMode = process.env.MULTI_TENANT_MODE;
 
   beforeEach(() => {
     process.env.SHOPIFY_STOREFRONT_ACCESS_TOKEN = originalStorefrontToken;
+    process.env.SHOPIFY_ADMIN_ACCESS_TOKEN = originalAdminToken;
+    process.env.SHOPIFY_SHOP_DOMAIN = originalShopDomain;
+    process.env.SHOPIFY_STORE_URL = originalStoreUrl;
     process.env.NODE_ENV = originalNodeEnv;
     process.env.SAAS_MODE = originalSaasMode;
     process.env.MULTI_TENANT_MODE = originalMultiTenantMode;
@@ -46,6 +52,9 @@ describe('ShopifyStorefrontService tenant-scoped client contract', () => {
 
   afterAll(() => {
     process.env.SHOPIFY_STOREFRONT_ACCESS_TOKEN = originalStorefrontToken;
+    process.env.SHOPIFY_ADMIN_ACCESS_TOKEN = originalAdminToken;
+    process.env.SHOPIFY_SHOP_DOMAIN = originalShopDomain;
+    process.env.SHOPIFY_STORE_URL = originalStoreUrl;
     process.env.NODE_ENV = originalNodeEnv;
     process.env.SAAS_MODE = originalSaasMode;
     process.env.MULTI_TENANT_MODE = originalMultiTenantMode;
@@ -580,5 +589,92 @@ describe('ShopifyStorefrontService tenant-scoped client contract', () => {
     })));
     expect(mockedAxios.create).not.toHaveBeenCalled();
     expect(postMock).not.toHaveBeenCalled();
+  });
+
+  it('fails closed on former singleton Storefront and Admin call sites when SaaS mode is on', async () => {
+    process.env.NODE_ENV = 'development';
+    process.env.SAAS_MODE = 'true';
+    process.env.SHOPIFY_SHOP_DOMAIN = 'global-shop.myshopify.com';
+    process.env.SHOPIFY_STORE_URL = 'https://global-shop.myshopify.com';
+    process.env.SHOPIFY_STOREFRONT_ACCESS_TOKEN = 'global-storefront-token';
+    process.env.SHOPIFY_ADMIN_ACCESS_TOKEN = 'global-admin-token';
+
+    expect(shopifyStorefront.isConfigured()).toBe(false);
+    expect(shopifyStorefront.isAdminConfigured()).toBe(false);
+
+    const blocked = [
+      shopifyStorefront.getProductById('123'),
+      shopifyStorefront.getCart('gid://shopify/Cart/abc'),
+      shopifyStorefront.updateCartBuyerIdentity('gid://shopify/Cart/abc', {
+        address1: '1 Market St',
+        city: 'San Francisco',
+        province: 'CA',
+        country: 'US',
+        zip: '94105',
+      }),
+      shopifyStorefront.applyDiscountCodes('gid://shopify/Cart/abc', ['SAVE10']),
+      shopifyStorefront.createCart([{ merchandiseId: 'gid://shopify/ProductVariant/1', quantity: 1 }]),
+      shopifyStorefront.addCartLines('gid://shopify/Cart/abc', []),
+      shopifyStorefront.updateCartLines('gid://shopify/Cart/abc', []),
+      shopifyStorefront.removeCartLines('gid://shopify/Cart/abc', []),
+      shopifyStorefront.associateCartWithCustomer('gid://shopify/Cart/abc', 'customer-token'),
+      shopifyStorefront.getProductMetafields('123'),
+      shopifyStorefront.getMetaobject('gid://shopify/Metaobject/1'),
+    ];
+
+    await Promise.all(blocked.map((promise) => expect(promise).rejects.toMatchObject({
+      name: ApiError.name,
+      statusCode: 400,
+      expose: true,
+    })));
+    expect(postMock).not.toHaveBeenCalled();
+    expect(mockedAxios.create).not.toHaveBeenCalled();
+  });
+
+  it('fails closed on singleton Admin reads when MULTI_TENANT_MODE is on', async () => {
+    process.env.NODE_ENV = 'development';
+    process.env.MULTI_TENANT_MODE = '1';
+    process.env.SHOPIFY_ADMIN_ACCESS_TOKEN = 'global-admin-token';
+    process.env.SHOPIFY_STORE_URL = 'https://global-shop.myshopify.com';
+
+    expect(shopifyStorefront.isAdminConfigured()).toBe(false);
+    await expect(shopifyStorefront.getProductMetafields('123')).rejects.toMatchObject({
+      name: ApiError.name,
+      message: 'Admin store context is required for this request',
+      statusCode: 400,
+      expose: true,
+    });
+    expect(postMock).not.toHaveBeenCalled();
+  });
+
+  it('still fetches product detail with the tenant token when SaaS mode disables singleton credentials', async () => {
+    process.env.NODE_ENV = 'development';
+    process.env.SAAS_MODE = 'true';
+    process.env.SHOPIFY_STOREFRONT_ACCESS_TOKEN = 'global-storefront-token';
+    process.env.SHOPIFY_SHOP_DOMAIN = 'global-shop.myshopify.com';
+
+    const store = await createStore();
+    const shopifyResponse = {
+      data: {
+        product: {
+          id: 'gid://shopify/Product/123',
+          title: 'Tenant Product',
+        },
+      },
+    };
+    postMock.mockResolvedValueOnce({ data: shopifyResponse });
+
+    const response = await shopifyStorefront.getProductByIdForStore(store._id.toString(), '123');
+
+    expect(response).toEqual(shopifyResponse);
+    expect(mockedAxios.create).toHaveBeenCalledWith(expect.objectContaining({
+      baseURL: 'https://tenant-shop.myshopify.com/api/2025-01/graphql.json',
+      headers: expect.objectContaining({
+        'X-Shopify-Storefront-Access-Token': 'tenant-storefront-token',
+      }),
+    }));
+    const createCalls = mockedAxios.create.mock.calls.map((call) => JSON.stringify(call[0]));
+    expect(createCalls.some((call) => call.includes('global-storefront-token'))).toBe(false);
+    expect(createCalls.some((call) => call.includes('global-shop.myshopify.com'))).toBe(false);
   });
 });

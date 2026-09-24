@@ -644,41 +644,13 @@ export class CartController extends Controller {
   }
 
   /**
-   * Transform Shopify cart response to API format
+   * Transform Shopify cart response to API format.
+   * Metafields stay empty: the previous enrichment called the process-wide
+   * Admin client (isAdminConfigured / getProductMetafields). Product detail
+   * already omits that read for v1. Store-scoped Admin metafield hydration
+   * can be added later with a tenant Admin client.
    */
-  private async transformCart(cart: any): Promise<CartData> {
-    // Extract unique product IDs from cart items
-    const productIds = [
-      ...new Set(
-        (cart.lines?.edges || [])
-          .map((edge: any) => edge.node.merchandise?.product?.id)
-          .filter((id: string) => id)
-      ),
-    ];
-
-    // Fetch metafields for all products in parallel
-    const metafieldsMap = new Map<string, any[]>();
-
-    if (shopifyStorefront.isAdminConfigured() && productIds.length > 0) {
-      const metafieldsPromises = productIds.map(async (productId: string) => {
-        try {
-          const response = await shopifyStorefront.getProductMetafields(productId);
-          const metafields = this.transformMetafields(
-            response?.data?.product?.metafields?.edges || []
-          );
-          return { productId, metafields };
-        } catch (error) {
-          console.error(`Failed to fetch metafields for product ${productId}:`, error);
-          return { productId, metafields: [] };
-        }
-      });
-
-      const results = await Promise.all(metafieldsPromises);
-      results.forEach(({ productId, metafields }) => {
-        metafieldsMap.set(productId, metafields);
-      });
-    }
-
+  private transformCart(cart: any): CartData {
     const items: CartLineItem[] = (cart.lines?.edges || []).map((edge: any) => {
       const node = edge.node;
       const merchandise = node.merchandise;
@@ -697,7 +669,7 @@ export class CartController extends Controller {
           : null,
         quantity: node.quantity || 0,
         quantityAvailable: merchandise.quantityAvailable || 0,
-        metafields: metafieldsMap.get(productId) || [],
+        metafields: [],
       };
     });
 
@@ -712,47 +684,5 @@ export class CartController extends Controller {
       subtotal,
       currency,
     };
-  }
-
-  /**
-   * Transform Shopify metafields to API format
-   * Same logic as ProductDetailController
-   */
-  private transformMetafields(metafieldEdges: any[]): any[] {
-    return metafieldEdges
-      .map(edge => edge.node)
-      .filter(metafield => metafield.namespace === 'custom' || metafield.namespace === 'shopify')
-      .map(metafield => {
-        const isMetaobjectReference = metafield.type?.includes('metaobject_reference');
-
-        let displayKey = metafield.key;
-        let displayValue = metafield.value;
-
-        if (
-          isMetaobjectReference &&
-          metafield.resolvedMetaobjects &&
-          metafield.resolvedMetaobjects.length > 0
-        ) {
-          displayKey = metafield.key
-            .split('-')
-            .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1))
-            .join(' ');
-
-          const displayNames = metafield.resolvedMetaobjects
-            .map((mo: any) => mo.displayName)
-            .filter((name: string) => name)
-            .join(', ');
-
-          displayValue = displayNames || metafield.value;
-        }
-
-        return {
-          namespace: metafield.namespace,
-          key: displayKey,
-          value: displayValue,
-          type: metafield.type,
-          description: metafield.description,
-        };
-      });
   }
 }

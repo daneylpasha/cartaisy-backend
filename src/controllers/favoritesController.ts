@@ -1,7 +1,10 @@
 import { Get, Post, Delete, Route, Tags, Response, Body, Security, Request, Query, Controller } from '@tsoa/runtime';
 import mongoose from 'mongoose';
 import Favorite from '../models/Favorite';
+import Customer from '../models/Customer';
+import User from '../models/User';
 import shopifyStorefront from '../services/shopifyStorefrontService';
+import { ApiError } from '../utils/errors';
 import {
   FavoritesResponse,
   FavoriteRequest,
@@ -16,6 +19,49 @@ import {
 @Route('customer/favorites')
 @Tags('Favorites')
 export class FavoritesController extends Controller {
+  /**
+   * Storefront credentials for favorite hydration come from the authenticated
+   * account's store. Customer principals already carry storeId loaded from the
+   * database. Dashboard user principals omit it, so we load User.storeId.
+   *
+   * Do not use request.storeId. strictStoreValidation copies x-store-id onto
+   * req.storeId when the JWT has no storeId claim, so that value is caller-controlled.
+   */
+  private async resolveTrustedStoreId(request?: any): Promise<string> {
+    let rawStoreId = request?.user?.storeId || request?.customer?.storeId;
+
+    if (!rawStoreId && request?.user) {
+      const userId = request.user.id || request.user._id;
+      if (userId && mongoose.Types.ObjectId.isValid(String(userId))) {
+        if (request.user.role === 'customer') {
+          const customer = await Customer.findById(userId).select('storeId').lean();
+          rawStoreId = customer?.storeId;
+        } else {
+          const user = await User.findById(userId).select('storeId').lean();
+          rawStoreId = user?.storeId;
+        }
+      }
+    }
+
+    const storeId = rawStoreId ? String(rawStoreId).trim() : '';
+
+    if (!storeId) {
+      throw new ApiError(
+        'Store context is required (re-authenticate so the account is bound to a store)',
+        400,
+        true,
+        undefined,
+        true
+      );
+    }
+
+    if (!/^[0-9a-fA-F]{24}$/.test(storeId)) {
+      throw new ApiError('Invalid Store ID format', 400, true, undefined, true);
+    }
+
+    return storeId;
+  }
+
   /**
    * Get user's favorite product IDs
    * Returns a simple array of product IDs for efficient client-side merging
@@ -241,6 +287,8 @@ export class FavoritesController extends Controller {
         };
       }
 
+      const storeId = await this.resolveTrustedStoreId(request);
+
       // Convert userId string to ObjectId for mongoose queries
       const userObjectId = new mongoose.Types.ObjectId(userId);
 
@@ -295,12 +343,17 @@ export class FavoritesController extends Controller {
         };
       }
 
-      // Fetch products from Shopify in parallel
+      // Fetch products from the authenticated store's Storefront API.
       const productPromises = productIds.map(async (productId) => {
         try {
-          const response = await shopifyStorefront.getProductById(productId);
+          const response = await shopifyStorefront.getProductByIdForStore(storeId, productId);
           return response?.data?.product || null;
         } catch (error) {
+          // Store configuration failures must not be swallowed into an empty
+          // list that looks like the shopper has no favorites.
+          if (error instanceof ApiError) {
+            throw error;
+          }
           console.error(`Failed to fetch product ${productId} from Shopify:`, error);
           return null;
         }
@@ -382,7 +435,11 @@ export class FavoritesController extends Controller {
         'Error fetching detailed favorites:',
         error instanceof Error ? error.message : 'Unknown error'
       );
-      this.setStatus(500);
+      if (error instanceof ApiError) {
+        this.setStatus(error.statusCode);
+      } else {
+        this.setStatus(500);
+      }
       return {
         success: false,
         data: {
