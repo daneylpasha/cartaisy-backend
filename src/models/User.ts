@@ -279,6 +279,21 @@ const UserSchema = new Schema<IUser>(
       minlength: [6, 'Password must be at least 6 characters long'],
       select: false, // Don't include password in queries by default
     },
+    // Optional audit fields for merchant dashboard Google sign-in.
+    // Linking stays by verified email; these do not grant access on their own.
+    googleSub: {
+      type: String,
+      trim: true,
+      index: true,
+      sparse: true,
+    },
+    authProvider: {
+      type: String,
+      enum: {
+        values: ['password', 'google'],
+        message: 'authProvider must be password or google',
+      },
+    },
     phone: {
       type: String,
       trim: true,

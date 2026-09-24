@@ -5,6 +5,7 @@ Cartaisy scope should stay focused on launching a managed Shopify mobile-app Saa
 ## Current state
 
 - The backend repo includes mobile-facing APIs, customer/admin routes, store models, Shopify services, and audits that identify tenant-safety and Shopify credential risks.
+- Merchant dashboard Google sign-in (`POST /api/v1/auth/google`) is an alternative credential for an existing invited dashboard user, matched by verified email. It is not public signup. See `docs/DECISIONS.md`.
 - The current codebase should be treated as a backend implementation in progress, not proof that the full SaaS product is complete.
 - Do not assume this exists unless verified in code: production-ready multi-tenant Shopify calls, end-to-end merchant onboarding, automated app builds, public SaaS billing, or app-store submission workflows.
 

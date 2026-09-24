@@ -22,6 +22,7 @@ Cartaisy is a multi-repo product. Shared behavior must be coordinated across bac
 - Dashboard responsibilities:
   - Merchant onboarding, Shopify connection, branding, home module management, app/build configuration, and admin workflows.
   - Publishing only supported configuration shapes.
+  - Sign in with Google obtains a Google Identity Services ID token in the browser and posts it to `POST /api/v1/auth/google` as `{ "idToken": string }`. The backend verifies it and returns the same session payload as `POST /api/v1/auth/login`. The dashboard does not verify the token itself and does not create merchant accounts. Invite-only signup stays. `GOOGLE_CLIENT_ID` on the backend must be the same web client ID the dashboard uses (comma-separated if more than one).
 
 ## Known gaps
 

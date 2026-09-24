@@ -1,6 +1,6 @@
 # Backend Status
 
-Last updated: 2026-09-23 (v1 onboarding decisions, issue #156).
+Last updated: 2026-09-24 (merchant dashboard Google sign-in).
 
 This file is a human/agent-maintained snapshot, not an automatically guaranteed source of truth. Verify current behavior in code, tests, CI, and deployed environments before making implementation decisions.
 
@@ -127,11 +127,17 @@ Do not reopen:
 4. Sync UX: primary "Sync again" plus quiet auto-retry (`docs/cartaisy/SHOPIFY_API_POLICY.md`). Branding may continue with a warning. Build stays blocked until catalog sync succeeded for the same connected shop (`Store.catalogSync` and `assertBuildEligible`). #154 landed ([PR #158](https://github.com/daneylpasha/cartaisy-backend/pull/158)).
 5. Platforms: Android and iOS. Android may ship first. Independent per-platform status. Build request API: #155. Dashboard UI: [cartaisy-dashboard#17](https://github.com/daneylpasha/cartaisy-dashboard/issues/17).
 6. Premium white-label bar for the dashboard and the shopper app. Launch waits on both. Shopper pass: [Cartaisy#122](https://github.com/daneylpasha/Cartaisy/issues/122).
-7. Invite-only. Manual billing unchanged (decision 2026-07-17, reaffirmed).
+7. Invite-only. Manual billing unchanged (decision 2026-07-17, reaffirmed). Google sign-in is an alternative credential for an existing dashboard user, not public signup. See "Merchant dashboard Google sign-in" below.
 
 **Superseded (2026-09-23):** a required home-module builder during onboarding; dashboard storage of `shopify.accessToken` for new connects; public open signup; product billing code; full automated EAS or app-store submission as the v1 build.
 
 On main when this section was written: #153 (PR #157) and #154 (PR #158). Issue #155 remains the build-request API ticket. This section does not claim that API has merged. Dashboard #15 and #16 landed in [cartaisy-dashboard#19](https://github.com/daneylpasha/cartaisy-dashboard/pull/19). Dashboard #17 is still open. Mobile #121 and #122 are outside this repo.
+
+## Merchant dashboard Google sign-in
+
+`POST /api/v1/auth/google` signs in an existing dashboard user (`super_admin`, `admin`, `moderator`) with a Google Identity Services ID token. The account is matched by verified email. Shopper roles (`customer`, `premium_customer`) do not get a dashboard session. Invite-only signup is unchanged: Google does not create users. The success payload matches `POST /api/v1/auth/login`.
+
+Railway production and staging need `GOOGLE_CLIENT_ID` (the dashboard web client ID; comma-separated list allowed). It is not a secret. Unset does not crash boot; the route returns `503` `GOOGLE_NOT_CONFIGURED`. `GOOGLE_CLIENT_SECRET` is not required for this check. Decision: `docs/DECISIONS.md` ("Google sign-in is an alternative merchant credential").
 
 ## Related docs/issues
 

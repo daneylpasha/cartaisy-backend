@@ -128,6 +128,7 @@ app.use(`/api/${apiConfig.version}/*`, auditLogger);
 app.use(`/api/${apiConfig.version}/customer/auth/login`, loginLimiter);
 app.use(`/api/${apiConfig.version}/customer/auth/register`, loginLimiter);
 app.use(`/api/${apiConfig.version}/auth/login`, loginLimiter);
+app.use(`/api/${apiConfig.version}/auth/google`, loginLimiter);
 app.use(`/api/${apiConfig.version}/auth/register`, loginLimiter);
 
 // =============================================================================
@@ -187,6 +188,7 @@ app.get('/api/health/detailed', async (_req: Request, res: Response) => {
           'GET /api/health',
           'POST /api/v1/auth/register',
           'POST /api/v1/auth/login',
+          'POST /api/v1/auth/google',
           'GET /api/v1/auth/profile',
           'PATCH /api/v1/auth/profile',
           'POST /api/v1/auth/change-password',

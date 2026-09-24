@@ -34,6 +34,23 @@ export const validateLogin = [
 ];
 
 /**
+ * Validation rules for merchant dashboard Google sign-in.
+ * `idToken` is a Google Identity Services credential from the browser.
+ */
+export const validateGoogleLogin = [
+  body('idToken')
+    .exists()
+    .withMessage('idToken is required')
+    .isString()
+    .withMessage('idToken must be a string')
+    .bail()
+    .notEmpty()
+    .withMessage('idToken is required')
+    .isLength({ max: 8192 })
+    .withMessage('idToken is too long'),
+];
+
+/**
  * Validation rules for password reset request
  */
 export const validatePasswordReset = [

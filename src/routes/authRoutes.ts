@@ -3,6 +3,7 @@ import rateLimit from 'express-rate-limit';
 import {
   register,
   login,
+  googleLogin,
   forgotPassword,
   resetPassword,
   getProfile,
@@ -15,6 +16,7 @@ import { authenticate } from '../middleware/auth';
 import {
   validateRegister,
   validateLogin,
+  validateGoogleLogin,
   validatePasswordReset,
   validatePasswordResetConfirm,
   validateProfileUpdate,
@@ -66,6 +68,15 @@ router.post(
   validateLogin,
   handleValidationErrors,
   login
+);
+
+// Merchant dashboard Sign in with Google (same limiter and validation style as /login)
+router.post(
+  '/google',
+  authLimiter,
+  validateGoogleLogin,
+  handleValidationErrors,
+  googleLogin
 );
 
 // Request password reset
