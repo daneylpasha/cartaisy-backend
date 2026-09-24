@@ -35,7 +35,7 @@ The backend is the only owner of Shopify access tokens for new merchant connects
 | Action | Method and path | Auth | Result |
 | --- | --- | --- | --- |
 | Start connect | `POST /api/v1/shopify/oauth/connect` with `{ "shop": "store.myshopify.com" }` | Store admin JWT | `{ authorizationUrl, state, tokenOwner: "backend" }`. Redirect the merchant's browser to `authorizationUrl`. `state` is CSRF material, not a Shopify token. |
-| Complete connect | `GET /api/v1/shopify/oauth/callback` | Public. Shopify redirects the browser here. | Exchanges the code, encrypts the Admin token onto that store only, and best-effort provisions the Storefront token. Response and optional browser redirect never include the token. |
+| Complete connect | `GET /api/v1/shopify/oauth/callback` | Public. Shopify redirects the browser here. | Exchanges the code, encrypts the Admin token onto that store only, best-effort provisions the Storefront token, and starts the first catalog sync. The sync does not block the browser redirect. A sync error does not fail the callback. Response and optional browser redirect never include the token. |
 | Connection status | `GET /api/v1/shopify/status` | Store admin JWT | `status` is `connected` or `disconnected` for the authenticated store. A client `storeId` is ignored. |
 | Catalog sync status | `GET /api/v1/shopify/sync` | Store admin JWT | Durable status for the authenticated store only: `idle`, `syncing`, `succeeded`, or `failed`, plus timestamps, a safe `errorSummary`, and `eligibleForBuild`. A client `storeId` is ignored. |
 | Sync again | `POST /api/v1/shopify/sync` | Store admin JWT | Same in-request full sync, using the backend token for that store only. Refuses when disconnected. Persists the status above. A fresh `syncing` run returns 409 `CATALOG_SYNC_IN_PROGRESS` and does not start a second sync. |
@@ -50,15 +50,17 @@ Issue #154. Status is stored on `Store.catalogSync` and is readable only for the
 | Status | Meaning |
 | --- | --- |
 | `idle` | This shop has not completed a catalog sync. |
-| `syncing` | Sync again is running, including quiet automatic retries. |
+| `syncing` | A catalog sync is running (the automatic first sync after connect, or Sync again), including quiet automatic retries. |
 | `succeeded` | The latest run for this shop finished. |
 | `failed` | The latest run failed after quiet retries. `errorSummary` is safe to show. |
 
-Quiet retries: a thrown sync error is retried immediately up to two more times in the same request (three attempts total). The same happens when the sync returns without throwing but imported zero products and reported errors (Shopify fetch failures are returned that way). An empty catalog with no errors is `succeeded`. Status stays `syncing` during retries. The dashboard does not show attempt numbers. There is no background queue. A `syncing` record older than 15 minutes can be claimed again so a restarted process does not leave Sync again stuck. That reclaim is per process; two servers can both pass it.
+Quiet retries: a thrown sync error is retried immediately up to two more times in that same sync run (three attempts total). The same happens when the sync returns without throwing but imported zero products and reported errors (Shopify fetch failures are returned that way). An empty catalog with no errors is `succeeded`. Status stays `syncing` during retries. The dashboard does not show attempt numbers. Sync again waits for the run. The connect callback does not. There is no separate job queue. A `syncing` record older than 15 minutes can be claimed again so a restarted process does not leave the store stuck. A fresher `syncing` record is not started a second time. That reclaim is per process; two servers can both pass it.
 
-Stores connected before this status existed read as `idle` and are not build-eligible until Sync again succeeds. The older admin and scheduled sync paths do not write `Store.catalogSync`.
+First sync after connect (issue #166, epic #152): after `saveCredentials` succeeds, the OAuth callback sets `catalogSync.status` to `syncing` and starts the same `syncCatalogForStore` run without waiting for it to finish. The redirect back to the dashboard is not delayed by the import. If the sync fails to start or the run errors, the callback still succeeds and the error is logged with the store id and shop. Reconnecting the same shop starts another sync when one is not already running. Connecting a different shop still clears the previous shop's catalog result, then starts a sync for the new shop.
 
-Build eligibility minimal bar: the store is eligible only when Shopify is connected and `catalogSync.status` is `succeeded` for that same shop domain. `idle`, `syncing`, `failed`, a success for a different shop, and a disconnected store are rejected. `shopify.lastSyncAt` is not the bar — connect stamps it before any catalog sync. A later failure stays ineligible even if `lastSucceededAt` is still set.
+Stores connected before this status existed read as `idle` and are not build-eligible until a catalog sync succeeds. A new connect should leave `syncing` rather than `idle`. The older admin and scheduled sync paths do not write `Store.catalogSync`.
+
+Build eligibility minimal bar: the store is eligible only when Shopify is connected and `catalogSync.status` is `succeeded` for that same shop domain. `idle`, `syncing`, `failed`, a success for a different shop, and a disconnected store are rejected. `shopify.lastSyncAt` is not the bar. Connect does not stamp it. A catalog sync writes it when that sync runs. A later failure stays ineligible even if `lastSucceededAt` is still set.
 
 Sibling build-request creation (issue #155) must call `assertBuildEligible(storeId)` from `src/services/catalogSyncService.ts` before inserting a request. On failure it throws `BuildNotEligibleError` (`code` `BUILD_NOT_ELIGIBLE`, HTTP 409). `reason` is `shopify_not_connected` or `catalog_sync_not_succeeded`. Use `buildEligibilityErrorBody(error)` for the response:
 
@@ -71,7 +73,7 @@ Sibling build-request creation (issue #155) must call `assertBuildEligible(store
 }
 ```
 
-OAuth refuses to switch shops until the current shop is disconnected. After that, connecting a different shop resets catalog sync to `idle`. Reconnecting the same shop keeps a prior `succeeded` status, and build eligibility returns once Shopify is connected again.
+OAuth refuses to switch shops until the current shop is disconnected. After that, connecting a different shop clears the previous catalog result and starts a sync for the new shop. Reconnecting the same shop starts another sync when one is not already in progress. Build eligibility returns only after that sync succeeds for the connected shop.
 
 ### Dashboard UI copy
 
@@ -118,4 +120,5 @@ These are the Shopify Partner app credentials for the OAuth flow. They are app-l
 - `docs/cartaisy/DEFINITION_OF_DONE.md`
 - GitHub issue: #153 (backend sole owner of Shopify OAuth tokens for new connects).
 - GitHub issue: #154 (durable catalog sync status and build eligibility).
+- GitHub issue: #166 (first catalog sync starts automatically after Shopify connect; epic #152).
 - GitHub issue: #155 and `docs/cartaisy/BUILD_REQUEST_API.md` (tracked build request; dashboard `daneylpasha/cartaisy-dashboard#17`).

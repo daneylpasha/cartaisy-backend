@@ -11,6 +11,10 @@ import shopifyOAuthRoutes from '../src/routes/shopifyOAuthRoutes';
 import { getAccessToken } from '../src/services/shopifyOAuthService';
 import { getShopifyClientForStore } from '../src/services/shopifyService';
 import { performFullSync } from '../src/services/syncService';
+import {
+  CATALOG_SYNC_STALE_AFTER_MS,
+  settleInFlightCatalogSyncs,
+} from '../src/services/catalogSyncService';
 
 jest.mock('node-fetch', () => ({
   __esModule: true,
@@ -194,6 +198,19 @@ describe('Shopify OAuth token ownership (issue #153)', () => {
       .query(signed);
   };
 
+  const waitForCatalogSyncToSettle = async (storeId: string) => {
+    const deadline = Date.now() + 4000;
+    while (Date.now() < deadline) {
+      const stored = await Store.findById(storeId).select('catalogSync.status');
+      if (stored?.catalogSync?.status !== 'syncing') {
+        await settleInFlightCatalogSyncs();
+        return stored;
+      }
+      await new Promise(resolve => setTimeout(resolve, 15));
+    }
+    throw new Error(`catalog sync for ${storeId} stayed syncing`);
+  };
+
   const connectShop = async (token: string, shop: string) => {
     const start = await startConnect(token, shop);
     expect(start.status).toBe(200);
@@ -201,6 +218,9 @@ describe('Shopify OAuth token ownership (issue #153)', () => {
     const state = authorizationUrl.searchParams.get('state');
     expect(state).toEqual(expect.any(String));
     const callback = await finishCallback(state as string, shop);
+    if (callback.status === 200 || callback.status === 302) {
+      await waitForCatalogSyncToSettle(storeAId);
+    }
     return { start, callback, state: state as string, authorizationUrl };
   };
 
@@ -342,6 +362,7 @@ describe('Shopify OAuth token ownership (issue #153)', () => {
     const freshState = new URL(restart.body.data.authorizationUrl).searchParams.get('state') as string;
     const first = await finishCallback(freshState, SHOP_A);
     expect(first.status).toBe(200);
+    await waitForCatalogSyncToSettle(storeAId);
     const second = await finishCallback(freshState, SHOP_A);
     expect(second.status).toBe(401);
     expectNoToken(second.body);
@@ -507,9 +528,12 @@ describe('Shopify OAuth token ownership (issue #153)', () => {
 
     const stored = await Store.findById(storeAId).select('shopify.shop shopify.isConnected catalogSync');
     expect(stored?.shopify?.shop).toBe(SHOP_B);
-    expect(stored?.catalogSync?.status).toBe('idle');
+    expect(stored?.catalogSync?.status).toBe('succeeded');
     expect(stored?.catalogSync?.shop).toBe(SHOP_B);
-    expect(stored?.catalogSync?.lastSucceededAt).toBeUndefined();
+    expect(stored?.catalogSync?.lastSucceededAt).toBeInstanceOf(Date);
+    expect(stored?.catalogSync?.lastSucceededAt?.toISOString()).not.toBe(
+      '2026-09-23T00:00:00.000Z'
+    );
     expect(stored?.shopify?.isConnected).toBe(true);
   });
 
@@ -558,6 +582,7 @@ describe('Shopify OAuth token ownership (issue #153)', () => {
     expect(location).not.toContain('evil.example');
     expect(location).not.toContain(RAW_TOKEN);
     expect(location).not.toContain('auth-code-from-shopify');
+    await waitForCatalogSyncToSettle(storeAId);
   });
 
   test('falls back to SHOPIFY_API_KEY and SHOPIFY_API_SECRET when partner names are unset', async () => {
@@ -591,5 +616,135 @@ describe('Shopify OAuth token ownership (issue #153)', () => {
     expectNoToken(callback.body);
     expect(await getAccessToken(storeAId)).toBe(RAW_TOKEN);
     expect(await getAccessToken(storeBId)).toBeNull();
+    await waitForCatalogSyncToSettle(storeAId);
+  });
+
+  test('callback starts catalog sync and redirects without waiting for it', async () => {
+    let releaseSync: (value: unknown) => void = () => undefined;
+    const gate = new Promise(resolve => {
+      releaseSync = resolve;
+    });
+    performFullSyncMock.mockImplementation(() => gate);
+
+    process.env.SHOPIFY_OAUTH_RETURN_URL = 'https://dashboard.example.com/onboarding';
+    const start = await startConnect(adminAToken, SHOP_A);
+    const state = new URL(start.body.data.authorizationUrl).searchParams.get('state') as string;
+
+    try {
+      const callback = await finishCallback(state, SHOP_A);
+      expect(callback.status).toBe(302);
+      expect(callback.headers.location).toContain('shopify=connected');
+      expect(performFullSyncMock).toHaveBeenCalledTimes(1);
+      expect(performFullSyncMock).toHaveBeenCalledWith(storeAId);
+
+      const mid = await Store.findById(storeAId).select('shopify.lastSyncAt catalogSync');
+      expect(mid?.catalogSync?.status).toBe('syncing');
+      expect(mid?.catalogSync?.shop).toBe(SHOP_A);
+      expect(mid?.shopify?.lastSyncAt).toBeUndefined();
+
+      const status = await request(app)
+        .get('/api/v1/shopify/sync')
+        .set('Authorization', `Bearer ${adminAToken}`);
+      expect(status.status).toBe(200);
+      expect(status.body.data.status).toBe('syncing');
+      expect(status.body.data.eligibleForBuild).toBe(false);
+      expect(status.body.data.storeId).toBe(storeAId);
+
+      const duplicate = await request(app)
+        .post('/api/v1/shopify/sync')
+        .set('Authorization', `Bearer ${adminAToken}`);
+      expect(duplicate.status).toBe(409);
+      expect(duplicate.body.code).toBe('CATALOG_SYNC_IN_PROGRESS');
+      expect(performFullSyncMock).toHaveBeenCalledTimes(1);
+
+      const secondStart = await startConnect(adminAToken, SHOP_A);
+      expect(secondStart.status).toBe(200);
+      const secondState = new URL(secondStart.body.data.authorizationUrl).searchParams.get(
+        'state'
+      ) as string;
+      const secondCallback = await finishCallback(secondState, SHOP_A);
+      expect(secondCallback.status).toBe(302);
+      expect(performFullSyncMock).toHaveBeenCalledTimes(1);
+
+      const stillSyncing = await Store.findById(storeAId).select('catalogSync.status');
+      expect(stillSyncing?.catalogSync?.status).toBe('syncing');
+    } finally {
+      releaseSync({
+        inProgress: false,
+        errors: [],
+        lastFullSync: new Date('2026-09-23T00:00:00.000Z'),
+        stats: { productsSync: 3, customersSync: 1, ordersSync: 2 },
+      });
+      await waitForCatalogSyncToSettle(storeAId);
+    }
+  });
+
+  test('a catalog sync error does not fail the oauth callback', async () => {
+    performFullSyncMock.mockRejectedValue(new Error(`Shopify down ${RAW_TOKEN}`));
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    try {
+      const { callback } = await connectShop(adminAToken, SHOP_A);
+      expect(callback.status).toBe(200);
+      expect(callback.body.success).toBe(true);
+      expect(callback.body.data.status).toBe('connected');
+      expectNoToken(callback.body);
+
+      const stored = await Store.findById(storeAId).select('catalogSync');
+      expect(stored?.catalogSync?.status).toBe('failed');
+      expect(stored?.catalogSync?.shop).toBe(SHOP_A);
+      expect(stored?.catalogSync?.errorSummary).not.toContain(RAW_TOKEN);
+      expect(stored?.catalogSync?.errorSummary).toContain('[redacted]');
+
+      const logged = [...warnSpy.mock.calls, ...errorSpy.mock.calls]
+        .flat()
+        .map(entry => String(entry))
+        .join('\n');
+      expect(logged).toContain(storeAId);
+      expect(logged).toContain(SHOP_A);
+    } finally {
+      errorSpy.mockRestore();
+      warnSpy.mockRestore();
+    }
+  });
+
+  test('reconnecting the same shop starts another catalog sync', async () => {
+    await connectShop(adminAToken, SHOP_A);
+    performFullSyncMock.mockClear();
+
+    const second = await connectShop(adminAToken, SHOP_A);
+    expect(second.callback.status).toBe(200);
+    expect(performFullSyncMock).toHaveBeenCalledTimes(1);
+    expect(performFullSyncMock).toHaveBeenCalledWith(storeAId);
+
+    const stored = await Store.findById(storeAId).select('catalogSync');
+    expect(stored?.catalogSync?.status).toBe('succeeded');
+    expect(stored?.catalogSync?.shop).toBe(SHOP_A);
+  });
+
+  test('a stale syncing record can be restarted from the oauth callback', async () => {
+    await connectShop(adminAToken, SHOP_A);
+    await Store.updateOne(
+      { _id: storeAId },
+      {
+        $set: {
+          'catalogSync.status': 'syncing',
+          'catalogSync.shop': SHOP_A,
+          'catalogSync.startedAt': new Date(Date.now() - CATALOG_SYNC_STALE_AFTER_MS - 1000),
+          'catalogSync.attempts': 1,
+        },
+      }
+    );
+    performFullSyncMock.mockClear();
+
+    const restarted = await connectShop(adminAToken, SHOP_A);
+    expect(restarted.callback.status).toBe(200);
+    expect(performFullSyncMock).toHaveBeenCalledTimes(1);
+    expect(performFullSyncMock).toHaveBeenCalledWith(storeAId);
+
+    const stored = await Store.findById(storeAId).select('catalogSync');
+    expect(stored?.catalogSync?.status).toBe('succeeded');
+    expect(stored?.catalogSync?.shop).toBe(SHOP_A);
   });
 });
