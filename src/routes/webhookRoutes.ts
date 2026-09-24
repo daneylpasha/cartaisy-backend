@@ -10,14 +10,34 @@ import {
   handleInventoryUpdate
 } from '../controllers/webhookController';
 import {
+  handleAppUninstalled,
+  handleComplianceDispatch,
+  handleCustomersDataRequest,
+  handleCustomersRedact,
+  handleShopRedact,
+} from '../controllers/shopifyComplianceWebhookController';
+import {
   verifyShopifyWebhook,
+  resolveShopifyComplianceStore,
   resolveShopifyWebhookStore,
 } from '../middleware/shopifyWebhookAuth';
 
 const router = express.Router();
 
-// Every Shopify webhook must pass HMAC verification and resolve its shop
-// domain to exactly one trusted Store before any handler can run
+// Compliance topics and app/uninstalled are app-level Shopify subscriptions.
+// They are registered before the connected-store gate so a shop that is
+// already disconnected (uninstall, then shop/redact) can still resolve.
+// These paths do not call Shopify and do not revoke tokens.
+const complianceWebhook = [verifyShopifyWebhook, resolveShopifyComplianceStore] as const;
+
+router.post('/shopify/customers/data_request', ...complianceWebhook, handleCustomersDataRequest);
+router.post('/shopify/customers/redact', ...complianceWebhook, handleCustomersRedact);
+router.post('/shopify/shop/redact', ...complianceWebhook, handleShopRedact);
+router.post('/shopify/app/uninstalled', ...complianceWebhook, handleAppUninstalled);
+router.post('/shopify/compliance', ...complianceWebhook, handleComplianceDispatch);
+
+// Catalog, order, and customer webhooks must pass HMAC verification and
+// resolve the shop domain to exactly one active, connected Store.
 router.use('/shopify', verifyShopifyWebhook, resolveShopifyWebhookStore);
 
 // Product webhooks

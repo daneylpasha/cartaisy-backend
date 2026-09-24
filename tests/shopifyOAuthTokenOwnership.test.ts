@@ -416,6 +416,7 @@ describe('Shopify OAuth token ownership (issue #153)', () => {
     expect(stored?.shopify?.isConnected).toBe(false);
     expect(stored?.shopify?.accessToken).toBeFalsy();
     expect(stored?.shopify?.shop).toBeFalsy();
+    expect(stored?.shopify?.complianceShop).toBe(SHOP_A);
     expect(stored?.shopify?.storefrontAccessToken).toBeFalsy();
     expect(await getAccessToken(storeAId)).toBeNull();
     expect(await getShopifyClientForStore(storeAId)).toBeNull();

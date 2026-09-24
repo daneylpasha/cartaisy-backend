@@ -92,9 +92,71 @@ Build my app is a separate tracked request, not this sync route (issue #155, das
 
 When `SHOPIFY_OAUTH_RETURN_URL` is set, the callback redirects the browser there with `shopify=connected` or `shopify=error` and a short `reason`. The return URL is taken only from that environment variable.
 
-Webhook HMAC verification and shop-domain-to-Store mapping are unchanged and stay store-scoped. Disconnect clears `shopify.shop` and `shopify.isConnected`, so a disconnected shop no longer resolves to a store.
+Webhook HMAC verification and shop-domain-to-Store mapping stay store-scoped. Disconnect and `app/uninstalled` clear `shopify.shop` and `shopify.isConnected`, so a disconnected shop no longer resolves for catalog, order, or customer webhooks. Both paths copy that shop domain onto `shopify.complianceShop` before clearing it. Mandatory compliance webhooks use that retained domain so `shop/redact` can still find the store. See the compliance section below.
 
 Historical tokens already stored in the dashboard database are not migrated by this contract.
+
+## Mandatory compliance webhooks
+
+Issue #162. Shopify requires `customers/data_request`, `customers/redact`, and `shop/redact` for any app that is distributed. Cartaisy also handles `app/uninstalled`. These are **app-level** subscriptions. Compliance topics cannot be created with the Admin API `webhookSubscriptionCreate`, and this backend does not register them per store during connect.
+
+Every route below verifies `X-Shopify-Hmac-Sha256` with `SHOPIFY_WEBHOOK_SECRET` (the app client secret, not a merchant token) and resolves `X-Shopify-Shop-Domain` to one Cartaisy store. A webhook for shop A never reads or writes store B. HMAC failure is `401`. A shop that cannot be mapped safely (unknown, malformed, or more than one store) is acknowledged with `200` and no writes, so Shopify does not retry a delivery that can never be applied. A store-scoped write that throws returns `500` so Shopify retries; the handlers are idempotent.
+
+| Topic | Method and path | When Shopify sends it |
+| --- | --- | --- |
+| `customers/data_request` | `POST /api/webhooks/shopify/customers/data_request` | A customer asks the merchant for their data |
+| `customers/redact` | `POST /api/webhooks/shopify/customers/redact` | A customer or merchant asks for that customer's data to be erased |
+| `shop/redact` | `POST /api/webhooks/shopify/shop/redact` | 48 hours after the app is uninstalled |
+| `app/uninstalled` | `POST /api/webhooks/shopify/app/uninstalled` | The merchant uninstalls the app, or the token is revoked |
+| Any of the four | `POST /api/webhooks/shopify/compliance` | Same handlers. The topic is `X-Shopify-Topic` |
+
+`POST /api/webhooks/shopify/compliance` is the URL to use when the Partner app config has one `uri` for every `compliance_topics` entry. The four specific paths are for the Dev Dashboard GDPR fields, or for one `[[webhooks.subscriptions]]` block per topic.
+
+### Operator configuration
+
+Set this on the Shopify app (Dev Dashboard or `shopify.app.toml`) and deploy the app config. Do not subscribe to these topics per shop from the backend.
+
+`app/uninstalled` is a normal topic, not a `compliance_topics` entry. Subscribe to it at app level as well so every install is covered without a per-store Admin API registration.
+
+```toml
+[webhooks]
+api_version = "2024-10"
+
+[[webhooks.subscriptions]]
+topics = ["app/uninstalled"]
+uri = "https://<api-host>/api/webhooks/shopify/app/uninstalled"
+
+[[webhooks.subscriptions]]
+compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
+uri = "https://<api-host>/api/webhooks/shopify/compliance"
+```
+
+Separate URLs, if the dashboard asks for one field per GDPR topic:
+
+| Dashboard field | URL |
+| --- | --- |
+| Customer data request | `https://<api-host>/api/webhooks/shopify/customers/data_request` |
+| Customer data erasure | `https://<api-host>/api/webhooks/shopify/customers/redact` |
+| Shop data erasure | `https://<api-host>/api/webhooks/shopify/shop/redact` |
+
+`SHOPIFY_WEBHOOK_SECRET` must be the app's client secret. The handlers do not log tokens, webhook secrets, or customer PII (email, phone, name, address).
+
+### v1 behavior
+
+**`customers/data_request`.** Cartaisy does not email the customer or the merchant. It writes one `ShopifyComplianceRequest` for that store, keyed by Shopify's `data_request.id`, so a replay does not create a second row. The row stores the shop domain, Shopify customer id, requested Shopify order ids, and the ids of matching local `User` (role `customer` or `premium_customer`) and `Customer` documents. It does not store email or phone. Ops fulfills the request from that record:
+
+- Mobile `Customer` ids: existing `POST /api/v1/stores/:storeId/compliance/export/customer/:customerId`.
+- Shopify-imported shoppers live on `User`. The matched user id on the compliance record is the handoff. That admin export route only loads `Customer`, so it will not return a `User`.
+
+**`customers/redact`.** Inside the resolved store only: anonymize matching customer-role users (email replaced, phone and addresses cleared, Shopify customer id removed, account deactivated), delete matching `Customer` documents, anonymize matching orders (email, addresses, guest contact, notes; monetary totals stay), and delete directly owned shopper rows (payment methods, wishlists, favorites, product views, search history, cart activity, checkout sessions, and similar). Match keys are the Shopify customer id, the customer email, and `orders_to_redact`. Before any of those identity fields are changed, the matched local user and customer ids are appended to the store-scoped compliance receipt for that webhook. A retry that can no longer find the owners by Shopify id or email uses the saved ids and finishes the remaining deletion. Order shipping and billing addresses are cleared in full: name, company, street, city, province, country, postal code, and phone. Merchant roles (`admin`, `super_admin`, `moderator`) are not modified. A second delivery is a no-op against data that is already redacted. The receipt does not store email or phone.
+
+**`shop/redact`.** Same shopper erasure for every customer-role user, `Customer`, order, and guest checkout in that store, including the saved owner ids and the full address clear. It also deletes that store's search history, app sessions, and analytics events that carry a user, search query, location, or device id. Credentials are cleared only when that store is not connected (see below). The Store document, merchant users, branding, and product catalog stay. Product documents are catalog copies and are not customer PII in v1.
+
+**`app/uninstalled`.** Marks the store disconnected and clears the Admin token, Storefront token, scope, and shop domain used for API calls. It does **not** call Shopify to revoke the token: the token is already revoked, and a failed revoke would leave it stored (that is the merchant `POST /api/v1/shopify/disconnect` rule). `getAccessToken` and `getShopifyClientForStore` return nothing afterward. Catalog sync status is left as-is; build eligibility fails with `shopify_not_connected` because the store is disconnected. Customer rows stay until `shop/redact`. Replay clears the same fields again. If `X-Shopify-Triggered-At` is older than the store's current `shopify.connectedAt`, the delivery is acknowledged and the newer connection is left in place. That comparison is in the same update that clears the token, so a reconnect that commits first is not wiped by a stale uninstall.
+
+**`shop/redact` and a live reconnect.** Shopper data for that store is still redacted. Credentials are cleared only when the store is not connected. A merchant who installed the app again keeps the new token.
+
+A store that is connected to a different shop is not selected via an older `complianceShop` value, so a redact for the previous shop cannot erase the shop that is connected now.
 
 ## Partner app environment variables
 
@@ -122,3 +184,4 @@ These are the Shopify Partner app credentials for the OAuth flow. They are app-l
 - GitHub issue: #154 (durable catalog sync status and build eligibility).
 - GitHub issue: #166 (first catalog sync starts automatically after Shopify connect; epic #152).
 - GitHub issue: #155 and `docs/cartaisy/BUILD_REQUEST_API.md` (tracked build request; dashboard `daneylpasha/cartaisy-dashboard#17`).
+- GitHub issue: #162 (mandatory compliance webhooks and `app/uninstalled`).
