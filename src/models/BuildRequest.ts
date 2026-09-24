@@ -98,5 +98,7 @@ const BuildRequestSchema = new Schema<IBuildRequest>(
 );
 
 BuildRequestSchema.index({ storeId: 1, createdAt: -1 });
+// Platform ops list every store, newest first (issue #164).
+BuildRequestSchema.index({ createdAt: -1, _id: -1 });
 
 export default mongoose.model<IBuildRequest>('BuildRequest', BuildRequestSchema);
