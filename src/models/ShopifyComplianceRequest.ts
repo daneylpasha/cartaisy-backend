@@ -14,7 +14,7 @@ export type ShopifyComplianceTopic =
   | 'shop/redact'
   | 'app/uninstalled';
 
-export type ShopifyComplianceStatus = 'recorded' | 'redacted' | 'uninstalled';
+export type ShopifyComplianceStatus = 'recorded' | 'pending' | 'redacted' | 'uninstalled';
 
 export interface IShopifyComplianceSummary {
   usersRedacted?: number;
@@ -100,7 +100,7 @@ const ShopifyComplianceRequestSchema = new Schema<IShopifyComplianceRequest>(
     status: {
       type: String,
       required: true,
-      enum: ['recorded', 'redacted', 'uninstalled'],
+      enum: ['recorded', 'pending', 'redacted', 'uninstalled'],
     },
     summary: {
       type: SummarySchema,

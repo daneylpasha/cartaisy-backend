@@ -34,27 +34,41 @@ import { markShopifyAppUninstalled } from './shopifyOAuthService';
  * v1 customers/data_request records the request for ops. It does not email
  * the customer or the merchant. v1 redact anonymizes shopper PII and leaves
  * merchant accounts, the Store document, branding, and the product catalog.
+ * Matched user and customer ids are stored on the store-scoped receipt before
+ * any identity field is changed, so a retry can finish redaction after the
+ * Shopify customer id and email are gone. Email and phone are never stored.
  */
 
 const CUSTOMER_ROLES = ['customer', 'premium_customer'] as const;
 const REDACTED_ORDER_EMAIL = 'redacted@redacted.invalid';
 const ID_LIST_LIMIT = 5000;
 
+const OBJECT_ID_PATTERN = /^[a-f\d]{24}$/i;
+
+/**
+ * Every field on OrderAddressSchema. Company, street, city, province,
+ * country, postal code, and phone are cleared. Names are replaced.
+ */
+const redactedAddressFields = (prefix: 'shippingAddress' | 'billingAddress'): Record<string, string> => ({
+  [`${prefix}.firstName`]: 'Redacted',
+  [`${prefix}.lastName`]: 'Customer',
+  [`${prefix}.company`]: '',
+  [`${prefix}.address1`]: 'REDACTED',
+  [`${prefix}.address2`]: '',
+  [`${prefix}.city`]: '',
+  [`${prefix}.province`]: '',
+  [`${prefix}.country`]: '',
+  [`${prefix}.zip`]: '',
+  [`${prefix}.phone`]: '',
+});
+
 const REDACTED_ORDER_FIELDS = {
   email: REDACTED_ORDER_EMAIL,
   'guestContact.email': REDACTED_ORDER_EMAIL,
   'guestContact.phone': '',
   'guestContact.fullName': 'Redacted',
-  'shippingAddress.firstName': 'Redacted',
-  'shippingAddress.lastName': 'Customer',
-  'shippingAddress.phone': '',
-  'shippingAddress.address1': 'REDACTED',
-  'shippingAddress.address2': '',
-  'billingAddress.firstName': 'Redacted',
-  'billingAddress.lastName': 'Customer',
-  'billingAddress.phone': '',
-  'billingAddress.address1': 'REDACTED',
-  'billingAddress.address2': '',
+  ...redactedAddressFields('shippingAddress'),
+  ...redactedAddressFields('billingAddress'),
   customerNotes: '',
   specialInstructions: '',
   merchantNotes: '',
@@ -344,6 +358,93 @@ const clearGuestCheckout = async (
   return result.modifiedCount || 0;
 };
 
+const uniqueIdStrings = (ids: Types.ObjectId[]): string[] =>
+  [...new Set(ids.map((id) => id.toString()))];
+
+const parseStoredOwnerIds = (ids: string[] | undefined): Types.ObjectId[] => {
+  const parsed: Types.ObjectId[] = [];
+  const seen = new Set<string>();
+  for (const id of ids || []) {
+    if (!OBJECT_ID_PATTERN.test(id) || seen.has(id)) {
+      continue;
+    }
+    seen.add(id);
+    parsed.push(new Types.ObjectId(id));
+  }
+  return parsed;
+};
+
+/**
+ * Persist owner ids before any identity field is cleared.
+ *
+ * The receipt is keyed by store, topic, and the webhook idempotency id.
+ * Shopify retries the same delivery after a 500. Once the user email and
+ * Shopify customer id are gone, or the Customer row is deleted, that retry
+ * cannot rediscover the owners. It loads these ids and finishes redaction
+ * for this store only. Email and phone are not written.
+ */
+const rememberOwnerIds = async (input: {
+  storeId: Types.ObjectId;
+  shopDomain: string;
+  topic: 'customers/redact' | 'shop/redact';
+  externalId: string;
+  shopifyCustomerId?: string | null;
+  shopifyOrderIds?: string[];
+  discovered: OwnedIds;
+}): Promise<OwnedIds> => {
+  const userIds = uniqueIdStrings(input.discovered.userIds);
+  const customerIds = uniqueIdStrings(input.discovered.customerIds);
+  const addToSet: Record<string, { $each: string[] }> = {};
+  if (userIds.length > 0) {
+    addToSet.matchedUserIds = { $each: userIds };
+  }
+  if (customerIds.length > 0) {
+    addToSet.matchedCustomerIds = { $each: customerIds };
+  }
+
+  const setOnInsert: Record<string, unknown> = {
+    storeId: input.storeId,
+    shopDomain: input.shopDomain,
+    topic: input.topic,
+    externalId: input.externalId,
+    shopifyOrderIds: input.shopifyOrderIds || [],
+    status: 'pending',
+    summary: {},
+    receivedAt: new Date(),
+  };
+  if (input.shopifyCustomerId) {
+    setOnInsert.shopifyCustomerId = input.shopifyCustomerId;
+  }
+
+  await ShopifyComplianceRequest.updateOne(
+    { storeId: input.storeId, topic: input.topic, externalId: input.externalId },
+    {
+      $setOnInsert: setOnInsert,
+      ...(Object.keys(addToSet).length > 0 ? { $addToSet: addToSet } : {}),
+    },
+    { upsert: true }
+  );
+
+  const saved = await ShopifyComplianceRequest.findOne({
+    storeId: input.storeId,
+    topic: input.topic,
+    externalId: input.externalId,
+  }).select('matchedUserIds matchedCustomerIds');
+
+  const stored: OwnedIds = {
+    userIds: parseStoredOwnerIds(saved?.matchedUserIds),
+    customerIds: parseStoredOwnerIds(saved?.matchedCustomerIds),
+  };
+  const storedUserIds = new Set(stored.userIds.map((id) => id.toString()));
+  const storedCustomerIds = new Set(stored.customerIds.map((id) => id.toString()));
+  const missing = userIds.some((id) => !storedUserIds.has(id))
+    || customerIds.some((id) => !storedCustomerIds.has(id));
+  if (!saved || missing) {
+    throw new Error('Compliance owner ids were not stored');
+  }
+  return stored;
+};
+
 const upsertReceipt = async (input: {
   storeId: Types.ObjectId;
   shopDomain: string;
@@ -451,7 +552,16 @@ export const redactCustomer = async (
     return;
   }
 
-  const owned = await findOwnedIds(storeObjectId, payload);
+  const discovered = await findOwnedIds(storeObjectId, payload);
+  const owned = await rememberOwnerIds({
+    storeId: storeObjectId,
+    shopDomain,
+    topic: 'customers/redact',
+    externalId,
+    shopifyCustomerId: payload.shopifyCustomerId,
+    shopifyOrderIds: payload.orderIds,
+    discovered,
+  });
   const usersRedacted = await anonymizeUsers(storeObjectId, owned.userIds);
   const customerResult = owned.customerIds.length === 0
     ? { deletedCount: 0 }
@@ -499,10 +609,17 @@ export const redactShop = async (storeId: string, shopDomain: string): Promise<v
     role: { $in: CUSTOMER_ROLES },
   }).select('_id');
   const customers = await Customer.find({ storeId: storeObjectId }).select('_id');
-  const owned: OwnedIds = {
+  const discovered: OwnedIds = {
     userIds: users.map((user) => user._id as Types.ObjectId),
     customerIds: customers.map((customer) => customer._id as Types.ObjectId),
   };
+  const owned = await rememberOwnerIds({
+    storeId: storeObjectId,
+    shopDomain,
+    topic: 'shop/redact',
+    externalId: 'shop',
+    discovered,
+  });
 
   const usersRedacted = await anonymizeUsers(storeObjectId, owned.userIds);
   const customerResult = await Customer.deleteMany({ storeId: storeObjectId });
@@ -524,8 +641,7 @@ export const redactShop = async (storeId: string, shopDomain: string): Promise<v
   const stillConnected = await Store.findById(storeId).select('shopify.isConnected');
   let credentialsCleared = false;
   if (stillConnected?.shopify?.isConnected !== true) {
-    await markShopifyAppUninstalled(storeId);
-    credentialsCleared = true;
+    credentialsCleared = await markShopifyAppUninstalled(storeId);
   }
 
   await upsertReceipt({
@@ -553,8 +669,9 @@ export const redactShop = async (storeId: string, shopDomain: string): Promise<v
 /**
  * Clear Shopify credentials for app/uninstalled without calling Shopify.
  *
- * A retry that arrives after the merchant has connected again is ignored
- * when `X-Shopify-Triggered-At` is older than `shopify.connectedAt`.
+ * A delivery whose `X-Shopify-Triggered-At` is older than `shopify.connectedAt`
+ * does not clear. The comparison is inside the credential update, so a
+ * reconnect that commits before that write is left in place.
  */
 export const recordAppUninstalled = async (
   storeId: string,
@@ -562,19 +679,7 @@ export const recordAppUninstalled = async (
   triggeredAt?: Date | null
 ): Promise<void> => {
   const storeObjectId = requireStoreId(storeId);
-  const current = await Store.findById(storeId).select('shopify.isConnected shopify.connectedAt');
-  const connectedAt = current?.shopify?.connectedAt;
-  const reconnectedAfterEvent = Boolean(
-    triggeredAt
-    && !Number.isNaN(triggeredAt.getTime())
-    && current?.shopify?.isConnected === true
-    && connectedAt
-    && connectedAt.getTime() > triggeredAt.getTime()
-  );
-
-  if (!reconnectedAfterEvent) {
-    await markShopifyAppUninstalled(storeId);
-  }
+  const credentialsCleared = await markShopifyAppUninstalled(storeId, { triggeredAt });
 
   await upsertReceipt({
     storeId: storeObjectId,
@@ -582,11 +687,11 @@ export const recordAppUninstalled = async (
     topic: 'app/uninstalled',
     externalId: 'app',
     status: 'uninstalled',
-    summary: { credentialsCleared: !reconnectedAfterEvent },
+    summary: { credentialsCleared },
   });
   console.log(
-    reconnectedAfterEvent
-      ? `Shopify app/uninstalled ignored for store ${storeId}: reconnected after the event`
-      : `Shopify app/uninstalled cleared credentials for store ${storeId}`
+    credentialsCleared
+      ? `Shopify app/uninstalled cleared credentials for store ${storeId}`
+      : `Shopify app/uninstalled ignored for store ${storeId}: reconnected after the event`
   );
 };

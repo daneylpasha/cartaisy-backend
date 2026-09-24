@@ -8,6 +8,7 @@ import User from '../src/models/User';
 import Customer from '../src/models/Customer';
 import Order from '../src/models/Order';
 import GuestSession from '../src/models/GuestSession';
+import Favorite from '../src/models/Favorite';
 import ShopifyComplianceRequest from '../src/models/ShopifyComplianceRequest';
 import webhookRoutes from '../src/routes/webhookRoutes';
 import { shopifyWebhookBodyParser } from '../src/middleware/shopifyWebhookAuth';
@@ -88,7 +89,9 @@ const orderFixture = (
   shippingAddress: {
     firstName: 'Sam',
     lastName: 'Shopper',
+    company: 'Secret Co',
     address1: '1 Secret St',
+    address2: 'Apt 2',
     city: 'Testville',
     province: 'TS',
     country: 'US',
@@ -98,7 +101,9 @@ const orderFixture = (
   billingAddress: {
     firstName: 'Sam',
     lastName: 'Shopper',
+    company: 'Secret Co',
     address1: '1 Secret St',
+    address2: 'Apt 2',
     city: 'Testville',
     province: 'TS',
     country: 'US',
@@ -280,9 +285,39 @@ describe('Shopify compliance webhooks', () => {
     expect(customer?.phone).toBe(PHONE);
     expect(order?.email).toBe(EMAIL);
     expect(order?.shippingAddress?.phone).toBe(PHONE);
+    expect(order?.shippingAddress?.company).toBe('Secret Co');
+    expect(order?.shippingAddress?.city).toBe('Testville');
+    expect(order?.shippingAddress?.province).toBe('TS');
+    expect(order?.shippingAddress?.country).toBe('US');
+    expect(order?.shippingAddress?.zip).toBe('12345');
+    expect(order?.billingAddress?.city).toBe('Testville');
     expect(guest?.guestCheckout?.email).toBe(EMAIL);
     expect(store?.shopify?.isConnected).toBe(true);
     expect(store?.shopify?.storefrontAccessToken).toBe('storefront-other');
+  };
+
+  const expectAddressRedacted = (address?: {
+    firstName?: string;
+    lastName?: string;
+    company?: string;
+    address1?: string;
+    address2?: string;
+    city?: string;
+    province?: string;
+    country?: string;
+    zip?: string;
+    phone?: string;
+  }): void => {
+    expect(address?.firstName).toBe('Redacted');
+    expect(address?.lastName).toBe('Customer');
+    expect(address?.company || '').toBe('');
+    expect(address?.address1).toBe('REDACTED');
+    expect(address?.address2 || '').toBe('');
+    expect(address?.city || '').toBe('');
+    expect(address?.province || '').toBe('');
+    expect(address?.country || '').toBe('');
+    expect(address?.zip || '').toBe('');
+    expect(address?.phone || '').toBe('');
   };
 
   const expectNoSecrets = (body: unknown) => {
@@ -418,14 +453,19 @@ describe('Shopify compliance webhooks', () => {
     expect(await Customer.countDocuments({ storeId: storeAId })).toBe(0);
     const redactedOrder = await Order.findOne({ storeId: storeAId, shopifyOrderId: SHOPIFY_ORDER_ID });
     expect(redactedOrder?.email).toBe('redacted@redacted.invalid');
-    expect(redactedOrder?.shippingAddress?.phone || '').toBe('');
-    expect(redactedOrder?.shippingAddress?.address1).toBe('REDACTED');
+    expectAddressRedacted(redactedOrder?.shippingAddress);
+    expectAddressRedacted(redactedOrder?.billingAddress);
     expect(redactedOrder?.customerNotes || '').toBe('');
     expect(redactedOrder?.totalPrice).toBe(10);
 
     const otherOrder = await Order.findOne({ storeId: storeAId, shopifyOrderId: '111' });
     expect(otherOrder?.email).toBe('other-buyer@example.com');
     expect(otherOrder?.shippingAddress?.address1).toBe('1 Secret St');
+    expect(otherOrder?.shippingAddress?.company).toBe('Secret Co');
+    expect(otherOrder?.shippingAddress?.city).toBe('Testville');
+    expect(otherOrder?.shippingAddress?.zip).toBe('12345');
+    expect(otherOrder?.billingAddress?.province).toBe('TS');
+    expect(otherOrder?.billingAddress?.country).toBe('US');
 
     const guest = await GuestSession.findOne({ storeId: storeAId });
     expect(guest?.guestCheckout).toBeUndefined();
@@ -434,6 +474,100 @@ describe('Shopify compliance webhooks', () => {
     expect(store?.shopify?.isConnected).toBe(true);
     expect(store?.shopify?.accessToken).toBeTruthy();
 
+    await expectStoreBUntouched();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test('customers/redact retry finishes erasure from saved owner ids', async () => {
+    await seedShopper();
+    const shopper = await User.findOne({ storeId: storeAId, email: EMAIL });
+    const customer = await Customer.findOne({ storeId: storeAId, email: EMAIL });
+    const otherShopper = await User.findOne({ storeId: storeBId, email: EMAIL });
+    expect(shopper?._id).toBeTruthy();
+    expect(customer?._id).toBeTruthy();
+    expect(otherShopper?._id).toBeTruthy();
+
+    await Favorite.create({ userId: shopper!._id, productId: 'gid://shopify/Product/1' });
+    await Favorite.create({ customerId: customer!._id, productId: 'gid://shopify/Product/2' });
+    await Favorite.create({ userId: otherShopper!._id, productId: 'gid://shopify/Product/3' });
+    await Order.create({
+      ...orderFixture(storeAId, 'linked-only@example.com', '555001', 'A-1003'),
+      user: shopper!._id,
+      isGuestOrder: false,
+    });
+
+    const updateMany = jest.spyOn(Order, 'updateMany').mockImplementationOnce(() => {
+      throw new Error('simulated order redact failure');
+    });
+
+    const failed = await postWebhook(app, 'customers/redact', redactPayload(), SHOP_A, {
+      topic: 'customers/redact',
+    });
+    expect(failed.status).toBe(500);
+    expect(failed.body).toEqual({ error: 'Failed to process webhook' });
+    expectNoSecrets(failed.body);
+    updateMany.mockRestore();
+
+    const shopperAfterFailure = await User.findOne({ storeId: storeAId, role: 'customer' });
+    expect(shopperAfterFailure?.email).toMatch(/^redacted\+.+@redacted\.invalid$/);
+    expect(shopperAfterFailure?.shopifyCustomerId).toBeUndefined();
+    expect(await User.findOne({ storeId: storeAId, email: EMAIL })).toBeNull();
+    expect(await Customer.countDocuments({ storeId: storeAId })).toBe(0);
+    expect(await Favorite.countDocuments({ userId: shopper!._id })).toBe(1);
+    expect(await Favorite.countDocuments({ customerId: customer!._id })).toBe(1);
+
+    const linkedAfterFailure = await Order.findOne({ storeId: storeAId, shopifyOrderId: '555001' });
+    expect(linkedAfterFailure?.email).toBe('linked-only@example.com');
+    expect(linkedAfterFailure?.shippingAddress?.city).toBe('Testville');
+    expect(linkedAfterFailure?.shippingAddress?.company).toBe('Secret Co');
+    expect(linkedAfterFailure?.billingAddress?.zip).toBe('12345');
+
+    const pending = await ShopifyComplianceRequest.findOne({
+      storeId: storeAId,
+      topic: 'customers/redact',
+    }).lean();
+    expect(pending?.status).toBe('pending');
+    expect(pending?.matchedUserIds).toEqual([shopper!._id.toString()]);
+    expect(pending?.matchedCustomerIds).toEqual([customer!._id.toString()]);
+    expect(pending?.matchedUserIds).not.toContain(otherShopper!._id.toString());
+    const pendingStored = JSON.stringify(pending);
+    expect(pendingStored).not.toContain(EMAIL);
+    expect(pendingStored).not.toContain(PHONE);
+    expect(await ShopifyComplianceRequest.countDocuments({ storeId: storeBId })).toBe(0);
+
+    const retried = await postWebhook(app, 'customers/redact', redactPayload(), SHOP_A, {
+      topic: 'customers/redact',
+    });
+    expect(retried.status).toBe(200);
+    expectNoSecrets(retried.body);
+    expect(await ShopifyComplianceRequest.countDocuments({ topic: 'customers/redact' })).toBe(1);
+
+    const completed = await ShopifyComplianceRequest.findOne({
+      storeId: storeAId,
+      topic: 'customers/redact',
+    }).lean();
+    expect(completed?.status).toBe('redacted');
+    expect(completed?.matchedUserIds).toEqual([shopper!._id.toString()]);
+    expect(completed?.matchedCustomerIds).toEqual([customer!._id.toString()]);
+    expect(JSON.stringify(completed)).not.toContain(EMAIL);
+    expect(JSON.stringify(completed)).not.toContain(PHONE);
+
+    expect(await Favorite.countDocuments({ userId: shopper!._id })).toBe(0);
+    expect(await Favorite.countDocuments({ customerId: customer!._id })).toBe(0);
+    expect(await Favorite.countDocuments({ userId: otherShopper!._id })).toBe(1);
+
+    const linked = await Order.findOne({ storeId: storeAId, shopifyOrderId: '555001' });
+    expect(linked?.email).toBe('redacted@redacted.invalid');
+    expectAddressRedacted(linked?.shippingAddress);
+    expectAddressRedacted(linked?.billingAddress);
+
+    const payloadOrder = await Order.findOne({ storeId: storeAId, shopifyOrderId: SHOPIFY_ORDER_ID });
+    expectAddressRedacted(payloadOrder?.shippingAddress);
+    expectAddressRedacted(payloadOrder?.billingAddress);
+
+    const otherOrder = await Order.findOne({ storeId: storeAId, shopifyOrderId: '111' });
+    expect(otherOrder?.shippingAddress?.city).toBe('Testville');
+    expect(otherOrder?.shippingAddress?.company).toBe('Secret Co');
     await expectStoreBUntouched();
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -508,6 +642,68 @@ describe('Shopify compliance webhooks', () => {
     expect(other?.shopify?.shop).toBe(SHOP_B);
   });
 
+  test('app/uninstalled does not wipe a reconnect that lands before the clear', async () => {
+    const triggeredAt = new Date('2026-09-24T11:00:00.000Z');
+    await Store.updateOne(
+      { _id: storeAId },
+      { $set: { 'shopify.isConnected': true, 'shopify.connectedAt': new Date('2026-09-24T10:00:00.000Z') } }
+    );
+    const reconnectedToken = encrypt('shpat_reconnected_token');
+    const original = Store.findOneAndUpdate.bind(Store);
+    const spy = jest.spyOn(Store, 'findOneAndUpdate').mockImplementation((async (
+      ...args: Parameters<typeof Store.findOneAndUpdate>
+    ) => {
+      await Store.collection.updateOne(
+        { _id: storeAId },
+        {
+          $set: {
+            'shopify.isConnected': true,
+            'shopify.shop': SHOP_A,
+            'shopify.connectedAt': new Date('2026-09-24T12:00:00.000Z'),
+            'shopify.accessToken': reconnectedToken,
+            'shopify.storefrontAccessToken': 'storefront-reconnected',
+            'shopify.scope': 'read_products',
+          },
+        }
+      );
+      return original(...args).exec();
+    }) as typeof Store.findOneAndUpdate);
+
+    try {
+      const response = await postWebhook(app, 'app/uninstalled', { id: 99 }, SHOP_A, {
+        topic: 'app/uninstalled',
+        triggeredAt: triggeredAt.toISOString(),
+      });
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({ success: true });
+      expectNoSecrets(response.body);
+      expect(spy).toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+
+    const stored = await Store.findById(storeAId).select('+shopify.accessToken');
+    expect(stored?.shopify?.isConnected).toBe(true);
+    expect(stored?.shopify?.accessToken).toBe(reconnectedToken);
+    expect(stored?.shopify?.shop).toBe(SHOP_A);
+    expect(stored?.shopify?.storefrontAccessToken).toBe('storefront-reconnected');
+    expect(stored?.shopify?.complianceShop).toBeFalsy();
+    expect(await getAccessToken(storeAId.toString())).toBe('shpat_reconnected_token');
+
+    const receipt = await ShopifyComplianceRequest.findOne({
+      topic: 'app/uninstalled',
+      storeId: storeAId,
+    }).lean();
+    expect(receipt?.summary?.credentialsCleared).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    const other = await Store.findById(storeBId).select('+shopify.accessToken');
+    expect(other?.shopify?.isConnected).toBe(true);
+    expect(other?.shopify?.shop).toBe(SHOP_B);
+    expect(other?.shopify?.storefrontAccessToken).toBe('storefront-other');
+    expect(other?.shopify?.accessToken).toBeTruthy();
+  });
+
   test('shop/redact on a connected store leaves the new token in place', async () => {
     await seedShopper();
     const response = await postWebhook(app, 'shop/redact', { shop_id: 1, shop_domain: SHOP_A }, SHOP_A, {
@@ -566,6 +762,8 @@ describe('Shopify compliance webhooks', () => {
     expect(merchant?.email).toBe('merchant-a@example.com');
     const order = await Order.findOne({ storeId: storeAId, shopifyOrderId: SHOPIFY_ORDER_ID });
     expect(order?.email).toBe('redacted@redacted.invalid');
+    expectAddressRedacted(order?.shippingAddress);
+    expectAddressRedacted(order?.billingAddress);
 
     const stored = await Store.findById(storeAId).select('+shopify.accessToken');
     expect(stored?.shopify?.isConnected).toBe(false);
