@@ -7,6 +7,7 @@ import BuildRequest from '../src/models/BuildRequest';
 import { generateToken } from '../src/utils/jwt';
 import { strictStoreValidation } from '../src/middleware/strictStoreValidation';
 import buildRequestRoutes from '../src/routes/buildRequestRoutes';
+import authRoutes from '../src/routes/authRoutes';
 
 const SHOP_A = 'alpha.myshopify.com';
 const SHOP_B = 'beta.myshopify.com';
@@ -114,6 +115,8 @@ describe('Build request API (issue #155)', () => {
         password: 'password123',
         role: 'super_admin',
         isActive: true,
+        isVerified: false,
+        isPlatformOperator: true,
         storeId: storeA._id,
       }),
     ]);
@@ -630,5 +633,288 @@ describe('Build request API (issue #155)', () => {
       .set('Authorization', `Bearer ${opsToken}`);
     expect(invalid.status).toBe(400);
     expect(invalid.body.code).toBe('BUILD_REQUEST_INVALID');
+  });
+
+  const withAllowlist = async (
+    value: string | undefined,
+    run: () => Promise<void>
+  ): Promise<void> => {
+    const previous = process.env.PLATFORM_OPS_EMAILS;
+    if (value === undefined) {
+      delete process.env.PLATFORM_OPS_EMAILS;
+    } else {
+      process.env.PLATFORM_OPS_EMAILS = value;
+    }
+    try {
+      await run();
+    } finally {
+      if (previous === undefined) {
+        delete process.env.PLATFORM_OPS_EMAILS;
+      } else {
+        process.env.PLATFORM_OPS_EMAILS = previous;
+      }
+    }
+  };
+
+  const expectNoCrossStoreLeak = (body: unknown, secret: string, otherId: string): void => {
+    const serialized = JSON.stringify(body);
+    expect(serialized).not.toContain(secret);
+    expect(serialized).not.toContain(storeBId);
+    expect(serialized).not.toContain(otherId);
+    expect(serialized).not.toContain(SHOP_B);
+  };
+
+  test('store-owner super_admin without a platform-ops marker cannot list or update other stores', async () => {
+    await withAllowlist(' , , ', async () => {
+      const owner = await User.create({
+        name: 'Store Owner',
+        email: 'store-owner@example.com',
+        password: 'password123',
+        role: 'super_admin',
+        isActive: true,
+        isVerified: true,
+        isPlatformOperator: false,
+        storeId: storeAId,
+      });
+      const ownerToken = generateToken(owner._id.toString());
+
+      await markEligible(storeAId, SHOP_A);
+      const created = await createRequest(ownerToken, {
+        android: true,
+        ios: false,
+        checklist: { accessNotes: 'Owner note for store A' },
+      });
+      expect(created.status).toBe(201);
+      const ownId = created.body.data.id as string;
+      expect(created.body.data.storeId).toBe(storeAId);
+
+      const list = await request(app)
+        .get('/api/v1/build-requests')
+        .set('Authorization', `Bearer ${ownerToken}`);
+      expect(list.status).toBe(200);
+      expect(list.body.data.requests.map((item: { id: string }) => item.id)).toEqual([ownId]);
+
+      const fetched = await request(app)
+        .get(`/api/v1/build-requests/${ownId}`)
+        .set('Authorization', `Bearer ${ownerToken}`);
+      expect(fetched.status).toBe(200);
+      expect(fetched.body.data.checklist.accessNotes).toBe('Owner note for store A');
+
+      const checklist = await request(app)
+        .patch(`/api/v1/build-requests/${ownId}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ checklist: { accessNotes: 'Updated owner note' } });
+      expect(checklist.status).toBe(200);
+      expect(checklist.body.data.storeId).toBe(storeAId);
+      expect(checklist.body.data.checklist.accessNotes).toBe('Updated owner note');
+      expect(checklist.body.data.platforms.android.status).toBe('queued');
+
+      const secret = 'Store B Play Console password hint';
+      const otherId = await insertBuildRequest({
+        storeId: storeBId,
+        requestedBy: adminBId,
+        android: 'queued',
+        ios: 'waiting_on_merchant',
+        accessNotes: secret,
+        createdAt: '2026-09-21T12:00:00.000Z',
+      });
+
+      const deniedList = await request(app)
+        .get('/api/v1/admin/build-requests')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .set('X-Store-ID', storeBId);
+      expect(deniedList.status).toBe(403);
+      expect(deniedList.body).toEqual({
+        success: false,
+        error: 'Platform admin access required',
+      });
+      expectNoCrossStoreLeak(deniedList.body, secret, otherId);
+
+      const deniedStatus = await request(app)
+        .patch(`/api/v1/admin/build-requests/${otherId}/status`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .set('X-Store-ID', storeBId)
+        .send({ android: { status: 'ready' } });
+      expect(deniedStatus.status).toBe(403);
+      expect(deniedStatus.body).toEqual({
+        success: false,
+        error: 'Platform admin access required',
+      });
+      expectNoCrossStoreLeak(deniedStatus.body, secret, otherId);
+
+      const stored = await BuildRequest.findById(otherId).lean();
+      expect(stored?.platforms.android.status).toBe('queued');
+      expect(stored?.checklist.accessNotes).toBe(secret);
+    });
+  });
+
+  test('a verified allowlisted email can list and update status without the operator flag', async () => {
+    await withAllowlist(' Ops@Example.com , unverified-ops@example.com ', async () => {
+      const [listed, unverified] = await Promise.all([
+        User.create({
+          name: 'Allowlisted Ops',
+          email: 'ops@example.com',
+          password: 'password123',
+          role: 'admin',
+          isActive: true,
+          isVerified: true,
+          isPlatformOperator: false,
+          storeId: storeAId,
+        }),
+        User.create({
+          name: 'Unverified Listed Email',
+          email: 'unverified-ops@example.com',
+          password: 'password123',
+          role: 'super_admin',
+          isActive: true,
+          isVerified: false,
+          isPlatformOperator: false,
+          storeId: storeAId,
+        }),
+      ]);
+      const listedToken = generateToken(listed._id.toString());
+      const unverifiedToken = generateToken(unverified._id.toString());
+
+      const secret = 'Allowlist must not leak this note';
+      const otherId = await insertBuildRequest({
+        storeId: storeBId,
+        requestedBy: adminBId,
+        android: 'queued',
+        ios: 'not_requested',
+        accessNotes: secret,
+        createdAt: '2026-09-22T12:00:00.000Z',
+      });
+
+      const unverifiedList = await request(app)
+        .get('/api/v1/admin/build-requests')
+        .set('Authorization', `Bearer ${unverifiedToken}`);
+      expect(unverifiedList.status).toBe(403);
+      expectNoCrossStoreLeak(unverifiedList.body, secret, otherId);
+
+      const unverifiedStatus = await request(app)
+        .patch(`/api/v1/admin/build-requests/${otherId}/status`)
+        .set('Authorization', `Bearer ${unverifiedToken}`)
+        .send({ android: { status: 'failed' } });
+      expect(unverifiedStatus.status).toBe(403);
+      expectNoCrossStoreLeak(unverifiedStatus.body, secret, otherId);
+
+      const listedList = await request(app)
+        .get('/api/v1/admin/build-requests')
+        .set('Authorization', `Bearer ${listedToken}`)
+        .set('X-Store-ID', storeAId);
+      expect(listedList.status).toBe(200);
+      expect(listedList.body.data.requests.map((item: { id: string }) => item.id)).toContain(otherId);
+      expect(JSON.stringify(listedList.body)).toContain(secret);
+
+      const listedStatus = await request(app)
+        .patch(`/api/v1/admin/build-requests/${otherId}/status`)
+        .set('Authorization', `Bearer ${listedToken}`)
+        .send({ android: { status: 'ready' } });
+      expect(listedStatus.status).toBe(200);
+      expect(listedStatus.body.data.storeId).toBe(storeBId);
+      expect(listedStatus.body.data.platforms.android.status).toBe('ready');
+
+      const flagged = await request(app)
+        .get('/api/v1/admin/build-requests')
+        .set('Authorization', `Bearer ${opsToken}`);
+      expect(flagged.status).toBe(200);
+      expect(flagged.body.data.requests.map((item: { id: string }) => item.id)).toContain(otherId);
+    });
+  });
+
+  test('store registration cannot grant platform ops and merchant routes still work', async () => {
+    await withAllowlist(undefined, async () => {
+      const authApp = express();
+      authApp.use(express.json());
+      authApp.use('/api/v1/auth', authRoutes);
+      authApp.use('/api/v1', strictStoreValidation);
+      authApp.use('/api/v1', buildRequestRoutes);
+
+      const registered = await request(authApp).post('/api/v1/auth/register').send({
+        email: 'new-owner@example.com',
+        password: 'password123',
+        name: 'New Owner',
+        storeName: 'New Owner Store',
+        role: 'admin',
+        isPlatformOperator: true,
+      });
+      expect(registered.status).toBe(201);
+      expect(registered.body.data.user.role).toBe('super_admin');
+      expect(registered.body.data.user.isPlatformOperator).not.toBe(true);
+
+      const storedUser = await User.findOne({ email: 'new-owner@example.com' });
+      expect(storedUser?.role).toBe('super_admin');
+      expect(storedUser?.isPlatformOperator).toBe(false);
+      expect(storedUser?.isVerified).toBe(true);
+
+      const token = registered.body.data.token as string;
+      const ownerStoreId = storedUser!.storeId.toString();
+      const secret = 'Registration must not reveal this note';
+      const otherId = await insertBuildRequest({
+        storeId: storeBId,
+        requestedBy: adminBId,
+        android: 'building',
+        ios: 'queued',
+        accessNotes: secret,
+        createdAt: '2026-09-22T18:00:00.000Z',
+      });
+
+      const deniedList = await request(authApp)
+        .get('/api/v1/admin/build-requests')
+        .set('Authorization', `Bearer ${token}`);
+      expect(deniedList.status).toBe(403);
+      expect(deniedList.body.error).toBe('Platform admin access required');
+      expectNoCrossStoreLeak(deniedList.body, secret, otherId);
+
+      const deniedStatus = await request(authApp)
+        .patch(`/api/v1/admin/build-requests/${otherId}/status`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ ios: { status: 'ready' } });
+      expect(deniedStatus.status).toBe(403);
+      expectNoCrossStoreLeak(deniedStatus.body, secret, otherId);
+      const unchanged = await BuildRequest.findById(otherId).lean();
+      expect(unchanged?.platforms.ios.status).toBe('queued');
+
+      const profile = await request(authApp)
+        .patch('/api/v1/auth/profile')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ isPlatformOperator: true });
+      expect(profile.status).toBe(400);
+      const afterProfile = await User.findOne({ email: 'new-owner@example.com' });
+      expect(afterProfile?.isPlatformOperator).toBe(false);
+
+      await markEligible(ownerStoreId, 'new-owner.myshopify.com');
+      const created = await request(authApp)
+        .post('/api/v1/build-requests')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          android: true,
+          ios: false,
+          storeId: storeBId,
+          checklist: { accessNotes: 'New owner checklist' },
+        });
+      expect(created.status).toBe(201);
+      expect(created.body.data.storeId).toBe(ownerStoreId);
+      expect(created.body.data.checklist.accessNotes).toBe('New owner checklist');
+
+      const ownList = await request(authApp)
+        .get('/api/v1/build-requests')
+        .set('Authorization', `Bearer ${token}`);
+      expect(ownList.status).toBe(200);
+      expect(ownList.body.data.requests).toHaveLength(1);
+      expect(JSON.stringify(ownList.body)).not.toContain(secret);
+
+      const ownGet = await request(authApp)
+        .get(`/api/v1/build-requests/${created.body.data.id}`)
+        .set('Authorization', `Bearer ${token}`);
+      expect(ownGet.status).toBe(200);
+
+      const ownChecklist = await request(authApp)
+        .patch(`/api/v1/build-requests/${created.body.data.id}`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ checklist: { accessNotes: 'Checklist saved' } });
+      expect(ownChecklist.status).toBe(200);
+      expect(ownChecklist.body.data.checklist.accessNotes).toBe('Checklist saved');
+    });
   });
 });

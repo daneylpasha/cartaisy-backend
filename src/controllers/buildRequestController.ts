@@ -163,7 +163,7 @@ export const updateBuildRequestChecklist = async (
 
 /**
  * GET /api/v1/admin/build-requests
- * Platform admin. Lists requests across stores. Store admins cannot call this.
+ * Platform operator. Lists requests across stores. Store owners cannot call this.
  */
 export const listAdminBuildRequests = async (
   req: AuthenticatedRequest,
@@ -179,7 +179,7 @@ export const listAdminBuildRequests = async (
 
 /**
  * PATCH /api/v1/admin/build-requests/:id/status
- * Platform admin. Updates Android and/or iOS status. Store admins cannot call this.
+ * Platform operator. Updates Android and/or iOS status. Store owners cannot call this.
  */
 export const updateBuildRequestStatus = async (
   req: AuthenticatedRequest,

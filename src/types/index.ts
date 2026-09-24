@@ -106,6 +106,11 @@ export interface IUser extends Document {
   phone?: string;
   isVerified: boolean;
   isActive: boolean;
+  /**
+   * Cross-store platform operator. Store signup, invites, and OAuth cannot set this.
+   * Admin build-request routes require this flag or a verified PLATFORM_OPS_EMAILS match.
+   */
+  isPlatformOperator: boolean;
   role: 'super_admin' | 'admin' | 'customer' | 'moderator' | 'premium_customer';
   invitedBy?: ObjectId;
   inviteToken?: string;
@@ -939,6 +944,8 @@ export interface AuthenticatedRequest<
     name: string;
     isActive: boolean;
     isVerified?: boolean;
+    /** True only when the stored user flag is exactly true. Signup cannot grant this. */
+    isPlatformOperator?: boolean;
     phone?: string;
     profile?: IUserProfile;
     addresses?: IAddress[];

@@ -271,7 +271,8 @@ app.use(`/api/${apiConfig.version}/shopify`, shopifyRoutes);
 // Shopify OAuth callback route (matches Shopify Partner Dashboard redirect URL)
 app.use('/api/auth/shopify', shopifyOAuthRoutes);
 app.use(`/api/webhooks`, webhookRoutes);
-// Build requests: store-admin create/list/get, platform-admin status updates.
+// Build requests: store-admin create/list/get. Cross-store list and status
+// updates require a platform-ops marker, not store-owner super_admin.
 // Mounted before the general admin router so /admin/build-requests is not
 // treated as a store-admin analytics route.
 app.use(`/api/${apiConfig.version}`, buildRequestRoutes);

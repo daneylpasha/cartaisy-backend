@@ -105,6 +105,8 @@ describe('POST /api/v1/auth/google', () => {
       expect(saved?.googleSub).toBe(`sub-${role}`);
       expect(saved?.authProvider).toBe('google');
       expect(saved?.lastLoginAt).toBeInstanceOf(Date);
+      expect(saved?.isPlatformOperator).toBe(false);
+      expect(response.body.data.user.isPlatformOperator).not.toBe(true);
 
       const passwordLogin = await request(app).post('/api/v1/auth/login').send({
         email: 'merchant@example.com',

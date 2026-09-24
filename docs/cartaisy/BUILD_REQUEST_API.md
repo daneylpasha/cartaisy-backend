@@ -1,6 +1,6 @@
 # Build request API
 
-Dashboard contract for "Build my app" (dashboard issue `daneylpasha/cartaisy-dashboard#17`, backend issue #155, parent epic #152). Platform ops queue: backend issue #164, dashboard `daneylpasha/cartaisy-dashboard#24`.
+Dashboard contract for "Build my app" (dashboard issue `daneylpasha/cartaisy-dashboard#17`, backend issue #155, parent epic #152). Platform ops queue: backend issue #164, dashboard `daneylpasha/cartaisy-dashboard#24`. Store owners are not platform operators: backend issue #170.
 
 v1 stores a request and live per-platform status. It does not start EAS, App Store Connect, or Play Console. Android and iOS are independent: Android can be `ready` while iOS is still `waiting_on_merchant`.
 
@@ -16,12 +16,30 @@ Merchant routes require a store-admin JWT (`admin` or `super_admin` on that stor
 | List own store | `GET /api/v1/build-requests` | Store admin. Newest first, at most 50. |
 | Get one | `GET /api/v1/build-requests/:id` | Store admin. Another store's id is `404`. |
 | Update checklist | `PATCH /api/v1/build-requests/:id` | Store admin. Access notes only. |
-| List all stores | `GET /api/v1/admin/build-requests` | Platform admin (`super_admin`) only. Newest first, paginated. |
-| Update status | `PATCH /api/v1/admin/build-requests/:id/status` | Platform admin (`super_admin`) only. |
+| List all stores | `GET /api/v1/admin/build-requests` | Platform operator only. Newest first, paginated. |
+| Update status | `PATCH /api/v1/admin/build-requests/:id/status` | Platform operator only. |
 
-Customers and signed-out callers cannot use these routes. A store admin who calls the list-all or status route gets `403` with `"Platform admin access required"`. That body does not include another store's notes.
+Customers and signed-out callers cannot use these routes. A store admin, including a store owner whose role is `super_admin`, who calls the list-all or status route gets `403` with `"Platform admin access required"`. That body does not include another store's notes or ids.
 
-Missing or invalid tokens use the existing auth envelope (`401`, `status: "error"`). Store-admin rejection uses `{ "success": false, "error": "Admin access required" }` (`403`).
+Missing or invalid tokens use the existing auth envelope (`401`, `status: "error"`). Store-admin rejection on merchant routes uses `{ "success": false, "error": "Admin access required" }` (`403`).
+
+### Granting platform ops (issue #170)
+
+Both admin build routes use the same gate. It does **not** check `role === "super_admin"`. A caller is a platform operator only when at least one of these is true:
+
+1. `User.isPlatformOperator` is `true` on that account.
+2. The account email is verified (`isVerified: true`) and matches an entry in the `PLATFORM_OPS_EMAILS` environment variable.
+
+If neither matches, the request fails closed with `403`. An unset, empty, or whitespace-only allowlist matches nobody. An unverified account does not match the allowlist. Role `super_admin` stays the store-owner role for store-scoped admin routes. That role alone does not unlock these two routes.
+
+Signup never grants platform ops. New-store registration still creates the owner as `super_admin` and sets `isPlatformOperator: false`, even if the body asks for the flag or another role. Google sign-in does not create accounts and does not set the flag. Shopify customer import does not set it. `PATCH /api/v1/auth/profile` rejects `isPlatformOperator`.
+
+How to grant access:
+
+- **Manual flag.** Set `isPlatformOperator` to `true` on that user document in the database. This is the grant for one specific account. Do not do it through signup.
+- **Allowlist.** Set `PLATFORM_OPS_EMAILS` on the API process to a comma-separated list of operator emails, then restart so the process sees it. Matching ignores case and surrounding spaces. Example: `PLATFORM_OPS_EMAILS=ops@cartaisy.com, other@cartaisy.com`. The signed-in account's email must already be verified. The same verified email on more than one account would match each of those accounts, so prefer the flag when an address is shared across stores.
+
+Merchant create, list, get, and checklist routes are unchanged. They still use store-admin auth (`admin` or `super_admin` on that store).
 
 ## Eligibility
 
@@ -167,7 +185,7 @@ Invalid status is `400` `BUILD_REQUEST_INVALID` and names the allowed values.
 
 `GET /api/v1/admin/build-requests`
 
-Platform admin only. The gate matches the status update: `req.user.role` must be `super_admin`. Role `admin`, `moderator`, and `customer` receive `403` with `"Platform admin access required"`. A missing token receives the existing `401` auth envelope. New-store registration still creates the store owner as `super_admin`, so that account can call this route, the same as the status update.
+Platform operator only. The gate matches the status update: `isPlatformOperator: true`, or a verified email in `PLATFORM_OPS_EMAILS`. Role `super_admin`, `admin`, `moderator`, and `customer` receive `403` with `"Platform admin access required"` when they have neither marker. A missing token receives the existing `401` auth envelope. A store owner created by signup cannot call this route. See "Granting platform ops" above (issue #170).
 
 The list is every store, newest first (`createdAt`, then id). `X-Store-ID` and a query `storeId` do not select a store. Unknown query keys are `400` `BUILD_REQUEST_INVALID`.
 

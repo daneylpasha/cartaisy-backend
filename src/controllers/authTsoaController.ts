@@ -62,7 +62,8 @@ export class AuthController extends Controller {
       const user = new User({
         email,
         password,
-        role: 'customer' // Default role for new registrations
+        role: 'customer', // Default role for new registrations
+        isPlatformOperator: false,
       });
 
       await user.save();
@@ -555,6 +556,7 @@ export class AuthController extends Controller {
         'role',
         'isVerified',
         'isActive',
+        'isPlatformOperator',
         'passwordResetToken',
         'passwordResetExpires',
         'createdAt',

@@ -317,6 +317,12 @@ const UserSchema = new Schema<IUser>(
       default: true,
       index: true,
     },
+    // Cross-store platform ops. Default false. Registration, invites, profile
+    // updates, and OAuth must not set this (issue #170).
+    isPlatformOperator: {
+      type: Boolean,
+      default: false,
+    },
 
     // User Role
     role: {
