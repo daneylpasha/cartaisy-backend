@@ -99,6 +99,10 @@ export interface IUser extends Document {
   name: string;
   email: string;
   password: string;
+  /** Google account subject (`sub`) recorded when a dashboard user signs in with Google. */
+  googleSub?: string;
+  /** Set to `google` when this dashboard user signs in with Google. Password login does not write it. */
+  authProvider?: 'password' | 'google';
   phone?: string;
   isVerified: boolean;
   isActive: boolean;

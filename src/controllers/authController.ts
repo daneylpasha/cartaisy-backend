@@ -7,6 +7,10 @@ import { generateToken, generateRefreshToken } from '../utils/jwt';
 import { sendWelcomeEmail, sendPasswordResetEmail } from '../utils/email';
 import { SUCCESS_MESSAGES } from '../utils/constants';
 import { AuthenticatedRequest } from '../types';
+import {
+  GoogleIdTokenVerificationError,
+  verifyGoogleIdToken,
+} from '../services/googleIdTokenService';
 
 // Use AuthenticatedRequest for consistency
 type AuthRequest = AuthenticatedRequest;
@@ -279,6 +283,124 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     });
   } catch (error) {
     console.error('Login error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Login failed. Please try again.'
+    });
+  }
+};
+
+/**
+ * Dashboard roles that may open a merchant session.
+ * `customer` and `premium_customer` are shopper records in the same collection
+ * (including Shopify imports) and must never receive a dashboard session here.
+ * `moderator` is the additional merchant/team role used by dashboard auth.
+ */
+const DASHBOARD_SIGN_IN_ROLES = ['super_admin', 'admin', 'moderator'] as const;
+
+/**
+ * Sign in a merchant dashboard user with a Google Identity Services ID token.
+ * Does not create accounts. Invite-only signup is unchanged.
+ * POST /api/v1/auth/google
+ */
+export const googleLogin = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { idToken } = req.body as { idToken?: string };
+
+    let identity;
+    try {
+      identity = await verifyGoogleIdToken(typeof idToken === 'string' ? idToken : '');
+    } catch (error) {
+      if (error instanceof GoogleIdTokenVerificationError) {
+        if (error.code === 'GOOGLE_NOT_CONFIGURED') {
+          res.status(503).json({
+            status: 'error',
+            code: 'GOOGLE_NOT_CONFIGURED',
+            message: 'Google sign-in is not configured',
+          });
+          return;
+        }
+
+        res.status(401).json({
+          status: 'error',
+          code: 'GOOGLE_TOKEN_INVALID',
+          message: 'Google sign-in could not be verified',
+        });
+        return;
+      }
+      throw error;
+    }
+
+    const matches = await User.find({
+      email: identity.email,
+      role: { $in: DASHBOARD_SIGN_IN_ROLES },
+    }).limit(2);
+
+    if (matches.length === 0) {
+      res.status(404).json({
+        status: 'error',
+        code: 'NO_MERCHANT_ACCOUNT',
+        message: 'No Cartaisy merchant account exists for this Google email',
+      });
+      return;
+    }
+
+    if (matches.length > 1) {
+      res.status(409).json({
+        status: 'error',
+        code: 'AMBIGUOUS_MERCHANT_ACCOUNT',
+        message: 'More than one merchant account matches this Google email',
+      });
+      return;
+    }
+
+    const user = matches[0];
+    if (!user || !user.isActive) {
+      res.status(403).json({
+        status: 'error',
+        code: 'ACCOUNT_INACTIVE',
+        message: 'Account is inactive. Please contact your administrator.',
+      });
+      return;
+    }
+
+    user.googleSub = identity.sub;
+    user.authProvider = 'google';
+    await user.updateLastLogin();
+
+    const token = generateToken((user._id as any).toString());
+    const refreshToken = generateRefreshToken((user._id as any).toString());
+
+    let storeName = '';
+    if (user.storeId) {
+      const store = await Store.findById(user.storeId).select('name');
+      storeName = store?.name || '';
+    }
+
+    const userData = {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      storeId: user.storeId,
+      storeName,
+      isEmailVerified: user.isVerified,
+      isActive: user.isActive,
+      avatar: user.profile?.avatar,
+      lastLoginAt: user.lastLoginAt
+    };
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Login successful',
+      data: {
+        user: userData,
+        token,
+        refreshToken
+      }
+    });
+  } catch (error) {
+    console.error('Google login error:', error);
     res.status(500).json({
       status: 'error',
       message: 'Login failed. Please try again.'
