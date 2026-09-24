@@ -823,23 +823,44 @@ const revokeShopifyAccessToken = async (shop: string, accessToken: string): Prom
 };
 
 const clearShopifyCredentials = async (storeId: string): Promise<void> => {
+  // One pipeline so a reconnect cannot land between reading the shop domain
+  // and clearing it. complianceShop keeps that domain for later compliance
+  // webhooks. Catalog webhooks still require isConnected.
   const store = await Store.findByIdAndUpdate(
     storeId,
-    {
-      $set: { 'shopify.isConnected': false },
-      $unset: {
-        'shopify.shop': '',
-        'shopify.accessToken': '',
-        'shopify.storefrontAccessToken': '',
-        'shopify.scope': '',
-        'shopify.connectedAt': '',
-        'shopify.lastSyncAt': '',
-        'shopify.locationId': '',
-        'shopify.oauthStateHash': '',
-        'shopify.oauthStateShop': '',
-        'shopify.oauthStateExpiresAt': '',
+    [
+      {
+        $set: {
+          'shopify.isConnected': false,
+          'shopify.complianceShop': {
+            $let: {
+              vars: { shop: { $ifNull: ['$shopify.shop', ''] } },
+              in: {
+                $cond: [
+                  { $gt: [{ $strLenCP: '$$shop' }, 0] },
+                  { $toLower: '$$shop' },
+                  '$shopify.complianceShop',
+                ],
+              },
+            },
+          },
+        },
       },
-    },
+      {
+        $unset: [
+          'shopify.shop',
+          'shopify.accessToken',
+          'shopify.storefrontAccessToken',
+          'shopify.scope',
+          'shopify.connectedAt',
+          'shopify.lastSyncAt',
+          'shopify.locationId',
+          'shopify.oauthStateHash',
+          'shopify.oauthStateShop',
+          'shopify.oauthStateExpiresAt',
+        ],
+      },
+    ],
     { new: true }
   );
 
@@ -849,13 +870,30 @@ const clearShopifyCredentials = async (storeId: string): Promise<void> => {
 };
 
 /**
+ * Mark a store uninstalled from the Shopify `app/uninstalled` webhook.
+ *
+ * Shopify revokes the offline token before that webhook is sent, so this
+ * does not call the revoke API. `disconnect` leaves the token in place when
+ * revoke fails so a retry can still revoke it; that would keep a dead token
+ * after uninstall. The local clear matches disconnect: `isConnected` is false
+ * and the Admin token, Storefront token, and shop domain used for API calls
+ * are removed. `shopify.complianceShop` keeps the domain so `shop/redact`
+ * can still resolve this store.
+ */
+export const markShopifyAppUninstalled = async (storeId: string): Promise<void> => {
+  await clearShopifyCredentials(storeId);
+};
+
+/**
  * Disconnects a Shopify store.
  *
  * When a shop domain and token are both stored, Shopify is asked to revoke the
  * token before the backend copy is cleared. A revoke failure leaves the token
  * in place so a retry can still revoke it. A token with no shop domain cannot
  * be revoked, so it is cleared locally and `shopifyRevoked` is false. Status
- * is `disconnected` only after the clear.
+ * is `disconnected` only after the clear. The shop domain is copied to
+ * `shopify.complianceShop` so a later compliance webhook can still resolve
+ * this store. Catalog webhooks do not use that field.
  */
 export const disconnect = async (storeId: string): Promise<{ shopifyRevoked: boolean }> => {
   const store = await Store.findById(storeId).select('+shopify.accessToken');

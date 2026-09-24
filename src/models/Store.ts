@@ -26,6 +26,12 @@ export interface IShopifyConnection {
   oauthStateHash?: string;
   oauthStateShop?: string;
   oauthStateExpiresAt?: Date;
+  /**
+   * Shop domain retained after credentials are cleared so compliance webhooks
+   * (`shop/redact`, and `app/uninstalled` replays) can still resolve this store.
+   * Not an access token. Catalog webhooks do not use this field.
+   */
+  complianceShop?: string;
 }
 
 /**
@@ -162,6 +168,13 @@ const ShopifyConnectionSchema = new Schema<IShopifyConnection>(
     oauthStateExpiresAt: {
       type: Date,
       select: false,
+    },
+    complianceShop: {
+      type: String,
+      trim: true,
+      lowercase: true,
+      sparse: true,
+      index: true,
     },
   },
   { _id: false }
