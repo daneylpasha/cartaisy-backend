@@ -32,6 +32,16 @@ export interface IShopifyConnection {
    * Not an access token. Catalog webhooks do not use this field.
    */
   complianceShop?: string;
+  /**
+   * Set when every operational webhook subscription (products, orders,
+   * inventory, customers/create) exists on this shop. Not an access token.
+   */
+  webhooksRegisteredAt?: Date;
+  /**
+   * Safe summary when the latest registration did not finish. Tokens are never
+   * stored here. Absent after a complete registration.
+   */
+  webhookRegistrationError?: string;
 }
 
 /**
@@ -175,6 +185,11 @@ const ShopifyConnectionSchema = new Schema<IShopifyConnection>(
       lowercase: true,
       sparse: true,
       index: true,
+    },
+    webhooksRegisteredAt: Date,
+    webhookRegistrationError: {
+      type: String,
+      maxlength: 500,
     },
   },
   { _id: false }

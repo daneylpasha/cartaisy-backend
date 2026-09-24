@@ -111,6 +111,8 @@ Use this only when staging is unavailable.
 
 ## Shopify Webhook Setup
 
+A successful OAuth connect registers the operational topics below (plus product, inventory, and `customers/create`) when `SHOPIFY_WEBHOOK_URL` or `API_BASE_URL` is the public HTTPS origin. Confirm `shopify.webhooksRegisteredAt` on the store, or `webhookRegistrationError` on `GET /api/v1/shopify/status`, before treating delivery as configured. Register the order topics by hand only when that automatic step did not finish.
+
 Register only the order topics needed by the existing smoke path:
 
 - `orders/create`

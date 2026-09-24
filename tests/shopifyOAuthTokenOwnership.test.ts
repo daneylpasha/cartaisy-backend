@@ -15,6 +15,10 @@ import {
   CATALOG_SYNC_STALE_AFTER_MS,
   settleInFlightCatalogSyncs,
 } from '../src/services/catalogSyncService';
+import {
+  OPERATIONAL_WEBHOOK_SUBSCRIPTIONS,
+  settleInFlightOperationalWebhookRegistrations,
+} from '../src/services/shopifyWebhookSubscriptionService';
 
 jest.mock('node-fetch', () => ({
   __esModule: true,
@@ -131,6 +135,11 @@ describe('Shopify OAuth token ownership (issue #153)', () => {
     delete process.env.SHOPIFY_API_SECRET;
 
     installShopifyFetch();
+    axiosCreate.mockReset();
+    axiosCreate.mockImplementation(() => ({
+      post: jest.fn().mockRejectedValue(new Error('storefront provisioning skipped')),
+      get: jest.fn(),
+    }));
     performFullSyncMock.mockReset();
     performFullSyncMock.mockResolvedValue({
       inProgress: false,
@@ -204,6 +213,7 @@ describe('Shopify OAuth token ownership (issue #153)', () => {
       const stored = await Store.findById(storeId).select('catalogSync.status');
       if (stored?.catalogSync?.status !== 'syncing') {
         await settleInFlightCatalogSyncs();
+        await settleInFlightOperationalWebhookRegistrations();
         return stored;
       }
       await new Promise(resolve => setTimeout(resolve, 15));
@@ -418,6 +428,8 @@ describe('Shopify OAuth token ownership (issue #153)', () => {
     expect(stored?.shopify?.shop).toBeFalsy();
     expect(stored?.shopify?.complianceShop).toBe(SHOP_A);
     expect(stored?.shopify?.storefrontAccessToken).toBeFalsy();
+    expect(stored?.shopify?.webhooksRegisteredAt).toBeFalsy();
+    expect(stored?.shopify?.webhookRegistrationError).toBeFalsy();
     expect(await getAccessToken(storeAId)).toBeNull();
     expect(await getShopifyClientForStore(storeAId)).toBeNull();
 
@@ -426,6 +438,8 @@ describe('Shopify OAuth token ownership (issue #153)', () => {
       .set('Authorization', `Bearer ${adminAToken}`);
     expect(status.body.data.status).toBe('disconnected');
     expect(status.body.data.shop).toBeNull();
+    expect(status.body.data.webhooksRegisteredAt).toBeNull();
+    expect(status.body.data.webhookRegistrationError).toBeNull();
 
     const other = await Store.findById(storeBId).select('+shopify.accessToken');
     expect(other?.shopify?.isConnected).not.toBe(true);
@@ -747,5 +761,146 @@ describe('Shopify OAuth token ownership (issue #153)', () => {
     const stored = await Store.findById(storeAId).select('catalogSync');
     expect(stored?.catalogSync?.status).toBe('succeeded');
     expect(stored?.catalogSync?.shop).toBe(SHOP_A);
+  });
+
+  test('webhook registration failure does not fail the oauth callback', async () => {
+    const previousWebhookUrl = process.env.SHOPIFY_WEBHOOK_URL;
+    process.env.SHOPIFY_WEBHOOK_URL = 'https://api.example.com/api/webhooks';
+    try {
+    const { callback } = await connectShop(adminAToken, SHOP_A);
+
+    expect(callback.status).toBe(200);
+    expect(callback.body.success).toBe(true);
+    expect(callback.body.data.status).toBe('connected');
+    expectNoToken(callback.body);
+
+    const stored = await Store.findById(storeAId).select(
+      'shopify.isConnected shopify.webhooksRegisteredAt shopify.webhookRegistrationError'
+    );
+    expect(stored?.shopify?.isConnected).toBe(true);
+    expect(stored?.shopify?.webhooksRegisteredAt).toBeUndefined();
+    expect(stored?.shopify?.webhookRegistrationError).toEqual(expect.any(String));
+    expect(stored?.shopify?.webhookRegistrationError).not.toMatch(/shpat_|shpss_/);
+
+    const status = await request(app)
+      .get('/api/v1/shopify/status')
+      .set('Authorization', `Bearer ${adminAToken}`);
+    expect(status.status).toBe(200);
+    expect(status.body.data.webhooksRegisteredAt).toBeNull();
+    expect(status.body.data.webhookRegistrationError).toEqual(expect.any(String));
+    expectNoToken(status.body);
+    } finally {
+      if (previousWebhookUrl === undefined) {
+        delete process.env.SHOPIFY_WEBHOOK_URL;
+      } else {
+        process.env.SHOPIFY_WEBHOOK_URL = previousWebhookUrl;
+      }
+    }
+  });
+
+  test('oauth callback registers operational webhooks with the store admin token', async () => {
+    const previousWebhookUrl = process.env.SHOPIFY_WEBHOOK_URL;
+    const previousAccessToken = process.env.SHOPIFY_ACCESS_TOKEN;
+    process.env.SHOPIFY_WEBHOOK_URL = 'https://api.example.com/api/webhooks';
+    process.env.SHOPIFY_ACCESS_TOKEN = 'shpat_global_env_token_should_not_be_used';
+    try {
+    const listed: Array<{ topic: string; callbackUrl: string }> = [];
+    const post = jest.fn().mockImplementation((_url: string, body: { query?: string; variables?: any }) => {
+      const query = body?.query || '';
+      if (query.includes('webhookSubscriptions(')) {
+        return Promise.resolve({
+          data: {
+            data: {
+              webhookSubscriptions: {
+                edges: listed.map((node) => ({
+                  node: {
+                    id: `gid://${node.topic}`,
+                    topic: node.topic,
+                    endpoint: { __typename: 'WebhookHttpEndpoint', callbackUrl: node.callbackUrl },
+                  },
+                })),
+                pageInfo: { hasNextPage: false, endCursor: null },
+              },
+            },
+          },
+        });
+      }
+      if (query.includes('webhookSubscriptionCreate')) {
+        const topic = body.variables.topic as string;
+        const callbackUrl = body.variables.webhookSubscription.callbackUrl as string;
+        listed.push({ topic, callbackUrl });
+        return Promise.resolve({
+          data: {
+            data: {
+              webhookSubscriptionCreate: {
+                webhookSubscription: { id: `gid://${topic}`, topic },
+                userErrors: [],
+              },
+            },
+          },
+        });
+      }
+      return Promise.reject(new Error('storefront provisioning skipped'));
+    });
+    axiosCreate.mockImplementation(() => ({ post, get: jest.fn() }));
+
+    const { callback } = await connectShop(adminAToken, SHOP_A);
+    expect(callback.status).toBe(200);
+    expect(callback.body.data.status).toBe('connected');
+    expectNoToken(callback.body);
+
+    const creates = post.mock.calls.filter(([, body]) =>
+      String(body?.query || '').includes('webhookSubscriptionCreate')
+    );
+    expect(creates).toHaveLength(OPERATIONAL_WEBHOOK_SUBSCRIPTIONS.length);
+    expect(creates.map(([, body]) => body.variables.webhookSubscription.callbackUrl)).toEqual(
+      OPERATIONAL_WEBHOOK_SUBSCRIPTIONS.map(
+        (subscription) => `https://api.example.com/api/webhooks${subscription.path}`
+      )
+    );
+
+    const hosts = axiosCreate.mock.calls.map((call) => JSON.stringify(call[0]));
+    expect(hosts.some((host) => host.includes(`https://${SHOP_A}/admin/api/2024-01`))).toBe(true);
+    expect(hosts.some((host) => host.includes(RAW_TOKEN))).toBe(true);
+    expect(hosts.some((host) => host.includes('shpat_global_env_token_should_not_be_used'))).toBe(false);
+
+    const stored = await Store.findById(storeAId).select(
+      'shopify.webhooksRegisteredAt shopify.webhookRegistrationError'
+    );
+    expect(stored?.shopify?.webhooksRegisteredAt).toBeInstanceOf(Date);
+    expect(stored?.shopify?.webhookRegistrationError).toBeUndefined();
+    const other = await Store.findById(storeBId).select(
+      'shopify.webhooksRegisteredAt shopify.webhookRegistrationError shopify.isConnected'
+    );
+    expect(other?.shopify?.isConnected).not.toBe(true);
+    expect(other?.shopify?.webhooksRegisteredAt).toBeUndefined();
+    expect(other?.shopify?.webhookRegistrationError).toBeUndefined();
+
+    const status = await request(app)
+      .get('/api/v1/shopify/status')
+      .set('Authorization', `Bearer ${adminAToken}`);
+    expect(status.body.data.webhooksRegisteredAt).toEqual(expect.any(String));
+    expect(status.body.data.webhookRegistrationError).toBeNull();
+    expectNoToken(status.body);
+
+    post.mockClear();
+    const again = await connectShop(adminAToken, SHOP_A);
+    expect(again.callback.status).toBe(200);
+    const secondCreates = post.mock.calls.filter(([, body]) =>
+      String(body?.query || '').includes('webhookSubscriptionCreate')
+    );
+    expect(secondCreates).toHaveLength(0);
+    } finally {
+      if (previousWebhookUrl === undefined) {
+        delete process.env.SHOPIFY_WEBHOOK_URL;
+      } else {
+        process.env.SHOPIFY_WEBHOOK_URL = previousWebhookUrl;
+      }
+      if (previousAccessToken === undefined) {
+        delete process.env.SHOPIFY_ACCESS_TOKEN;
+      } else {
+        process.env.SHOPIFY_ACCESS_TOKEN = previousAccessToken;
+      }
+    }
   });
 });
