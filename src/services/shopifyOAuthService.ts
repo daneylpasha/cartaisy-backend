@@ -878,6 +878,8 @@ const clearShopifyCredentials = async (
           'shopify.oauthStateHash',
           'shopify.oauthStateShop',
           'shopify.oauthStateExpiresAt',
+          'shopify.webhooksRegisteredAt',
+          'shopify.webhookRegistrationError',
         ],
       },
     ],

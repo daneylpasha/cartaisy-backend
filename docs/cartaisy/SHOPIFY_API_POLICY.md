@@ -35,8 +35,8 @@ The backend is the only owner of Shopify access tokens for new merchant connects
 | Action | Method and path | Auth | Result |
 | --- | --- | --- | --- |
 | Start connect | `POST /api/v1/shopify/oauth/connect` with `{ "shop": "store.myshopify.com" }` | Store admin JWT | `{ authorizationUrl, state, tokenOwner: "backend" }`. Redirect the merchant's browser to `authorizationUrl`. `state` is CSRF material, not a Shopify token. |
-| Complete connect | `GET /api/v1/shopify/oauth/callback` | Public. Shopify redirects the browser here. | Exchanges the code, encrypts the Admin token onto that store only, best-effort provisions the Storefront token, and starts the first catalog sync. The sync does not block the browser redirect. A sync error does not fail the callback. Response and optional browser redirect never include the token. |
-| Connection status | `GET /api/v1/shopify/status` | Store admin JWT | `status` is `connected` or `disconnected` for the authenticated store. A client `storeId` is ignored. |
+| Complete connect | `GET /api/v1/shopify/oauth/callback` | Public. Shopify redirects the browser here. | Exchanges the code, encrypts the Admin token onto that store only, best-effort provisions the Storefront token, starts the first catalog sync, and registers operational webhook subscriptions for that shop. The sync and webhook registration do not block the browser redirect. A sync or webhook error does not fail the callback. Response and optional browser redirect never include the token. |
+| Connection status | `GET /api/v1/shopify/status` | Store admin JWT | `status` is `connected` or `disconnected` for the authenticated store. When connected, `webhooksRegisteredAt` and `webhookRegistrationError` report the latest operational webhook registration. A client `storeId` is ignored. |
 | Catalog sync status | `GET /api/v1/shopify/sync` | Store admin JWT | Durable status for the authenticated store only: `idle`, `syncing`, `succeeded`, or `failed`, plus timestamps, a safe `errorSummary`, and `eligibleForBuild`. A client `storeId` is ignored. |
 | Sync again | `POST /api/v1/shopify/sync` | Store admin JWT | Same in-request full sync, using the backend token for that store only. Refuses when disconnected. Persists the status above. A fresh `syncing` run returns 409 `CATALOG_SYNC_IN_PROGRESS` and does not start a second sync. |
 | Disconnect | `POST /api/v1/shopify/disconnect` | Store admin JWT | Revokes the token at Shopify, then clears it. Status becomes `disconnected`. If revoke fails, the token stays so disconnect can be retried. |
@@ -158,6 +158,48 @@ Separate URLs, if the dashboard asks for one field per GDPR topic:
 
 A store that is connected to a different shop is not selected via an older `complianceShop` value, so a redact for the previous shop cannot erase the shop that is connected now.
 
+## Operational webhook subscriptions
+
+Issue #163. After `saveCredentials` succeeds, the OAuth callback registers catalog, order, inventory, and customer subscriptions for **that store only**. It uses `getShopifyClientForStore(storeId)` and the store's Admin token. It does not read `SHOPIFY_ACCESS_TOKEN` or any other global merchant token.
+
+These are not compliance topics. `customers/data_request`, `customers/redact`, `shop/redact`, and `app/uninstalled` stay app-level and are not created here.
+
+Registration does not block the browser redirect. The same callback still starts the first catalog sync without waiting for it (issue #166). A Shopify error, a missing public URL, or a missing scope does not fail OAuth. The store stays Admin-connected.
+
+The Admin call lists `webhookSubscriptions`, then calls `webhookSubscriptionCreate` only for a topic whose callback URL is not already subscribed. A reconnect does not create a second subscription for the same topic and URL. An "already been taken" response counts as present. Listing is paginated. If the list call fails, nothing is created.
+
+| Topic | Callback |
+| --- | --- |
+| `products/create` | `POST /api/webhooks/shopify/products/create` |
+| `products/update` | `POST /api/webhooks/shopify/products/update` |
+| `products/delete` | `POST /api/webhooks/shopify/products/delete` |
+| `orders/create` | `POST /api/webhooks/shopify/orders/create` |
+| `orders/updated` | `POST /api/webhooks/shopify/orders/updated` |
+| `orders/paid` | `POST /api/webhooks/shopify/orders/paid` |
+| `inventory_levels/update` | `POST /api/webhooks/shopify/inventory_levels/update` |
+| `customers/create` | `POST /api/webhooks/shopify/customers/create` |
+
+The mount is `/api/webhooks`, not `/api/v1/webhooks`. Callback host:
+
+| Source | When |
+| --- | --- |
+| `SHOPIFY_WEBHOOK_URL` | Preferred. Either the https API origin (`https://<api-host>`) or the mount (`https://<api-host>/api/webhooks`). `http` and a topic path are rejected and nothing is registered. |
+| `API_BASE_URL` | Used when `SHOPIFY_WEBHOOK_URL` is unset. Origin only. |
+| `RAILWAY_STATIC_URL` | Used when both of the above are unset. |
+
+Deliveries still pass `verifyShopifyWebhook` and `resolveShopifyWebhookStore` before any handler runs. This registration does not change handler behavior.
+
+`GET /api/v1/shopify/status` exposes the result for the authenticated store:
+
+| Field | Meaning |
+| --- | --- |
+| `webhooksRegisteredAt` | All eight subscriptions were present after the latest run. |
+| `webhookRegistrationError` | The latest run did not finish. Short text safe to show. Tokens are not stored. |
+
+Both are `null` while a run is still in flight, and `null` when the store is disconnected. The write is ignored if that store is no longer connected to the same shop, so a reconnect to a different shop cannot be marked registered by the previous shop's run. Disconnect and `app/uninstalled` clear both fields. Retry is another connect: registration runs again and creates only what is missing.
+
+The install's Admin scopes must cover the topics. `read_products`, `read_orders`, and `read_customers` match the product, order, and customer topics. `inventory_levels/update` needs `read_inventory`. The example `SHOPIFY_SCOPES` value includes `write_inventory`. `customers/create` can also fail until Shopify grants protected customer data access. A topic that Shopify rejects is named on `webhookRegistrationError`. Subscriptions that succeeded stay in place, and a later connect creates only the missing ones.
+
 ## Partner app environment variables
 
 These are the Shopify Partner app credentials for the OAuth flow. They are app-level, not per merchant. Per-store Admin and Storefront tokens are written only to the backend `Store` document.
@@ -171,6 +213,7 @@ These are the Shopify Partner app credentials for the OAuth flow. They are app-l
 | `SHOPIFY_OAUTH_RETURN_URL` | No | Absolute `http` or `https` URL of the dashboard page that should continue after connect. The access token is not appended. |
 | `SHOPIFY_API_VERSION` | No | Admin API version used during connect. Defaults to `2024-01`. |
 | `SHOPIFY_WEBHOOK_SECRET` | Yes for webhooks | App webhook HMAC secret. This is not the merchant access token. |
+| `SHOPIFY_WEBHOOK_URL` | No | Public origin or `/api/webhooks` mount used as the callback host when operational subscriptions are registered after connect. Falls back to `API_BASE_URL`, then `RAILWAY_STATIC_URL`. |
 
 `SHOPIFY_API_KEY` and `SHOPIFY_API_SECRET` are fallbacks for the client ID and secret when the `SHOPIFY_CLIENT_*` names are unset. `SHOPIFY_ACCESS_TOKEN` and `SHOPIFY_STOREFRONT_ACCESS_TOKEN` are legacy global env credentials. New merchant connects must not use them; the token for a store is `Store.shopify.accessToken`, encrypted, and readable only by store-scoped backend calls.
 
@@ -185,3 +228,4 @@ These are the Shopify Partner app credentials for the OAuth flow. They are app-l
 - GitHub issue: #166 (first catalog sync starts automatically after Shopify connect; epic #152).
 - GitHub issue: #155 and `docs/cartaisy/BUILD_REQUEST_API.md` (tracked build request; dashboard `daneylpasha/cartaisy-dashboard#17`).
 - GitHub issue: #162 (mandatory compliance webhooks and `app/uninstalled`).
+- GitHub issue: #163 (operational product, order, inventory, and `customers/create` subscriptions after connect).

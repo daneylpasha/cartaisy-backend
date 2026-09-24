@@ -11,14 +11,16 @@ import {
   toSafeSyncErrorSummary,
 } from '../services/catalogSyncService';
 import Store from '../models/Store';
+import { startOperationalWebhookRegistration } from '../services/shopifyWebhookSubscriptionService';
 
 /**
  * Shopify OAuth Controller
  *
  * Dashboard contract (backend is the only token owner):
  * - POST /shopify/oauth/connect returns an authorize URL. No access token.
- * - GET  /shopify/oauth/callback completes OAuth, stores the token, and starts
- *   the first catalog sync. The sync does not block the redirect.
+ * - GET  /shopify/oauth/callback completes OAuth, stores the token, starts
+ *   the first catalog sync, and registers operational webhook subscriptions.
+ *   Neither the sync nor webhook registration blocks the redirect.
  * - GET  /shopify/status reports connected or disconnected.
  * - POST /shopify/disconnect revokes and clears the backend token.
  * - GET  /shopify/sync reads durable catalog sync status for this store only.
@@ -228,6 +230,18 @@ export const handleCallback = async (req: AuthenticatedRequest, res: Response) =
       );
     }
 
+    // Operational product/order/inventory/customer subscriptions for this shop
+    // only. Runs after the token is saved and does not block the redirect.
+    // A Shopify or configuration failure is logged and stored on
+    // shopify.webhookRegistrationError. Reconnect retries the same registration.
+    try {
+      startOperationalWebhookRegistration(storeId);
+    } catch (webhookError: unknown) {
+      console.error(
+        `[Shopify OAuth] Webhook registration failed to start for store ${storeId} shop ${normalizedShop}: ${safeErrorMessage(webhookError, 'Webhook registration failed')}`
+      );
+    }
+
     // Best-effort: provision a per-store Storefront API access token so
     // store-scoped mobile product/cart/checkout paths work for this store.
     // A failure here must NOT fail the OAuth flow — the store stays
@@ -287,7 +301,7 @@ export const getConnectionStatus = async (req: AuthenticatedRequest, res: Respon
     }
 
     const store = await Store.findById(req.storeId).select(
-      'shopify.shop shopify.scope shopify.isConnected shopify.connectedAt shopify.lastSyncAt'
+      'shopify.shop shopify.scope shopify.isConnected shopify.connectedAt shopify.lastSyncAt shopify.webhooksRegisteredAt shopify.webhookRegistrationError'
     );
 
     if (!store) {
@@ -308,6 +322,8 @@ export const getConnectionStatus = async (req: AuthenticatedRequest, res: Respon
         scope: isConnected ? store.shopify?.scope || null : null,
         connectedAt: isConnected ? store.shopify?.connectedAt || null : null,
         lastSyncAt: isConnected ? store.shopify?.lastSyncAt || null : null,
+        webhooksRegisteredAt: isConnected ? store.shopify?.webhooksRegisteredAt || null : null,
+        webhookRegistrationError: isConnected ? store.shopify?.webhookRegistrationError || null : null,
         tokenOwner: 'backend',
       },
     });
