@@ -26,7 +26,7 @@ Missing or invalid tokens use the existing auth envelope (`401`, `status: "error
 
 Create calls `assertBuildEligible(storeId)` from `src/services/catalogSyncService.ts` before it inserts a request. On failure the response is HTTP 409 and `buildEligibilityErrorBody(error)`. There is no second eligibility check.
 
-Issue #154 owns durable sync status on `Store.catalogSync` (`idle | syncing | succeeded | failed`). This API does not write that field. `shopify.lastSyncAt` is not success: connect writes that timestamp before a catalog sync. Do not enable the button from `lastSyncAt`. The next step is still Connect Shopify or Sync again.
+Issue #154 owns durable sync status on `Store.catalogSync` (`idle | syncing | succeeded | failed`). This API does not write that field. `shopify.lastSyncAt` is not success. Connect does not write it; a catalog sync does. Do not enable the button from `lastSyncAt`. Connect starts the first sync automatically (issue #166). Sync again remains the manual rerun. The build button stays off until `catalogSync.status` is `succeeded`.
 
 Ineligible create response (`409`):
 

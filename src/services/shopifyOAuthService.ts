@@ -493,7 +493,8 @@ export const saveCredentials = async (
       'shopify.scope': scope,
       'shopify.isConnected': true,
       'shopify.connectedAt': new Date(),
-      'shopify.lastSyncAt': new Date(),
+      // lastSyncAt is written when a catalog sync runs (syncService), not at
+      // connect. Build eligibility uses Store.catalogSync, not this timestamp.
       ...(shopChange?.set ?? {}),
     };
 

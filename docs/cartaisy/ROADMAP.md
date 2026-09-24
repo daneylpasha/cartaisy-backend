@@ -107,7 +107,7 @@ Gate: test push delivered to the sample-merchant Android build, scoped to its st
 
 Locked field split for this phase (Shopify is the source of truth): locked shop domain / myshopify URL, Shopify shop id, products, orders, and collection contents. Editable: app display name, logo, brand colors, splash and icon, which collections to feature on home, and home module layout later. Splash and icon stay build-time. Colors and logo stay runtime-overridable (decision 2026-07-17).
 
-Sync UX for this phase: primary "Sync again" plus the quiet auto-retry in `docs/cartaisy/SHOPIFY_API_POLICY.md`. Branding may continue with a warning. Build stays blocked until catalog sync has succeeded for the same connected shop (`Store.catalogSync` and `assertBuildEligible`).
+Sync UX for this phase: the first catalog sync starts automatically after Shopify connect. Primary "Sync again" plus the quiet auto-retry in `docs/cartaisy/SHOPIFY_API_POLICY.md` remain for a later run. Branding may continue with a warning. Build stays blocked until catalog sync has succeeded for the same connected shop (`Store.catalogSync` and `assertBuildEligible`).
 
 Gate: a prospect can be demoed today and onboarded this week without improvising. The gate is not met. The 2026-09-23 rules above are the shape that onboarding must follow.
 

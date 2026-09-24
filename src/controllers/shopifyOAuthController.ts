@@ -6,7 +6,9 @@ import {
   CatalogSyncNotConnectedError,
   CatalogSyncStoreNotFoundError,
   getCatalogSyncStatus,
+  startCatalogSyncForStore,
   syncCatalogForStore,
+  toSafeSyncErrorSummary,
 } from '../services/catalogSyncService';
 import Store from '../models/Store';
 
@@ -15,7 +17,8 @@ import Store from '../models/Store';
  *
  * Dashboard contract (backend is the only token owner):
  * - POST /shopify/oauth/connect returns an authorize URL. No access token.
- * - GET  /shopify/oauth/callback completes OAuth and stores the token.
+ * - GET  /shopify/oauth/callback completes OAuth, stores the token, and starts
+ *   the first catalog sync. The sync does not block the redirect.
  * - GET  /shopify/status reports connected or disconnected.
  * - POST /shopify/disconnect revokes and clears the backend token.
  * - GET  /shopify/sync reads durable catalog sync status for this store only.
@@ -214,6 +217,17 @@ export const handleCallback = async (req: AuthenticatedRequest, res: Response) =
       },
     });
 
+    // First catalog sync (issue #166). Claim `syncing` before the redirect so
+    // GET /shopify/sync shows progress, then let the import finish in the
+    // background. A sync error must not roll back a successful connect.
+    try {
+      await startCatalogSyncForStore(storeId);
+    } catch (syncStartError: unknown) {
+      console.error(
+        `[Shopify OAuth] Catalog sync failed to start for store ${storeId} shop ${normalizedShop}: ${toSafeSyncErrorSummary(syncStartError)}`
+      );
+    }
+
     // Best-effort: provision a per-store Storefront API access token so
     // store-scoped mobile product/cart/checkout paths work for this store.
     // A failure here must NOT fail the OAuth flow — the store stays
@@ -399,7 +413,9 @@ export const getCatalogSync = async (req: AuthenticatedRequest, res: Response) =
  *
  * Runs the existing in-request full sync and persists `idle|syncing|succeeded|failed`
  * on this store. A fresh in-progress sync returns 409 without starting another run.
- * Quiet automatic retries stay inside this request. Uses the backend token.
+ * A `syncing` record older than 15 minutes can be claimed again. The OAuth
+ * callback uses the same guard. Quiet automatic retries stay inside this
+ * request. Uses the backend token.
  */
 export const triggerSync = async (req: AuthenticatedRequest, res: Response) => {
   try {

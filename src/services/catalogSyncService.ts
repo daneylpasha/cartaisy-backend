@@ -6,22 +6,24 @@ import { BusinessLogicError, NotFoundError } from '../utils/errors';
 /**
  * Durable catalog sync status for the authenticated store (issue #154).
  *
- * `POST /api/v1/shopify/sync` is the only merchant Sync again entrypoint. It
- * runs the existing in-request full sync and records the outcome on
- * `Store.catalogSync`. There is no second sync route and no background queue.
+ * `POST /api/v1/shopify/sync` is the merchant Sync again entrypoint. A
+ * successful Shopify OAuth callback (issue #166) starts the same sync without
+ * a second route: it claims `syncing` and then runs detached so the dashboard
+ * redirect is not blocked. There is no separate job queue.
  *
  * Quiet retries: the first failure is retried immediately up to
  * `CATALOG_SYNC_QUIET_RETRIES` more times (three attempts total) before the
  * stored status becomes `failed`. Status stays `syncing` for those retries.
- * The dashboard does not surface attempt numbers. A `syncing` record older
- * than `CATALOG_SYNC_STALE_AFTER_MS` can be claimed again, so a process
- * restart does not leave Sync again stuck.
+ * The dashboard does not surface attempt numbers. Sync again waits for that
+ * run. The connect callback does not. A `syncing` record older than
+ * `CATALOG_SYNC_STALE_AFTER_MS` can be claimed again, so a process restart
+ * does not leave the store stuck. A fresher `syncing` record is left alone.
  *
  * Build eligibility minimal bar: Shopify is connected for this store AND
  * `catalogSync.status` is `succeeded` for that same shop domain. `idle`,
  * `syncing`, `failed`, a success recorded for a different shop, and a
- * disconnected store are not eligible. Do not use `shopify.lastSyncAt` —
- * connect stamps that field before any catalog sync.
+ * disconnected store are not eligible. Do not use `shopify.lastSyncAt`.
+ * Connect does not stamp that field; a catalog sync writes it when it runs.
  */
 
 export const CATALOG_SYNC_QUIET_RETRIES = 2;
@@ -473,24 +475,14 @@ const markFailed = async (
 };
 
 /**
- * Sync again for one store. Overlapping calls while a fresh `syncing` record
- * exists do not start a second run. A resolved run that imported products is
- * success even if some records reported errors. Zero products plus errors is
- * a failure (Shopify fetch failures return that way instead of throwing) and
- * is retried quietly, then stored as `failed`. An empty catalog with no
- * errors is success.
+ * Body of a sync that has already claimed `syncing`. Shared by Sync again,
+ * which waits for the result, and by the post-connect kickoff, which does not.
  */
-export const syncCatalogForStore = async (storeId: string): Promise<CatalogSyncRunResult> => {
-  const store = await loadStore(storeId);
-  if (!store) {
-    throw new CatalogSyncStoreNotFoundError();
-  }
-  if (!isShopifyConnected(store)) {
-    throw new CatalogSyncNotConnectedError();
-  }
-
-  const shop = (store.shopify?.shop || '').trim();
-  const previous = await claimSync(storeId, shop);
+const executeClaimedCatalogSync = async (
+  storeId: string,
+  shop: string,
+  previous: CatalogSyncStoreSlice
+): Promise<CatalogSyncRunResult> => {
   let lastError: unknown;
 
   for (let attempt = 1; attempt <= CATALOG_SYNC_MAX_ATTEMPTS; attempt += 1) {
@@ -526,7 +518,7 @@ export const syncCatalogForStore = async (storeId: string): Promise<CatalogSyncR
 
       lastError = error;
       console.warn(
-        `Catalog sync attempt ${attempt}/${CATALOG_SYNC_MAX_ATTEMPTS} failed for store ${storeId}: ${toSafeSyncErrorSummary(error)}`
+        `Catalog sync attempt ${attempt}/${CATALOG_SYNC_MAX_ATTEMPTS} failed for store ${storeId} shop ${shop}: ${toSafeSyncErrorSummary(error)}`
       );
     }
   }
@@ -538,4 +530,94 @@ export const syncCatalogForStore = async (storeId: string): Promise<CatalogSyncR
     errorSummary,
     data: await readPublicStatus(storeId),
   };
+};
+
+/** In-process runs started by `startCatalogSyncForStore`. Tests drain this. */
+const inFlightCatalogSyncs = new Set<Promise<void>>();
+
+const trackInFlightCatalogSync = (run: Promise<unknown>): void => {
+  const tracked = run.then(
+    () => undefined,
+    () => undefined
+  );
+  inFlightCatalogSyncs.add(tracked);
+  void tracked.then(() => {
+    inFlightCatalogSyncs.delete(tracked);
+  });
+};
+
+/** Resolves when every detached catalog sync started so far has finished. */
+export const settleInFlightCatalogSyncs = async (): Promise<void> => {
+  let snapshot = [...inFlightCatalogSyncs];
+  while (snapshot.length > 0) {
+    await Promise.all(snapshot);
+    snapshot = [...inFlightCatalogSyncs].filter(run => !snapshot.includes(run));
+  }
+};
+
+const claimCatalogSync = async (
+  storeId: string
+): Promise<{ shop: string; previous: CatalogSyncStoreSlice }> => {
+  const store = await loadStore(storeId);
+  if (!store) {
+    throw new CatalogSyncStoreNotFoundError();
+  }
+  if (!isShopifyConnected(store)) {
+    throw new CatalogSyncNotConnectedError();
+  }
+
+  const shop = (store.shopify?.shop || '').trim();
+  const previous = await claimSync(storeId, shop);
+  return { shop, previous };
+};
+
+/**
+ * Sync again for one store. Overlapping calls while a fresh `syncing` record
+ * exists do not start a second run. A `syncing` record older than
+ * `CATALOG_SYNC_STALE_AFTER_MS` can be claimed again. A resolved run that
+ * imported products is success even if some records reported errors. Zero
+ * products plus errors is a failure (Shopify fetch failures return that way
+ * instead of throwing) and is retried quietly, then stored as `failed`. An
+ * empty catalog with no errors is success.
+ */
+export const syncCatalogForStore = async (storeId: string): Promise<CatalogSyncRunResult> => {
+  const { shop, previous } = await claimCatalogSync(storeId);
+  return executeClaimedCatalogSync(storeId, shop, previous);
+};
+
+/**
+ * Claim `syncing` and run the catalog sync without awaiting it.
+ * Returns after the status write so callers can redirect while the import
+ * continues. A fresh in-progress sync returns `already_running` and does not
+ * start another run. Failures are logged with the store id and shop; they
+ * are not thrown to the caller after the run has been detached.
+ */
+export const startCatalogSyncForStore = async (
+  storeId: string
+): Promise<'started' | 'already_running'> => {
+  let shop = '';
+  try {
+    const claimed = await claimCatalogSync(storeId);
+    shop = claimed.shop;
+    const run = executeClaimedCatalogSync(storeId, shop, claimed.previous)
+      .then(result => {
+        if (result.outcome === 'failed') {
+          console.error(
+            `Catalog sync failed for store ${storeId} shop ${shop}: ${result.errorSummary}`
+          );
+        }
+      })
+      .catch((error: unknown) => {
+        console.error(
+          `Catalog sync error for store ${storeId} shop ${shop}: ${toSafeSyncErrorSummary(error)}`
+        );
+      });
+    trackInFlightCatalogSync(run);
+    return 'started';
+  } catch (error) {
+    if (error instanceof CatalogSyncInProgressError) {
+      return 'already_running';
+    }
+    throw error;
+  }
 };
