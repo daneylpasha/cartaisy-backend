@@ -10,6 +10,8 @@ const SECRET_QUERY_FRAGMENTS = [
   'serviceaccount',
   'credentials',
   'pem',
+  'keyp8',
+  'googleserviceaccountkeyjson',
 ];
 
 export function redactCredentialQueryUrl(url: string): string {

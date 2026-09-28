@@ -1,11 +1,11 @@
 import cron from 'node-cron';
 import { redactEasLogText } from './easBuildClient';
 import { pollInFlightEasBuilds } from './easBuildService';
+import { pollInFlightStoreSubmits, redactSubmitLogText } from './easSubmitService';
 
 /**
- * Polls in-flight Cartaisy EAS workflow runs once a minute and writes
- * platform status plus installUrl. Started with the other schedulers.
- * Jest skips it so the process can exit.
+ * Polls in-flight Cartaisy EAS workflow runs and store submits once a minute.
+ * Started with the other schedulers. Jest skips it so the process can exit.
  */
 class EasBuildScheduler {
   private started = false;
@@ -27,6 +27,12 @@ class EasBuildScheduler {
       } catch (error) {
         const message = error instanceof Error ? error.message : 'poll failed';
         console.warn('[eas-build] poll error', { message: redactEasLogText(message) });
+      }
+      try {
+        await pollInFlightStoreSubmits();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'poll failed';
+        console.warn('[eas-submit] poll error', { message: redactSubmitLogText(message) });
       } finally {
         this.tickInFlight = false;
       }
