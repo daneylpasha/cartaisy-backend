@@ -1,11 +1,12 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
 /**
- * Tracked "Build my app" request (issue #155).
+ * Tracked "Build my app" request (issue #155, EAS trigger in #182).
  *
- * v1 records the merchant request and per-platform status. It does not start
- * an EAS build. Android and iOS move independently: Android may be `ready`
- * while iOS is `waiting_on_merchant`.
+ * Android and iOS move independently: Android may be `ready` while iOS is
+ * `waiting_on_merchant`. When Cartaisy Expo credentials are configured, a
+ * create also starts one EAS workflow run per requested platform. `eas` is
+ * server-only and must not be returned to clients.
  */
 
 export const BUILD_PLATFORM_STATUSES = [
@@ -19,11 +20,22 @@ export const BUILD_PLATFORM_STATUSES = [
 
 export type BuildPlatformStatus = (typeof BUILD_PLATFORM_STATUSES)[number];
 
+export interface IBuildPlatformEas {
+  /** EAS Workflow run id. Server-only. */
+  workflowRunId?: string;
+  /** EAS Build id once the workflow reports one. Server-only. */
+  buildId?: string;
+  startedAt?: Date;
+}
+
 export interface IBuildPlatformState {
   status: BuildPlatformStatus;
   updatedAt: Date;
-  /** Expo/EAS install handoff. Absent until platform ops set it. `ready` does not require it. */
+  /** Expo/EAS install handoff. Absent until automation or platform ops set it. `ready` does not require it. */
   installUrl?: string | null;
+  /** Merchant-safe automation note. Omitted from API responses when empty. */
+  message?: string | null;
+  eas?: IBuildPlatformEas;
 }
 
 export interface IBuildRequestChecklist {
@@ -56,6 +68,21 @@ const PlatformStateSchema = new Schema<IBuildPlatformState>(
     installUrl: {
       type: String,
       trim: true,
+    },
+    message: {
+      type: String,
+      trim: true,
+      maxlength: 280,
+    },
+    eas: {
+      type: new Schema<IBuildPlatformEas>(
+        {
+          workflowRunId: { type: String, trim: true },
+          buildId: { type: String, trim: true },
+          startedAt: { type: Date },
+        },
+        { _id: false }
+      ),
     },
   },
   { _id: false }
@@ -106,5 +133,14 @@ const BuildRequestSchema = new Schema<IBuildRequest>(
 BuildRequestSchema.index({ storeId: 1, createdAt: -1 });
 // Platform ops list every store, newest first (issue #164).
 BuildRequestSchema.index({ createdAt: -1, _id: -1 });
+// In-flight EAS polls. workflowRunId is absent until a run is accepted.
+BuildRequestSchema.index({
+  'platforms.android.status': 1,
+  'platforms.android.eas.workflowRunId': 1,
+});
+BuildRequestSchema.index({
+  'platforms.ios.status': 1,
+  'platforms.ios.eas.workflowRunId': 1,
+});
 
 export default mongoose.model<IBuildRequest>('BuildRequest', BuildRequestSchema);

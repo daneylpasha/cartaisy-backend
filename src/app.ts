@@ -11,6 +11,7 @@ import { FirebaseNotificationService } from './services/firebaseNotificationServ
 import { notificationScheduler } from './services/notificationScheduler';
 import { imageCleanupScheduler } from './services/imageCleanupScheduler';
 import { abandonedCartScheduler } from './services/abandonedCartScheduler';
+import { easBuildScheduler } from './services/easBuildScheduler';
 
 // Log Firebase status on startup
 console.log('Firebase Status:', {
@@ -33,6 +34,7 @@ if (process.env.NODE_ENV !== 'test') {
   notificationScheduler.start();
   imageCleanupScheduler.start();
   abandonedCartScheduler.start();
+  easBuildScheduler.start();
 }
 
 // Security middleware imports
