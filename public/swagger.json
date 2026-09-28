@@ -3006,7 +3006,7 @@
 				"properties": {
 					"cartId": {
 						"type": "string",
-						"description": "Shopify Storefront cart ID"
+						"description": "Shopify Storefront cart GID (`gid://shopify/Cart/<token>` or the same\nid with Shopify's `?key=` suffix). Cartaisy-only cart ids are rejected."
 					},
 					"country": {
 						"type": "string",
