@@ -388,9 +388,8 @@ const StoreBrandingSchema = new Schema<IStoreBranding>(
       type: String,
       trim: true,
     },
-    // App icon and splash are build-time assets. They live on the branding
-    // document so the dashboard can reload them. They are not part of the
-    // public /store/config runtime override.
+    // Public GET /store/config returns these only when they are absolute
+    // http(s) URLs and not token-shaped. Invalid values are omitted.
     iconUrl: {
       type: String,
       trim: true,

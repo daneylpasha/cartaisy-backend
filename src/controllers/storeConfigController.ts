@@ -17,6 +17,12 @@ export interface StoreConfigResponse {
   primaryColor?: string;
   secondaryColor?: string;
   logoUrl?: string;
+  /** App icon. `appIconUrl` is the same value when present. */
+  iconUrl?: string;
+  appIconUrl?: string;
+  /** Splash image. `splashImageUrl` is the same value when present. */
+  splashUrl?: string;
+  splashImageUrl?: string;
 }
 
 // =============================================================================
@@ -41,18 +47,22 @@ const sanitizeHexColor = (value: unknown): string | undefined => {
 };
 
 /**
- * `Store.branding.logoUrl` has no format validation at the schema level, so the
+ * Brand image URLs have no format validation at the schema level, so the
  * response is the only place a malformed value can be filtered out. Only
- * well-formed absolute http(s) URLs are exposed.
+ * well-formed absolute http(s) URLs are exposed. Token-shaped values are
+ * omitted so a Shopify secret stored in a branding URL cannot leave this
+ * public route. Same markers as the admin branding read.
  */
-const sanitizeLogoUrl = (value: unknown): string | undefined => {
+const TOKEN_SHAPED_URL = /shpat_|shpss_|shpca_|shpct_|shpua_|access_token|bearer\s/i;
+
+const sanitizeBrandImageUrl = (value: unknown): string | undefined => {
   if (typeof value !== 'string') {
     return undefined;
   }
 
   const trimmed = value.trim();
 
-  if (!trimmed) {
+  if (!trimmed || TOKEN_SHAPED_URL.test(trimmed)) {
     return undefined;
   }
 
@@ -135,9 +145,21 @@ export const getStoreConfig = async (req: Request, res: Response): Promise<void>
       data.secondaryColor = secondaryColor;
     }
 
-    const logoUrl = sanitizeLogoUrl(store.branding?.logoUrl);
+    const logoUrl = sanitizeBrandImageUrl(store.branding?.logoUrl);
     if (logoUrl) {
       data.logoUrl = logoUrl;
+    }
+
+    const iconUrl = sanitizeBrandImageUrl(store.branding?.iconUrl);
+    if (iconUrl) {
+      data.iconUrl = iconUrl;
+      data.appIconUrl = iconUrl;
+    }
+
+    const splashUrl = sanitizeBrandImageUrl(store.branding?.splashUrl);
+    if (splashUrl) {
+      data.splashUrl = splashUrl;
+      data.splashImageUrl = splashUrl;
     }
 
     res.json({

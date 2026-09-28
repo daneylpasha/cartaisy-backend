@@ -122,6 +122,10 @@ describe('getStoreConfig branding fields', () => {
     expect(body.data.primaryColor).toBe('#FF6B6B');
     expect(body.data).not.toHaveProperty('secondaryColor');
     expect(body.data).not.toHaveProperty('logoUrl');
+    expect(body.data).not.toHaveProperty('iconUrl');
+    expect(body.data).not.toHaveProperty('appIconUrl');
+    expect(body.data).not.toHaveProperty('splashUrl');
+    expect(body.data).not.toHaveProperty('splashImageUrl');
   });
 
   it('omits every branding field when the store has no branding object at all', async () => {
@@ -136,6 +140,139 @@ describe('getStoreConfig branding fields', () => {
     expect(body.data).not.toHaveProperty('primaryColor');
     expect(body.data).not.toHaveProperty('secondaryColor');
     expect(body.data).not.toHaveProperty('logoUrl');
+    expect(body.data).not.toHaveProperty('iconUrl');
+    expect(body.data).not.toHaveProperty('appIconUrl');
+    expect(body.data).not.toHaveProperty('splashUrl');
+    expect(body.data).not.toHaveProperty('splashImageUrl');
+  });
+
+  it('returns iconUrl and splashUrl with read aliases when both are absolute http(s) URLs', async () => {
+    mockStoreDocument({
+      ...activeStore,
+      branding: {
+        primaryColor: '#FF6B6B',
+        secondaryColor: '#123',
+        logoUrl: 'https://cdn.example.com/logo.png',
+        iconUrl: 'https://cdn.example.com/icon.png',
+        splashUrl: 'http://cdn.example.com/splash.png',
+      },
+    });
+    const res = createResponse();
+
+    await getStoreConfig(createRequest({ 'x-store-id': storeId }), res);
+
+    expect(res.status).not.toHaveBeenCalled();
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      data: {
+        currency: 'GBP',
+        timezone: 'Europe/London',
+        language: 'fr',
+        name: 'Tenant Store',
+        primaryColor: '#FF6B6B',
+        secondaryColor: '#123',
+        logoUrl: 'https://cdn.example.com/logo.png',
+        iconUrl: 'https://cdn.example.com/icon.png',
+        appIconUrl: 'https://cdn.example.com/icon.png',
+        splashUrl: 'http://cdn.example.com/splash.png',
+        splashImageUrl: 'http://cdn.example.com/splash.png',
+      },
+    });
+  });
+
+  it('omits an invalid iconUrl and splashUrl and still returns the rest of the config', async () => {
+    mockStoreDocument({
+      ...activeStore,
+      branding: {
+        primaryColor: '#FF6B6B',
+        secondaryColor: '#00AABB',
+        logoUrl: 'https://cdn.example.com/logo.png',
+        iconUrl: 'not-a-url',
+        splashUrl: 'ftp://cdn.example.com/splash.png',
+      },
+    });
+    const res = createResponse();
+
+    await getStoreConfig(createRequest({ 'x-store-id': storeId }), res);
+
+    expect(res.status).not.toHaveBeenCalled();
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      data: {
+        currency: 'GBP',
+        timezone: 'Europe/London',
+        language: 'fr',
+        name: 'Tenant Store',
+        primaryColor: '#FF6B6B',
+        secondaryColor: '#00AABB',
+        logoUrl: 'https://cdn.example.com/logo.png',
+      },
+    });
+
+    const data = res.json.mock.calls[0][0].data;
+    expect(data).not.toHaveProperty('iconUrl');
+    expect(data).not.toHaveProperty('appIconUrl');
+    expect(data).not.toHaveProperty('splashUrl');
+    expect(data).not.toHaveProperty('splashImageUrl');
+    expect(data.iconUrl).not.toBeNull();
+    expect(data.splashUrl).not.toBeNull();
+  });
+
+  it('omits token-shaped branding image URLs and does not echo the secret', async () => {
+    const leakedIcon = 'https://cdn.example.com/icon.png?x=shpat_secretvalue';
+    const leakedSplash = 'https://cdn.example.com/splash.png?access_token=shpss_secret';
+    const leakedLogo = 'https://cdn.example.com/logo.png?token=bearer secret';
+    mockStoreDocument({
+      ...activeStore,
+      branding: {
+        primaryColor: '#FF6B6B',
+        logoUrl: leakedLogo,
+        iconUrl: leakedIcon,
+        splashUrl: leakedSplash,
+      },
+    });
+    const res = createResponse();
+
+    await getStoreConfig(createRequest({ 'x-store-id': storeId }), res);
+
+    expect(res.status).not.toHaveBeenCalled();
+    const body = res.json.mock.calls[0][0];
+    expect(body.success).toBe(true);
+    expect(body.data.primaryColor).toBe('#FF6B6B');
+    expect(body.data).not.toHaveProperty('logoUrl');
+    expect(body.data).not.toHaveProperty('iconUrl');
+    expect(body.data).not.toHaveProperty('appIconUrl');
+    expect(body.data).not.toHaveProperty('splashUrl');
+    expect(body.data).not.toHaveProperty('splashImageUrl');
+
+    const serialized = JSON.stringify(body);
+    expect(serialized).not.toContain('shpat_');
+    expect(serialized).not.toContain('shpss_');
+    expect(serialized).not.toContain('access_token');
+    expect(serialized).not.toContain('bearer');
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
+  });
+
+  it('returns a trimmed iconUrl when splashUrl is blank', async () => {
+    mockStoreDocument({
+      ...activeStore,
+      branding: {
+        primaryColor: '#FF6B6B',
+        iconUrl: '  https://cdn.example.com/icon.png  ',
+        splashUrl: '   ',
+      },
+    });
+    const res = createResponse();
+
+    await getStoreConfig(createRequest({ 'x-store-id': storeId }), res);
+
+    expect(res.status).not.toHaveBeenCalled();
+    const body = res.json.mock.calls[0][0];
+    expect(body.success).toBe(true);
+    expect(body.data.iconUrl).toBe('https://cdn.example.com/icon.png');
+    expect(body.data.appIconUrl).toBe('https://cdn.example.com/icon.png');
+    expect(body.data).not.toHaveProperty('splashUrl');
+    expect(body.data).not.toHaveProperty('splashImageUrl');
   });
 
   it('omits an invalid stored logoUrl and still returns the rest of the config', async () => {
@@ -221,6 +358,8 @@ describe('getStoreConfig branding fields', () => {
         primaryColor: 123,
         secondaryColor: null,
         logoUrl: { url: 'https://cdn.example.com/logo.png' },
+        iconUrl: null,
+        splashUrl: ['https://cdn.example.com/splash.png'],
       },
     });
     const res = createResponse();
@@ -233,6 +372,10 @@ describe('getStoreConfig branding fields', () => {
     expect(body.data).not.toHaveProperty('primaryColor');
     expect(body.data).not.toHaveProperty('secondaryColor');
     expect(body.data).not.toHaveProperty('logoUrl');
+    expect(body.data).not.toHaveProperty('iconUrl');
+    expect(body.data).not.toHaveProperty('appIconUrl');
+    expect(body.data).not.toHaveProperty('splashUrl');
+    expect(body.data).not.toHaveProperty('splashImageUrl');
   });
 });
 
