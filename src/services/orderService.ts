@@ -7,6 +7,7 @@ import { reserveInventory, releaseInventory, checkInventoryAvailability } from '
 import { tenantConfig } from '../config/tenant';
 import { IOrder, IProduct, IUser, IAddress, IOrderLineItem, IMobileStatusHistory } from '../types/index';
 import { ApiError } from '../utils/errors';
+import { assertLegacyStripeSettlementAllowed } from '../utils/legacySettlement';
 
 interface ProcessedCartItem {
   product: IProduct;
@@ -81,6 +82,8 @@ export const createMobileOrder = async (
     campaignId?: string;
   }
 ): Promise<{ order: IOrder; shopifyOrder?: any }> => {
+  assertLegacyStripeSettlementAllowed();
+
   const session = await mongoose.startSession();
   session.startTransaction();
 
@@ -283,6 +286,8 @@ export const processPayment = async (paymentData: {
   userId: string;
   email: string;
 }): Promise<PaymentResult> => {
+  assertLegacyStripeSettlementAllowed();
+
   try {
     // This is a simplified payment processing example
     // In production, integrate with Stripe, PayPal, or other payment providers

@@ -157,6 +157,48 @@ describe('Shopify-hosted checkout handoff (SaaS checkout v1)', () => {
       expect(mockedStorefront.getCheckoutUrlForStore).not.toHaveBeenCalled();
     });
 
+    test.each([
+      ['Cartaisy customer ObjectId', new Types.ObjectId().toString()],
+      ['guest session id', 'guest-session-store-a'],
+      ['product GID', 'gid://shopify/Product/123456789'],
+      ['legacy checkout GID', 'gid://shopify/Checkout/abc123'],
+      ['bare cart token', 'c1-not-a-gid'],
+      ['empty cart GID', 'gid://shopify/Cart/'],
+      ['non-canonical cart GID', 'GID://SHOPIFY/cart/not-canonical'],
+    ])('rejects a Cartaisy-only cart id (%s) before any Storefront call', async (_label, cartId) => {
+      process.env.SAAS_MODE = 'true';
+      const controller = new CheckoutController();
+
+      await expect(
+        controller.checkoutHandoff({ cartId }, STORE_A, {})
+      ).rejects.toThrow('Cart ID must be a Shopify Storefront cart GID');
+
+      expect(mockedStorefront.getCheckoutUrlForStore).not.toHaveBeenCalled();
+      expectNoGlobalStorefrontCalls();
+    });
+
+    test('accepts a Storefront cart GID that includes the Shopify key', async () => {
+      const cartIdWithKey = `${CART_ID}?key=checkout-key`;
+      mockedStorefront.getCheckoutUrlForStore.mockResolvedValue(
+        cartPayload({ id: cartIdWithKey })
+      );
+      const controller = new CheckoutController();
+
+      const response = await controller.checkoutHandoff(
+        { cartId: `  ${cartIdWithKey}  ` },
+        STORE_A,
+        {}
+      );
+
+      expect(response.success).toBe(true);
+      expect(response.data.checkoutUrl).toBe(CHECKOUT_URL);
+      expect(mockedStorefront.getCheckoutUrlForStore).toHaveBeenCalledWith(
+        STORE_A,
+        cartIdWithKey,
+        undefined
+      );
+    });
+
     test('unknown cart returns a 404 ApiError', async () => {
       mockedStorefront.getCheckoutUrlForStore.mockResolvedValue({ data: { cart: null } });
       const controller = new CheckoutController();
@@ -237,6 +279,32 @@ describe('Shopify-hosted checkout handoff (SaaS checkout v1)', () => {
 
       await expect(
         controller.completeCheckout({ sessionId: 's1' } as any, { user: { _id: 'u1' } })
+      ).rejects.toThrow('Native checkout is disabled');
+    });
+
+    test('completeCheckout fails closed in production before a payment intent', async () => {
+      const originalNodeEnv = process.env.NODE_ENV;
+      process.env.NODE_ENV = 'production';
+      const controller = new CheckoutController();
+
+      try {
+        await expect(
+          controller.completeCheckout({ sessionId: 's1' } as any, { user: { _id: 'u1' } })
+        ).rejects.toThrow('Native checkout is disabled');
+        expectNoGlobalStorefrontCalls();
+      } finally {
+        process.env.NODE_ENV = originalNodeEnv;
+      }
+    });
+
+    test('saveStep2 fails closed in SaaS mode before Stripe payment-method reads', async () => {
+      process.env.SAAS_MODE = 'true';
+      const controller = new CheckoutController();
+
+      await expect(
+        controller.saveStep2({ sessionId: 's1', paymentMethodId: 'pm_123' } as any, {
+          user: { _id: 'u1' },
+        })
       ).rejects.toThrow('Native checkout is disabled');
     });
 

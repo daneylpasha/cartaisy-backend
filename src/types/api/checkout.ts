@@ -461,7 +461,10 @@ export interface CartData {
 // =============================================================================
 
 export interface CheckoutHandoffRequest {
-  /** Shopify Storefront cart ID */
+  /**
+   * Shopify Storefront cart GID (`gid://shopify/Cart/<token>` or the same
+   * id with Shopify's `?key=` suffix). Cartaisy-only cart ids are rejected.
+   */
   cartId: string;
   /**
    * ISO 3166-1 alpha-2 country code for localized checkout (e.g. 'US').

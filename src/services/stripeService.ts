@@ -1,5 +1,6 @@
 import Stripe from 'stripe';
 import { tenantConfig } from '../config/tenant';
+import { assertLegacyStripeSettlementAllowed } from '../utils/legacySettlement';
 
 /**
  * Stripe Payment Service
@@ -217,6 +218,7 @@ class StripeService {
     paymentMethodId: string,
     metadata?: Record<string, string>
   ): Promise<Stripe.PaymentIntent> {
+    assertLegacyStripeSettlementAllowed();
     this.ensureConfigured();
 
     try {
@@ -265,6 +267,7 @@ class StripeService {
     paymentMethodId: string,
     metadata?: Record<string, string>
   ): Promise<Stripe.PaymentIntent> {
+    assertLegacyStripeSettlementAllowed();
     this.ensureConfigured();
 
     try {
@@ -311,6 +314,7 @@ class StripeService {
     paymentIntentId: string,
     paymentMethodId?: string
   ): Promise<Stripe.PaymentIntent> {
+    assertLegacyStripeSettlementAllowed();
     this.ensureConfigured();
 
     try {
@@ -370,6 +374,7 @@ class StripeService {
     amount?: number,
     reason?: Stripe.RefundCreateParams.Reason
   ): Promise<Stripe.Refund> {
+    assertLegacyStripeSettlementAllowed();
     this.ensureConfigured();
 
     try {

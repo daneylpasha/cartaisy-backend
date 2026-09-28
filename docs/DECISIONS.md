@@ -114,6 +114,14 @@ Known gap: exact original decision dates are not known for most entries. Use "Da
 - Impact: Mobile opens the returned `checkoutUrl` instead of the native multi-step flow for SaaS stores. Non-sensitive handoff metadata (`CheckoutHandoff`: storeId, cart ID, customer/guest correlation) is recorded for future order webhook reconciliation. Native Stripe checkout remains available only in dev/single-store mode until a separate tenant-safety issue redesigns it.
 - Related docs: `docs/CHECKOUT_TENANT_SAFETY_AUDIT.md`, `docs/cartaisy/SHOPIFY_API_POLICY.md`. GitHub issue: #68.
 
+### Shopify owns settlement; Cartaisy does not charge
+
+- Date: 2026-09-28.
+- Decision: The only SaaS/production settlement entry is `POST /api/v1/checkout/handoff`, which returns a Shopify Storefront `checkoutUrl`. The cart id must be a Storefront cart GID (`gid://shopify/Cart/<token>` with an optional `?key=`). Cartaisy-only ids are rejected before any Storefront call. Legacy native checkout, Stripe payment-intent create/confirm/refund, simulated `processPayment` / `createMobileOrder`, and mobile/local order-create handlers (`POST /api/v1/customer/orders` and the unrouted legacy `createOrder`) fail closed with 403 when `NODE_ENV=production`, `SAAS_MODE`, or `MULTI_TENANT_MODE` is set. There is no env flag that turns Stripe settlement back on in those modes. Saved-card vaulting (`/payment-methods`) does not capture payment and is unchanged. Webhook order ingest is unchanged.
+- Reason: Shopify owns payment capture. A Cartaisy order or Stripe PaymentIntent would settle outside the merchant's Shopify checkout.
+- Impact: Mobile SaaS completes checkout by opening the handoff URL. Local order creation remains available only for non-production, non-SaaS development and tests.
+- Related docs: `docs/CHECKOUT_TENANT_SAFETY_AUDIT.md`. GitHub issue: #181.
+
 ### Shopify order webhooks reconcile checkout handoff orders store-scoped
 
 - Date: 2026-07-03.
