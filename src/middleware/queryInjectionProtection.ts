@@ -42,9 +42,12 @@ export const additionalQueryValidation: RequestHandler = (
     if (typeof value === 'string') {
       for (const pattern of suspiciousPatterns) {
         if (pattern.test(value)) {
+          const safeValue = value.includes('PRIVATE KEY') || value.includes('-----BEGIN')
+            ? '[REDACTED]'
+            : value;
           console.warn(`🚨 SECURITY: Suspicious pattern detected`);
           console.warn(`  Pattern: ${pattern}`);
-          console.warn(`  Value: ${value}`);
+          console.warn(`  Value: ${safeValue}`);
           console.warn(`  Path: ${path}`);
           console.warn(`  IP: ${req.ip}`);
           console.warn(`  Request Path: ${req.path}`);

@@ -41,6 +41,8 @@ if (process.env.NODE_ENV !== 'test') {
 import { strictStoreValidation } from './middleware/strictStoreValidation';
 import { queryProtection } from './middleware/queryInjectionProtection';
 import { auditLogger } from './middleware/auditLogger';
+import { redactCredentialQuery } from './middleware/redactCredentialQuery';
+import { storeCredentialJsonErrorHandler } from './middleware/storeCredentialJsonError';
 import { loginLimiter } from './middleware/storeLimiter';
 import { shopifyWebhookBodyParser } from './middleware/shopifyWebhookAuth';
 import { assertTsoaRoutesMounted } from './utils/tsoaRouteReadiness';
@@ -103,6 +105,8 @@ app.use(`/api/${apiConfig.version}/customer/homescreen`, publicDataLimiter);
 // Apply general rate limiter to all other API routes
 app.use(`/api/${apiConfig.version}/`, limiter);
 
+// Drop credential query params before the access log records the URL.
+app.use(redactCredentialQuery);
 // Logging (see all requests in console)
 app.use(morgan('combined'));
 
@@ -112,6 +116,9 @@ app.use(morgan('combined'));
 app.use('/api/webhooks/shopify', shopifyWebhookBodyParser);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+// Catch malformed JSON on credential routes before the global logger prints
+// the raw body. Other routes still fall through.
+app.use(storeCredentialJsonErrorHandler);
 
 // =============================================================================
 // SECURITY MIDDLEWARE
@@ -257,6 +264,7 @@ import storeSettingsRoutes from './routes/storeSettingsRoutes';
 import storeBrandingRoutes from './routes/storeBrandingRoutes';
 import storeConfigRoutes from './routes/storeConfigRoutes';
 import buildRequestRoutes from './routes/buildRequestRoutes';
+import storeCredentialsRoutes from './routes/storeCredentialsRoutes';
 
 // API Routes with versioning
 app.use(`/api/${apiConfig.version}/auth`, authRoutes);
@@ -278,6 +286,11 @@ app.use(`/api/webhooks`, webhookRoutes);
 // Mounted before the general admin router so /admin/build-requests is not
 // treated as a store-admin analytics route.
 app.use(`/api/${apiConfig.version}`, buildRequestRoutes);
+// Store submit credentials: store-admin upsert/status/delete for the
+// authenticated store. Platform operators can read status for one store.
+// Mounted before the general admin router so /admin/store-credentials is not
+// handled as a store-admin analytics route. Does not start EAS Submit.
+app.use(`/api/${apiConfig.version}`, storeCredentialsRoutes);
 app.use(`/api/${apiConfig.version}/admin`, adminRoutes);
 // Order management routes (admin)
 app.use(`/api/${apiConfig.version}/admin`, orderManagementRoutes);
