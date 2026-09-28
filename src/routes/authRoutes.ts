@@ -38,10 +38,28 @@ const authLimiter = rateLimit({
   skipSuccessfulRequests: true // Don't count successful logins against limit
 });
 
-// Rate limiting for password reset (production settings)
-const passwordResetLimiter = rateLimit({
+// Separate counters so requesting a reset email cannot block submitting the new password.
+// Skipped in tests so expiry and reuse cases are not throttled.
+const skipPasswordResetLimitInTests = (): boolean => process.env.NODE_ENV === 'test';
+
+const forgotPasswordLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
-  max: 5, // 5 requests per hour (production limit)
+  max: 5,
+  skip: skipPasswordResetLimitInTests,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    status: 'error',
+    message: 'Too many password reset attempts. Please try again later.'
+  }
+});
+
+const resetPasswordLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10,
+  skip: skipPasswordResetLimitInTests,
+  standardHeaders: true,
+  legacyHeaders: false,
   message: {
     status: 'error',
     message: 'Too many password reset attempts. Please try again later.'
@@ -82,7 +100,7 @@ router.post(
 // Request password reset
 router.post(
   '/forgot-password',
-  passwordResetLimiter,
+  forgotPasswordLimiter,
   validatePasswordReset,
   handleValidationErrors,
   forgotPassword
@@ -91,7 +109,7 @@ router.post(
 // Reset password with token
 router.post(
   '/reset-password',
-  passwordResetLimiter,
+  resetPasswordLimiter,
   validatePasswordResetConfirm,
   handleValidationErrors,
   resetPassword

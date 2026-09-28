@@ -1,10 +1,14 @@
 import { Controller, Post, Get, Patch, Delete, Body, Request, Route, Tags, Response, Security, SuccessResponse } from '@tsoa/runtime';
-import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import User from '../models/User';
 import Store from '../models/Store';
-import { generateToken, generateRefreshToken } from '../utils/jwt';
-import { sendWelcomeEmail, sendPasswordResetEmail } from '../utils/email';
+import { generateToken, generateRefreshToken, isSessionRevokedByPasswordChange } from '../utils/jwt';
+import { sendWelcomeEmail } from '../utils/email';
+import {
+  MERCHANT_FORGOT_PASSWORD_MESSAGE,
+  requestMerchantPasswordReset,
+  resetMerchantPassword,
+} from '../services/merchantPasswordResetService';
 import { SUCCESS_MESSAGES, ERROR_MESSAGES } from '../utils/constants';
 import { AuthenticatedRequest } from '../types';
 import {
@@ -212,54 +216,12 @@ export class AuthController extends Controller {
   @SuccessResponse(200, 'Password reset email sent if account exists')
   @Response(500, 'Internal Server Error')
   public async forgotPassword(@Body() requestBody: ForgotPasswordRequest): Promise<ForgotPasswordResponse> {
-    try {
-      const { email } = requestBody;
-
-      // Find user by email
-      const user = await User.findOne({ email });
-
-      // Always return success message (don't reveal if email exists)
-      if (!user) {
-        this.setStatus(200);
-        return {
-          status: 'success',
-          message: 'If an account exists with this email, you will receive a password reset link shortly.'
-        };
-      }
-
-      // Generate password reset token
-      const resetToken = user.createPasswordResetToken();
-      await user.save({ validateBeforeSave: false });
-
-      // Send password reset email
-      const emailSent = await sendPasswordResetEmail(email, resetToken);
-
-      if (!emailSent) {
-        // If email fails, clear the reset token
-        (user as any).passwordResetToken = undefined;
-        (user as any).passwordResetExpires = undefined;
-        await user.save({ validateBeforeSave: false });
-
-        this.setStatus(500);
-        return {
-          status: 'error',
-          message: 'Failed to send reset email. Please try again later.'
-        };
-      }
-
-      this.setStatus(200);
-      return {
-        status: 'success',
-        message: 'If an account exists with this email, you will receive a password reset link shortly.'
-      };
-    } catch (error) {
-      console.error('Forgot password error:', error);
-      this.setStatus(500);
-      return {
-        status: 'error',
-        message: 'Failed to process password reset request. Please try again.'
-      };
-    }
+    await requestMerchantPasswordReset(requestBody.email);
+    this.setStatus(200);
+    return {
+      status: 'success',
+      message: MERCHANT_FORGOT_PASSWORD_MESSAGE,
+    };
   }
 
   /**
@@ -274,47 +236,27 @@ export class AuthController extends Controller {
   @Response(500, 'Internal Server Error')
   public async resetPassword(@Body() requestBody: ResetPasswordRequest): Promise<ResetPasswordResponse> {
     try {
-      const { token, newPassword } = requestBody;
+      const result = await resetMerchantPassword(requestBody.token, requestBody.newPassword);
 
-      // Hash the token to match stored version
-      const hashedToken = crypto
-        .createHash('sha256')
-        .update(token)
-        .digest('hex');
-
-      // Find user with matching token that hasn't expired
-      const user = await User.findOne({
-        passwordResetToken: hashedToken,
-        passwordResetExpires: { $gt: Date.now() }
-      });
-
-      if (!user) {
+      if (result.status === 'error') {
         this.setStatus(400);
         return {
           status: 'error',
-          message: 'Invalid or expired reset token'
+          message: result.message,
         };
       }
-
-      // Update password and clear reset token fields
-      user.password = newPassword;
-      (user as any).passwordResetToken = undefined;
-      (user as any).passwordResetExpires = undefined;
-      await user.save();
-
-      // Generate new JWT token (auto-login after reset)
-      const authToken = generateToken((user._id as any).toString());
 
       this.setStatus(200);
       return {
         status: 'success',
         message: 'Password reset successful',
         data: {
-          token: authToken
-        }
+          token: result.token,
+          refreshToken: result.refreshToken,
+        },
       };
-    } catch (error) {
-      console.error('Reset password error:', error);
+    } catch {
+      console.error('Reset password error');
       this.setStatus(500);
       return {
         status: 'error',
@@ -387,6 +329,14 @@ export class AuthController extends Controller {
         return {
           status: 'error',
           message: 'Account is inactive'
+        };
+      }
+
+      if (isSessionRevokedByPasswordChange(decoded.iat, user.passwordChangedAt)) {
+        this.setStatus(401);
+        return {
+          status: 'error',
+          message: 'Invalid or expired refresh token'
         };
       }
 
@@ -559,6 +509,7 @@ export class AuthController extends Controller {
         'isPlatformOperator',
         'passwordResetToken',
         'passwordResetExpires',
+        'passwordChangedAt',
         'createdAt',
         'updatedAt',
         'lastLoginAt',

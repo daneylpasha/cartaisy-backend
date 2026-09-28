@@ -98,7 +98,8 @@ export interface IUser extends Document {
   stripeCustomerId?: string;
   name: string;
   email: string;
-  password: string;
+  /** Absent for a Google-only dashboard user. */
+  password?: string;
   /** Google account subject (`sub`) recorded when a dashboard user signs in with Google. */
   googleSub?: string;
   /** Set to `google` when this dashboard user signs in with Google. Password login does not write it. */
@@ -122,6 +123,8 @@ export interface IUser extends Document {
   lastLoginAt?: Date;
   passwordResetToken?: string;
   passwordResetExpires?: Date;
+  /** Access and refresh tokens issued before this time are no longer accepted. */
+  passwordChangedAt?: Date;
   emailVerificationToken?: string;
   emailVerificationExpires?: Date;
   createdAt: Date;

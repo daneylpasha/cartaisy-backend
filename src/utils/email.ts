@@ -1,6 +1,7 @@
 import nodemailer from 'nodemailer';
 import { Resend } from 'resend';
 import { tenantConfig } from '../config/tenant';
+import { PASSWORD_RESET_TTL_MINUTES } from './passwordReset';
 
 // Email configuration from tenant config (defaults)
 const EMAIL_FROM_NAME = tenantConfig.email.fromName;
@@ -369,6 +370,153 @@ export const sendPasswordResetEmail = async (
     fromAddress,
     replyTo,
   });
+};
+
+const escapeHtml = (value: string): string =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+
+/**
+ * Merchant dashboard origin for password-reset links.
+ * DASHBOARD_URL wins. FRONTEND_URL is the fallback so existing deploys keep working.
+ * No trailing slash.
+ */
+export const getDashboardBaseUrl = (): string => {
+  const configured = (process.env.DASHBOARD_URL || tenantConfig.api.frontendUrl || '').trim();
+  return configured.replace(/\/+$/, '');
+};
+
+/**
+ * Agreed dashboard reset page for dashboard issue #68.
+ * `{DASHBOARD_URL}/reset-password?token={64-char hex}`
+ */
+export const buildMerchantPasswordResetUrl = (resetToken: string): string | null => {
+  try {
+    const base = getDashboardBaseUrl();
+    if (!base) {
+      return null;
+    }
+    const url = new URL('/reset-password', `${base}/`);
+    url.searchParams.set('token', resetToken);
+    return url.toString();
+  } catch {
+    return null;
+  }
+};
+
+const merchantEmailDocument = (heading: string, bodyHtml: string): string => {
+  const year = new Date().getFullYear();
+  return `<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${escapeHtml(heading)}</title>
+  </head>
+  <body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#18181b;">
+    <div style="max-width:560px;margin:0 auto;padding:32px 16px;">
+      <div style="background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e4e4e7;">
+        <div style="padding:28px 32px 8px 32px;">
+          <p style="margin:0;font-size:13px;letter-spacing:0.04em;text-transform:uppercase;color:#71717a;">Cartaisy</p>
+          <h1 style="margin:8px 0 0 0;font-size:22px;font-weight:600;line-height:1.3;">${escapeHtml(heading)}</h1>
+        </div>
+        <div style="padding:8px 32px 32px 32px;font-size:15px;line-height:1.6;color:#3f3f46;">
+          ${bodyHtml}
+        </div>
+      </div>
+      <p style="margin:16px 0 0 0;text-align:center;font-size:12px;color:#a1a1aa;">© ${year} Cartaisy</p>
+    </div>
+  </body>
+</html>`;
+};
+
+export interface RenderedEmail {
+  subject: string;
+  html: string;
+}
+
+/**
+ * Dashboard password-reset email. The only secret is the link query token.
+ */
+export const renderMerchantPasswordResetEmail = (resetToken: string): RenderedEmail | null => {
+  const resetUrl = buildMerchantPasswordResetUrl(resetToken);
+  if (!resetUrl) {
+    return null;
+  }
+  const safeUrl = escapeHtml(resetUrl);
+  const subject = 'Reset your Cartaisy password';
+  const html = merchantEmailDocument(
+    'Reset your password',
+    `<p>We received a request to reset the password for your Cartaisy dashboard account.</p>
+     <p style="margin:24px 0;">
+       <a href="${safeUrl}" style="display:inline-block;background:#18181b;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600;">Reset password</a>
+     </p>
+     <p>This link expires in ${PASSWORD_RESET_TTL_MINUTES} minutes and works once.</p>
+     <p>If you did not request this, you can ignore this email. Your password will stay the same.</p>
+     <p>If you usually sign in with Google, Continue with Google on the dashboard still works.</p>
+     <p style="font-size:13px;color:#71717a;word-break:break-all;">Or copy this link into your browser:<br><a href="${safeUrl}" style="color:#18181b;">${safeUrl}</a></p>`
+  );
+  return { subject, html };
+};
+
+/**
+ * Sent when a dashboard account has no password. No reset link and no token.
+ */
+export const renderMerchantGoogleSignInEmail = (): RenderedEmail | null => {
+  const base = getDashboardBaseUrl();
+  if (!base) {
+    return null;
+  }
+  let dashboardUrl: string;
+  try {
+    dashboardUrl = new URL(base).toString();
+  } catch {
+    return null;
+  }
+  const safeUrl = escapeHtml(dashboardUrl);
+  const subject = 'Sign in to Cartaisy with Google';
+  const html = merchantEmailDocument(
+    'Use Continue with Google',
+    `<p>Your Cartaisy dashboard account does not use a password, so there is no password to reset.</p>
+     <p>On the sign-in page, choose <strong>Continue with Google</strong>.</p>
+     <p style="margin:24px 0;">
+       <a href="${safeUrl}" style="display:inline-block;background:#18181b;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600;">Open the dashboard</a>
+     </p>
+     <p>If you did not ask for this email, you can ignore it.</p>`
+  );
+  return { subject, html };
+};
+
+/**
+ * Sends the merchant dashboard password reset email through the configured provider.
+ * Does not log the token or the message body.
+ */
+export const sendMerchantPasswordResetEmail = async (
+  email: string,
+  resetToken: string
+): Promise<boolean> => {
+  const rendered = renderMerchantPasswordResetEmail(resetToken);
+  if (!rendered) {
+    console.error('Merchant password reset email could not be built');
+    return false;
+  }
+  return sendEmail(email, rendered.subject, rendered.html);
+};
+
+/**
+ * Tells a Google-only merchant to use Continue with Google.
+ * Does not include a reset link or token.
+ */
+export const sendMerchantGoogleSignInEmail = async (email: string): Promise<boolean> => {
+  const rendered = renderMerchantGoogleSignInEmail();
+  if (!rendered) {
+    console.error('Merchant Google sign-in email could not be built');
+    return false;
+  }
+  return sendEmail(email, rendered.subject, rendered.html);
 };
 
 /**

@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { verifyToken } from '../utils/jwt';
+import { isSessionRevokedByPasswordChange, verifyToken } from '../utils/jwt';
 import User, { IUser } from '../models/User';
 import Customer from '../models/Customer';
 import { AuthenticatedRequest } from '../types';
@@ -98,6 +98,14 @@ export const authenticate = async (
       return;
     }
 
+    if (isSessionRevokedByPasswordChange(decoded.iat, user.passwordChangedAt)) {
+      res.status(401).json({
+        status: 'error',
+        message: 'Your session is no longer valid. Please sign in again.',
+      });
+      return;
+    }
+
     // Attach user to request object with proper typing
     req.user = {
       _id: user._id,
@@ -151,7 +159,11 @@ export const optionalAuthenticate = async (
       const decoded = verifyToken(token);
       const user = await User.findById(decoded.userId).select('-password');
 
-      if (user && user.isActive) {
+      if (
+        user &&
+        user.isActive &&
+        !isSessionRevokedByPasswordChange(decoded.iat, user.passwordChangedAt)
+      ) {
         req.user = {
           _id: user._id,
           id: user._id.toString(),

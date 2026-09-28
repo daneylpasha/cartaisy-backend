@@ -60,6 +60,26 @@ export const generateRefreshToken = (userId: string): string => {
 };
 
 /**
+ * True when a JWT was issued before the user's password last changed.
+ * `iat` is whole seconds. A token issued in the same second as the change
+ * stays valid so the session returned by reset-password is not rejected.
+ * Tokens with no `iat` are rejected once a password change has been recorded.
+ */
+export const isSessionRevokedByPasswordChange = (
+  issuedAtSeconds: number | undefined,
+  passwordChangedAt?: Date | null
+): boolean => {
+  if (!passwordChangedAt) {
+    return false;
+  }
+  if (issuedAtSeconds === undefined || !Number.isFinite(issuedAtSeconds)) {
+    return true;
+  }
+  const changedAtSeconds = Math.floor(passwordChangedAt.getTime() / 1000);
+  return issuedAtSeconds < changedAtSeconds;
+};
+
+/**
  * Decodes token without verification (useful for debugging)
  * @param token - JWT token to decode
  * @returns Decoded token payload or null

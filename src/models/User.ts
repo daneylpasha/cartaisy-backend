@@ -9,6 +9,7 @@ import {
   IMarketing,
   MongooseDocument,
 } from '../types/index';
+import { PASSWORD_RESET_TTL_MS } from '../utils/passwordReset';
 
 /**
  * User Mongoose Model
@@ -275,7 +276,13 @@ const UserSchema = new Schema<IUser>(
     },
     password: {
       type: String,
-      required: [true, 'Password is required'],
+      // Google-only dashboard users have no password hash. Password signup still requires one.
+      required: [
+        function (this: { authProvider?: string }): boolean {
+          return this.authProvider !== 'google';
+        },
+        'Password is required',
+      ],
       minlength: [6, 'Password must be at least 6 characters long'],
       select: false, // Don't include password in queries by default
     },
@@ -392,6 +399,11 @@ const UserSchema = new Schema<IUser>(
       type: Date,
       select: false,
     },
+    // Set when a password reset succeeds. Access and refresh tokens issued
+    // before this second are rejected. Not a client field.
+    passwordChangedAt: {
+      type: Date,
+    },
     emailVerificationToken: {
       type: String,
       select: false,
@@ -410,6 +422,7 @@ const UserSchema = new Schema<IUser>(
         delete (ret as any).password;
         delete (ret as any).passwordResetToken;
         delete (ret as any).passwordResetExpires;
+        delete (ret as any).passwordChangedAt;
         delete (ret as any).emailVerificationToken;
         delete (ret as any).emailVerificationExpires;
         delete (ret as any).__v;
@@ -493,7 +506,7 @@ UserSchema.methods.createPasswordResetToken = function (this: MongooseDocument<I
 
   (this as any).passwordResetToken = crypto.createHash('sha256').update(resetToken).digest('hex');
 
-  (this as any).passwordResetExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+  (this as any).passwordResetExpires = new Date(Date.now() + PASSWORD_RESET_TTL_MS);
 
   return resetToken;
 };
