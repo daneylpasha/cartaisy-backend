@@ -85,6 +85,10 @@ describe('updateStoreBranding', () => {
         logoUrl: null,
         primaryColor: '#123456',
         secondaryColor: '#654321',
+        iconUrl: null,
+        appIconUrl: null,
+        splashUrl: null,
+        splashImageUrl: null,
       },
       message: 'Store branding updated successfully',
     });
@@ -137,6 +141,10 @@ describe('updateStoreBranding', () => {
         logoUrl: null,
         primaryColor: '#FF6B6B',
         secondaryColor: '#00AABB',
+        iconUrl: null,
+        appIconUrl: null,
+        splashUrl: null,
+        splashImageUrl: null,
       },
       message: 'Store branding updated successfully',
     });
@@ -162,6 +170,10 @@ describe('updateStoreBranding', () => {
         logoUrl: null,
         primaryColor: '#123456',
         secondaryColor: null,
+        iconUrl: null,
+        appIconUrl: null,
+        splashUrl: null,
+        splashImageUrl: null,
       },
       message: 'Store branding updated successfully',
     });
@@ -287,6 +299,94 @@ describe('updateStoreBranding', () => {
       success: false,
       error: 'Store not found',
     });
+  });
+
+  it('returns stored icon and splash URLs, including read aliases, on a color update', async () => {
+    mockUpdateResult({
+      _id: storeId,
+      branding: {
+        primaryColor: '#123456',
+        secondaryColor: '#654321',
+        logoUrl: 'https://cdn.example.com/logo.png',
+        iconUrl: 'https://cdn.example.com/icon.png',
+        splashUrl: 'https://cdn.example.com/splash.png',
+      },
+    });
+    const res = createResponse();
+
+    await updateStoreBranding(
+      createRequest({ storeId }, { primaryColor: '#123456' }),
+      res
+    );
+
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      data: {
+        logoUrl: 'https://cdn.example.com/logo.png',
+        primaryColor: '#123456',
+        secondaryColor: '#654321',
+        iconUrl: 'https://cdn.example.com/icon.png',
+        appIconUrl: 'https://cdn.example.com/icon.png',
+        splashUrl: 'https://cdn.example.com/splash.png',
+        splashImageUrl: 'https://cdn.example.com/splash.png',
+      },
+      message: 'Store branding updated successfully',
+    });
+  });
+
+  it('omits token-shaped branding URLs from the PATCH response', async () => {
+    const leakedIcon = 'https://cdn.example.com/icon.png?x=shpat_secretvalue';
+    const leakedLogo = 'https://cdn.example.com/logo.png?access_token=shpat_logoleak';
+    mockUpdateResult({
+      _id: storeId,
+      branding: {
+        primaryColor: '#123456',
+        logoUrl: leakedLogo,
+        iconUrl: leakedIcon,
+        splashUrl: 'https://cdn.example.com/splash.png',
+      },
+    });
+    const res = createResponse();
+
+    await updateStoreBranding(
+      createRequest({ storeId }, { primaryColor: '#123456' }),
+      res
+    );
+
+    const body = res.json.mock.calls[0][0];
+    expect(body.data.logoUrl).toBeNull();
+    expect(body.data.iconUrl).toBeNull();
+    expect(body.data.appIconUrl).toBeNull();
+    expect(body.data.splashUrl).toBe('https://cdn.example.com/splash.png');
+    expect(body.data.splashImageUrl).toBe('https://cdn.example.com/splash.png');
+    expect(JSON.stringify(body)).not.toMatch(/shpat_|access_token/);
+  });
+
+  it('does not write iconUrl or splashUrl from the PATCH body', async () => {
+    mockUpdateResult({
+      _id: storeId,
+      branding: { primaryColor: '#123456' },
+    });
+    const res = createResponse();
+
+    await updateStoreBranding(
+      createRequest(
+        { storeId },
+        {
+          primaryColor: '#123456',
+          iconUrl: 'https://cdn.example.com/shpat_secret.png',
+          splashUrl: 'https://cdn.example.com/splash.png',
+        }
+      ),
+      res
+    );
+
+    expect(mockedStore.findByIdAndUpdate).toHaveBeenCalledWith(
+      storeId,
+      { $set: { 'branding.primaryColor': '#123456' } },
+      { new: true }
+    );
+    expect(JSON.stringify(res.json.mock.calls[0][0])).not.toMatch(/shpat_/);
   });
 
   it('returns 500 when the update fails', async () => {

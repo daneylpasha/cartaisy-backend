@@ -293,7 +293,7 @@ app.use(`/api/${apiConfig.version}`, complianceRoutes);
 app.use(`/api/${apiConfig.version}`, storeAdminRoutes);
 // Store settings routes (admin - currency, timezone, language)
 app.use(`/api/${apiConfig.version}/admin`, storeSettingsRoutes);
-// Store branding routes (admin - logo, colors)
+// Store branding routes (admin - logo, icon, splash, colors)
 app.use(`/api/${apiConfig.version}/admin`, storeBrandingRoutes);
 // Store config routes (public - for mobile app)
 app.use(`/api/${apiConfig.version}/store`, storeConfigRoutes);

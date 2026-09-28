@@ -180,6 +180,7 @@ Known gap: exact original decision dates are not known for most entries. Use "Da
 - Reason: Daniyal requires runtime branding only if it never looks laggy or cheap to the merchant's app users; build-time defaults plus cached runtime override achieves updateability without an unbranded first paint.
 - Impact: Implementing the mobile runtime branding contract and the `/store/config` branding extension is approved MVP work. Dashboard exposes only merchant-safe branding fields; native-side changes remain onboarding work.
 - Clarified 2026-09-23: merchants choose splash and icon during onboarding. Those assets stay build-time. They are not part of the runtime `/store/config` override. See "Cartaisy v1 merchant onboarding is locked".
+- Clarified 2026-09-28: the chosen icon and splash URLs are stored on `Store.branding` (issue #173) so a dashboard reload does not depend on a dashboard-only copy. They are still not part of the runtime `/store/config` override. See "App icon and splash live on store branding".
 - Related docs: mobile repo `docs/MOBILE_RUNTIME_BRANDING_CONTRACT.md`, `docs/cartaisy/ROADMAP.md`. Decided by Daniyal, 2026-07-17.
 
 ### Shopify Partners development store is the test and demo environment
@@ -272,6 +273,14 @@ Known gap: exact original decision dates are not known for most entries. Use "Da
 - Reason: Merchants should not need a separate Cartaisy password. Account creation stays invite-only, so a Google email with no dashboard user is not a signup.
 - Impact: Railway production and staging must set `GOOGLE_CLIENT_ID` to the dashboard's Google OAuth web client ID. The value is an audience, not a secret. `GOOGLE_CLIENT_SECRET` is not used for this ID-token check. If `GOOGLE_CLIENT_ID` is unset, the process still boots and the route returns `503` with `GOOGLE_NOT_CONFIGURED`. Stable error codes: `GOOGLE_TOKEN_INVALID` (401), `NO_MERCHANT_ACCOUNT` (404), `ACCOUNT_INACTIVE` (403), `AMBIGUOUS_MERCHANT_ACCOUNT` (409) when more than one dashboard user shares that email. `googleSub` and `authProvider` may be stored for audit. Password login behavior is unchanged. An invited user who is still `isActive: false` cannot finish activation through Google in this version. For a non-Gmail address, `email_verified` only proves that Google had verified that address; invite-only signup is what keeps an unknown address from becoming a merchant.
 - Related docs: `.env.example`, `docs/STATUS.md`, `docs/cartaisy/CROSS_REPO_MAP.md`, `docs/cartaisy/ROADMAP.md`, `docs/cartaisy/SAAS_SCOPE.md`.
+
+### App icon and splash live on store branding
+
+- Date: 2026-09-28.
+- Decision: App icon and splash are first-class fields on `Store.branding`. An authenticated store admin uploads them with `POST /api/v1/admin/stores/:storeId/branding/icon` and `POST /api/v1/admin/stores/:storeId/branding/splash` (multipart field `image`, same auth, store ownership, and Cloudinary path as the logo). The stored fields are `iconUrl` and `splashUrl`. `GET` and `PATCH /api/v1/admin/stores/:storeId/branding` return those fields beside `logoUrl`, `primaryColor`, and `secondaryColor`, with read aliases `appIconUrl` and `splashImageUrl`. `PATCH` does not accept image URLs. Only an absolute `https` URL that is not token-shaped is stored. Token-shaped values (`shpat_`, `shpss_`, `shpca_`, `shpct_`, `shpua_`, `access_token`, bearer) are dropped on read and are never written to logs or API responses. An already-stored absolute `http` URL is still returned; new uploads are not. Callers may update only their own store; `super_admin` keeps the existing explicit cross-store allowance on these admin routes. Public `GET /api/v1/store/config` does not gain icon or splash. Native icon and splash stay build-time under the 2026-07-17 runtime branding decision.
+- Reason: The dashboard already edits icon and splash, but a missing backend route left the URLs only on the dashboard store record. White-label reload needs them on the live branding document. Shopify Admin tokens must not ride along in an image URL.
+- Impact: Issue #173. Dashboard clients can stop depending on dashboard-only `brandAssets` after a branding reload. This does not start EAS builds and does not change the locked onboarding rule that splash and icon are build-time.
+- Related docs: `docs/STATUS.md`. GitHub issue: #173.
 
 ## Related docs/issues
 

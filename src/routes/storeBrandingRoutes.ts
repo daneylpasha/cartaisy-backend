@@ -6,6 +6,8 @@ import {
   getStoreBranding,
   updateStoreBranding,
   uploadStoreLogo,
+  uploadStoreIcon,
+  uploadStoreSplash,
   deleteStoreLogo,
 } from '../controllers/admin/storeBrandingController';
 
@@ -14,12 +16,12 @@ const router = express.Router();
 /**
  * Store Branding Routes
  *
- * Admin endpoints for managing store branding (logo, colors)
+ * Admin endpoints for managing store branding (logo, icon, splash, colors)
  * Mounted at /api/v1/admin
  */
 
-// Configure multer for logo uploads (memory storage, max 2MB)
-const logoUpload = multer({
+// Configure multer for brand image uploads (memory storage, max 2MB)
+const brandImageUpload = multer({
   storage: multer.memoryStorage(),
   limits: {
     fileSize: 2 * 1024 * 1024, // 2MB max
@@ -40,7 +42,7 @@ const logoUpload = multer({
 
 /**
  * GET /api/v1/admin/stores/:storeId/branding
- * Get store branding (logo, colors)
+ * Get store branding (logo, icon, splash, colors)
  */
 router.get(
   '/stores/:storeId/branding',
@@ -74,8 +76,40 @@ router.post(
   authenticate,
   authorize('admin', 'super_admin'),
   requireOwnedStoreParam(),
-  logoUpload.single('logo'),
+  brandImageUpload.single('logo'),
   uploadStoreLogo
+);
+
+/**
+ * POST /api/v1/admin/stores/:storeId/branding/icon
+ * Upload the app icon
+ * Accepts: multipart/form-data with 'image' field
+ * Max size: 2MB
+ * Allowed types: JPG, PNG, WebP
+ */
+router.post(
+  '/stores/:storeId/branding/icon',
+  authenticate,
+  authorize('admin', 'super_admin'),
+  requireOwnedStoreParam(),
+  brandImageUpload.single('image'),
+  uploadStoreIcon
+);
+
+/**
+ * POST /api/v1/admin/stores/:storeId/branding/splash
+ * Upload the splash image
+ * Accepts: multipart/form-data with 'image' field
+ * Max size: 2MB
+ * Allowed types: JPG, PNG, WebP
+ */
+router.post(
+  '/stores/:storeId/branding/splash',
+  authenticate,
+  authorize('admin', 'super_admin'),
+  requireOwnedStoreParam(),
+  brandImageUpload.single('image'),
+  uploadStoreSplash
 );
 
 /**
