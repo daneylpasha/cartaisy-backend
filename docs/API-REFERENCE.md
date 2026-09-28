@@ -164,29 +164,9 @@ Authorization: Bearer your-jwt-token
 
 ### Password Reset
 
-**POST** `/api/auth/forgot-password`
+Merchant recovery is `POST /api/v1/auth/forgot-password` and `POST /api/v1/auth/reset-password`. The dashboard page is `{DASHBOARD_URL}/reset-password?token={token}`. Request and response bodies, Google-only mail, and session revocation are specified in `docs/MERCHANT_PASSWORD_RESET.md`.
 
-Request a password reset email.
-
-**Request Body:**
-```json
-{
-  "email": "john@example.com"
-}
-```
-
-**POST** `/api/auth/reset-password`
-
-Reset password using the reset token.
-
-**Request Body:**
-```json
-{
-  "token": "password-reset-token",
-  "newPassword": "newsecurepassword123",
-  "confirmPassword": "newsecurepassword123"
-}
-```
+`confirmPassword` is not an API field. Password rules match signup: 6 to 128 characters, with at least one letter and one number.
 
 ## Products
 

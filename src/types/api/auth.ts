@@ -95,6 +95,7 @@ export interface ResetPasswordResponse {
   message: string;
   data?: {
     token: string;
+    refreshToken: string;
   };
 }
 

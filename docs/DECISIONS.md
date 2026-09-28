@@ -309,6 +309,14 @@ Known gap: exact original decision dates are not known for most entries. Use "Da
 - Impact: Dashboard issue #67 calls `POST /api/v1/build-requests/:id/submits` and polls the GET routes in `docs/cartaisy/STORE_SUBMIT_API.md`. Missing or unreadable credentials and a missing finished artifact are rejected before a job is stored. Build create and the workflow poller are unchanged.
 - Related docs: `docs/cartaisy/STORE_SUBMIT_API.md`, `docs/cartaisy/STORE_CREDENTIALS_API.md`, `docs/cartaisy/BUILD_REQUEST_API.md`, `.env.example`. GitHub issue: #187.
 
+### Merchant password reset uses a dashboard link and does not mint passwords for Google-only accounts
+
+- Date: 2026-09-28.
+- Decision: `POST /api/v1/auth/forgot-password` and `POST /api/v1/auth/reset-password` are the merchant recovery API. The emailed link is `{DASHBOARD_URL}/reset-password?token={64-char hex}`, falling back to `FRONTEND_URL` when `DASHBOARD_URL` is unset. Dashboard issue #68 owns that page. The token is single-use, expires in 10 minutes, and is stored as a SHA-256 hash. Forgot-password always returns the same success body for an unknown email, a Google-only account, an inactive account, an ambiguous email, and a mail failure. A dashboard user with no password hash receives an email that says to use Continue with Google and does not receive a reset link. A user who already has a password still receives a reset link after they have also signed in with Google. A successful reset sets `passwordChangedAt`, and access plus refresh tokens issued before that second stop working. Shopper reset on `/api/v1/customer/auth` is unchanged.
+- Reason: Merchants need a recovery path when password login fails. A reset link on a Google-only account would create a password that account never had. Silence would look like a broken reset. The HTTP response must not reveal which case the caller hit.
+- Impact: Set `DASHBOARD_URL` to the dashboard origin in each environment. The raw token and the new password must not be logged. See `docs/MERCHANT_PASSWORD_RESET.md`.
+- Related docs: `docs/MERCHANT_PASSWORD_RESET.md`, `.env.example`. GitHub issue: #188. Dashboard issue: #68.
+
 ## Related docs/issues
 
 - GitHub issue: #52.

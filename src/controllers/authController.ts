@@ -1,10 +1,14 @@
 import { Request, Response } from 'express';
-import crypto from 'crypto';
 import User from '../models/User';
 import Store from '../models/Store';
 import Order from '../models/Order';
-import { generateToken, generateRefreshToken } from '../utils/jwt';
-import { sendWelcomeEmail, sendPasswordResetEmail } from '../utils/email';
+import { generateToken, generateRefreshToken, isSessionRevokedByPasswordChange } from '../utils/jwt';
+import { sendWelcomeEmail } from '../utils/email';
+import {
+  MERCHANT_FORGOT_PASSWORD_MESSAGE,
+  requestMerchantPasswordReset,
+  resetMerchantPassword,
+} from '../services/merchantPasswordResetService';
 import { SUCCESS_MESSAGES } from '../utils/constants';
 import { AuthenticatedRequest } from '../types';
 import {
@@ -412,105 +416,46 @@ export const googleLogin = async (req: Request, res: Response): Promise<void> =>
 };
 
 /**
- * Request password reset
+ * Request a merchant password reset email.
+ * The body is the same whether or not the email matches an account.
  */
 export const forgotPassword = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { email } = req.body;
-
-    // Find user by email
-    const user = await User.findOne({ email });
-
-    // Always return success message (don't reveal if email exists)
-    if (!user) {
-      res.status(200).json({
-        status: 'success',
-        message: 'If an account exists with this email, you will receive a password reset link shortly.'
-      });
-      return;
-    }
-
-    // Generate password reset token
-    const resetToken = user.createPasswordResetToken();
-    await user.save({ validateBeforeSave: false });
-
-    // Send password reset email
-    const emailSent = await sendPasswordResetEmail(email, resetToken);
-
-    if (!emailSent) {
-      // If email fails, clear the reset token
-      (user as any).passwordResetToken = undefined;
-      (user as any).passwordResetExpires = undefined;
-      await user.save({ validateBeforeSave: false });
-
-      res.status(500).json({
-        status: 'error',
-        message: 'Failed to send reset email. Please try again later.'
-      });
-      return;
-    }
-
-    res.status(200).json({
-      status: 'success',
-      message: 'If an account exists with this email, you will receive a password reset link shortly.'
-    });
-  } catch (error) {
-    console.error('Forgot password error:', error);
-    res.status(500).json({
-      status: 'error',
-      message: 'Failed to process password reset request. Please try again.'
-    });
-  }
+  await requestMerchantPasswordReset(req.body?.email);
+  res.status(200).json({
+    status: 'success',
+    message: MERCHANT_FORGOT_PASSWORD_MESSAGE,
+  });
 };
 
 /**
- * Reset password with token
+ * Reset a merchant password with a single-use token.
  */
 export const resetPassword = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { token, newPassword } = req.body;
+    const { token, newPassword } = req.body as { token?: unknown; newPassword?: unknown };
+    const result = await resetMerchantPassword(token, newPassword);
 
-    // Hash the token to match stored version
-    const hashedToken = crypto
-      .createHash('sha256')
-      .update(token)
-      .digest('hex');
-
-    // Find user with matching token that hasn't expired
-    const user = await User.findOne({
-      passwordResetToken: hashedToken,
-      passwordResetExpires: { $gt: Date.now() }
-    });
-
-    if (!user) {
+    if (result.status === 'error') {
       res.status(400).json({
         status: 'error',
-        message: 'Invalid or expired reset token'
+        message: result.message,
       });
       return;
     }
-
-    // Update password and clear reset token fields
-    user.password = newPassword;
-    (user as any).passwordResetToken = undefined;
-    (user as any).passwordResetExpires = undefined;
-    await user.save();
-
-    // Generate new JWT token (auto-login after reset)
-    const authToken = generateToken((user._id as any).toString());
 
     res.status(200).json({
       status: 'success',
       message: 'Password reset successful',
       data: {
-        token: authToken
-      }
+        token: result.token,
+        refreshToken: result.refreshToken,
+      },
     });
-  } catch (error) {
-    console.error('Reset password error:', error);
+  } catch {
+    console.error('Reset password error');
     res.status(500).json({
       status: 'error',
-      message: 'Failed to reset password. Please try again.'
+      message: 'Failed to reset password. Please try again.',
     });
   }
 };
@@ -625,6 +570,7 @@ export const updateProfile = async (req: AuthRequest, res: Response): Promise<vo
       'isPlatformOperator',
       'passwordResetToken',
       'passwordResetExpires',
+      'passwordChangedAt',
       'createdAt',
       'updatedAt',
       'lastLoginAt',
@@ -869,6 +815,14 @@ export const refreshToken = async (req: Request, res: Response): Promise<void> =
       res.status(403).json({
         status: 'error',
         message: 'Account is inactive'
+      });
+      return;
+    }
+
+    if (isSessionRevokedByPasswordChange(decoded.iat, user.passwordChangedAt)) {
+      res.status(401).json({
+        status: 'error',
+        message: 'Invalid or expired refresh token'
       });
       return;
     }

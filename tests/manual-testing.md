@@ -367,8 +367,9 @@ curl -X POST http://localhost:3000/api/v1/auth/forgot-password \
 ### ✅ Reset Password with Token
 
 ```bash
-# Note: In a real scenario, you'd get this token from email
-# For testing, you'd need to check the database for the reset token
+# The raw token is only in the email link:
+# {DASHBOARD_URL}/reset-password?token={64-char hex}
+# The database stores the SHA-256 hash, not the raw token.
 RESET_TOKEN="reset_token_from_email"
 
 curl -X POST http://localhost:3000/api/v1/auth/reset-password \
@@ -385,7 +386,8 @@ curl -X POST http://localhost:3000/api/v1/auth/reset-password \
   "status": "success",
   "message": "Password reset successful",
   "data": {
-    "token": "new_jwt_token_here"
+    "token": "new_jwt_token_here",
+    "refreshToken": "new_refresh_token_here"
   }
 }
 ```
@@ -396,18 +398,29 @@ curl -X POST http://localhost:3000/api/v1/auth/reset-password \
 curl -X POST http://localhost:3000/api/v1/auth/reset-password \
   -H "Content-Type: application/json" \
   -d '{
-    "token": "invalid_token",
+    "token": "not-a-real-reset-token",
     "newPassword": "resetpassword123"
   }' | jq
 ```
 
 **Expected Response (400):**
+
+This placeholder is not a 64-character hex token, so validation rejects the format:
+
 ```json
 {
   "status": "error",
-  "message": "Invalid or expired reset token"
+  "message": "Validation failed",
+  "errors": [
+    {
+      "field": "token",
+      "message": "Invalid reset token format"
+    }
+  ]
 }
 ```
+
+A 64-character hex token that was never issued, has expired, or was already used returns `Invalid or expired reset token`. Do not paste a sample token into this file.
 
 ## 7. Rate Limiting Tests
 

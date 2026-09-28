@@ -2,6 +2,7 @@ import { Request } from 'express';
 import jwt from 'jsonwebtoken';
 import User from './models/User';
 import Customer from './models/Customer';
+import { isSessionRevokedByPasswordChange } from './utils/jwt';
 
 /**
  * Express Authentication Handler for TSOA
@@ -33,6 +34,10 @@ export async function expressAuthentication(
         // Check if user is active
         if (!user.isActive) {
           throw new Error('Account has been deactivated');
+        }
+
+        if (isSessionRevokedByPasswordChange(decoded.iat, user.passwordChangedAt)) {
+          throw new Error('Your session is no longer valid. Please sign in again.');
         }
 
         // Return full user object that will be available as request.user in controllers
@@ -105,7 +110,11 @@ export async function expressAuthentication(
       // First try to find in User model (admin/web users)
       const user = await User.findById(userId).select('-password');
 
-      if (user && user.isActive) {
+      if (
+        user &&
+        user.isActive &&
+        !isSessionRevokedByPasswordChange(decoded.iat, user.passwordChangedAt)
+      ) {
         // Return full user object that will be available as request.user in controllers
         return {
           _id: user._id,
