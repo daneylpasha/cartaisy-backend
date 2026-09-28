@@ -6,6 +6,7 @@ import {
   buildEligibilityErrorBody,
 } from '../services/catalogSyncService';
 import {
+  BuildRequestInProgressError,
   BuildRequestValidationError,
   createStoreBuildRequest,
   getStoreBuildRequest,
@@ -18,6 +19,14 @@ import {
 const sendBuildRequestError = (res: Response, error: unknown, fallback: string): void => {
   if (error instanceof BuildNotEligibleError) {
     res.status(409).json(buildEligibilityErrorBody(error));
+    return;
+  }
+  if (error instanceof BuildRequestInProgressError) {
+    res.status(409).json({
+      success: false,
+      error: error.message,
+      code: error.code,
+    });
     return;
   }
   if (error instanceof BuildRequestValidationError) {

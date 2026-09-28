@@ -2,7 +2,7 @@
 
 Dashboard contract for "Build my app" (dashboard issue `daneylpasha/cartaisy-dashboard#17`, backend issue #155, parent epic #152). Platform ops queue: backend issue #164, dashboard `daneylpasha/cartaisy-dashboard#24`. Store owners are not platform operators: backend issue #170. Ops branding handoff for EAS: backend issue #177.
 
-v1 stores a request and live per-platform status. It does not start EAS, App Store Connect, or Play Console. Android and iOS are independent: Android can be `ready` while iOS is still `waiting_on_merchant`.
+v1 stores a request and live per-platform status. When Cartaisy Expo credentials are set on the API process, create also starts an EAS Workflow build for each requested platform and a background poll writes the Expo install URL. Android and iOS are independent: Android can be `ready` while iOS is still `waiting_on_merchant`. Store-owner Apple/Google connect and EAS Submit are not part of this API. App Store Connect and Play Console are not started here.
 
 Poll `GET /api/v1/build-requests/:id` for status. There is no push channel in v1. Platform ops list every store with `GET /api/v1/admin/build-requests`.
 
@@ -83,7 +83,9 @@ Ineligible create response (`409`):
 - `storeId` is ignored.
 - Any other field is `400` `BUILD_REQUEST_INVALID`.
 
-Requested platforms start as `queued`. The other starts as `not_requested`. The merchant cannot set status.
+Requested platforms start as `queued`. The other starts as `not_requested`. The merchant cannot set status. When EAS automation is configured, the 201 response may already show `building` or `failed` for a requested platform. See "Automated EAS builds". When it is not configured, requested platforms stay `queued` and may include `message`.
+
+While automation is configured, a second create is `409` `BUILD_ALREADY_IN_PROGRESS` if this store already has `queued` or `building` on a platform included in the new request. Another store is not affected. After the in-flight platform is `ready`, `failed`, or `not_requested`, a new request is allowed. When automation is not configured, more than one queued request is still allowed.
 
 `201`:
 
@@ -164,7 +166,7 @@ Choose neither platform:
 }
 ```
 
-Send one platform or both. The omitted platform is unchanged.
+Send one platform or both. The omitted platform is unchanged. Each platform object may include `status`, `installUrl`, or both. `installUrl` is an https URL on `expo.dev` or `expo.io` with no credentials and no token-shaped text, or `null` to clear it. Omitting `installUrl` leaves the stored URL in place. `ready` does not require one. A manual edit also stops EAS automation for that platform (see below).
 
 Status values:
 
@@ -290,9 +292,39 @@ A page past the end returns `requests: []` and the real `total`. This route does
 - After submit, show both platform statuses from `platforms.android` and `platforms.ios`.
 - Refresh by polling get or list. A few seconds apart is enough. Stop polling when both requested platforms are `ready` or `failed`, and keep polling while either is `queued`, `building`, or `waiting_on_merchant`.
 
+## Automated EAS builds (issue #182)
+
+Create is the trigger. There is no separate start endpoint. One EAS Workflow run is dispatched per requested platform, on Cartaisy's Expo project, after the request is stored. The merchant still cannot send a status or an install URL.
+
+Required environment variables on the API process (see `.env.example`):
+
+| Variable | Role |
+| --- | --- |
+| `EXPO_TOKEN` | Robot access token for Cartaisy's Expo account. Authorization header only. |
+| `EAS_PROJECT_ID` | Expo project UUID (`extra.eas.projectId`). Not taken from the request. |
+| `EAS_WORKFLOW_FILE` | Workflow file name only, such as `store-build.yml`. |
+| `EAS_GIT_REF` | Git branch, tag, or commit. Defaults to `main`. |
+
+The workflow file lives in that Expo project's git repository. It must declare `workflow_dispatch` inputs `platform` and `storeId` (strings). Optional string inputs, sent only when safe: `appName`, `storeSlug`, `iconUrl`, `splashUrl`. `platform` is `android` or `ios`. A run should include one `type: build` job for that platform. Icon and splash are omitted unless they are absolute `https` URLs with no token-shaped text. Shopify tokens are not selected and are not inputs.
+
+Dispatch calls `POST https://api.expo.dev/v2/workflows/dispatch`. About once a minute the API polls `GET /v2/workflows/runs/:id` and, on success, the build's Expo `artifacts.buildUrl` (or an expo.dev archive URL). The token is not written to logs or responses. EAS ids are stored on the platform and are not returned.
+
+| Outcome | Platform status | `installUrl` | `message` |
+| --- | --- | --- | --- |
+| Credentials missing or invalid | `queued` | unchanged | Automated builds are not configured yet. An operator can still attach an install link. |
+| EAS accepted the run | `building` | unchanged | omitted |
+| Workflow succeeded and the install link is an https expo.dev or expo.io URL for this project and platform | `ready` | that URL | omitted |
+| Dispatch failed, workflow failed, or no safe install link | `failed` | unchanged | A fixed merchant-safe sentence. Expo's error body is not copied. |
+
+`message` is omitted when empty. A value that contains a token marker is omitted too. `ready` still does not require an install URL when ops set the status themselves.
+
+Platform ops `PATCH` of status or `installUrl` clears automation tracking for that platform. The poller will not replace a link ops already pasted. The manual paste rules below stay in force.
+
+Per-store bundle ids, Apple Developer connect, Google Play connect, and EAS Submit are follow-up work. This route does not create an Expo project per store.
+
 ## Out of scope
 
-- Starting or hiding an EAS build.
-- App Store Connect or Play Console automation.
+- EAS Submit, App Store Connect, and Play Console automation.
+- Store-owner Apple Developer or Google Play credential connect.
 - Merchant dashboard UI (issue #17 in the dashboard repo consumes the store-admin contract).
 - Ops queue UI (dashboard issue #24 consumes the platform list and the existing status PATCH).

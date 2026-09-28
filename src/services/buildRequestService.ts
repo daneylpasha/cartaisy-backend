@@ -6,7 +6,9 @@ import BuildRequest, {
 } from '../models/BuildRequest';
 import Store from '../models/Store';
 import { assertBuildEligible } from './catalogSyncService';
+import { isEasAutomationConfigured, startAutomatedEasBuilds } from './easBuildService';
 import { BusinessLogicError, NotFoundError } from '../utils/errors';
+import { hasTokenShapedText, safeExpoInstallUrl, TOKEN_SHAPED_URL } from '../utils/expoInstallUrl';
 
 const ACCESS_NOTES_MAX = 280;
 const LIST_LIMIT = 50;
@@ -23,10 +25,23 @@ export class BuildRequestValidationError extends BusinessLogicError {
   }
 }
 
+export class BuildRequestInProgressError extends BusinessLogicError {
+  constructor() {
+    super(
+      'A build is already in progress for this store. Wait until it finishes before requesting another.',
+      'BUILD_ALREADY_IN_PROGRESS',
+      409
+    );
+    this.name = 'BuildRequestInProgressError';
+  }
+}
+
 export interface PublicPlatformState {
   status: BuildPlatformStatus;
   updatedAt: string;
   installUrl: string | null;
+  /** Present only when automation has a merchant-safe note. */
+  message?: string;
 }
 
 export interface PublicBuildRequest {
@@ -114,21 +129,40 @@ const installUrlOrNull = (value: string | null | undefined): string | null => {
   return trimmed ? trimmed : null;
 };
 
+/** Drop a stored note that contains a secret marker. Fixed copy never does. */
+const publicAutomationMessage = (value: string | null | undefined): string | undefined => {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 280 || hasTokenShapedText(trimmed)) {
+    return undefined;
+  }
+  return trimmed;
+};
+
+const toPublicPlatform = (
+  state: IBuildRequest['platforms']['android']
+): PublicPlatformState => {
+  const platform: PublicPlatformState = {
+    status: state.status,
+    updatedAt: iso(state.updatedAt),
+    installUrl: installUrlOrNull(state.installUrl),
+  };
+  const message = publicAutomationMessage(state.message);
+  if (message) {
+    platform.message = message;
+  }
+  return platform;
+};
+
 export const toPublicBuildRequest = (doc: BuildRequestRecord): PublicBuildRequest => ({
   id: doc._id.toString(),
   storeId: doc.storeId.toString(),
   requestedBy: doc.requestedBy.toString(),
   platforms: {
-    android: {
-      status: doc.platforms.android.status,
-      updatedAt: iso(doc.platforms.android.updatedAt),
-      installUrl: installUrlOrNull(doc.platforms.android.installUrl),
-    },
-    ios: {
-      status: doc.platforms.ios.status,
-      updatedAt: iso(doc.platforms.ios.updatedAt),
-      installUrl: installUrlOrNull(doc.platforms.ios.installUrl),
-    },
+    android: toPublicPlatform(doc.platforms.android),
+    ios: toPublicPlatform(doc.platforms.ios),
   },
   checklist: {
     accessNotes: doc.checklist?.accessNotes ? doc.checklist.accessNotes : null,
@@ -185,6 +219,46 @@ const platformState = (requested: boolean, now: Date): IBuildRequest['platforms'
   updatedAt: now,
 });
 
+const inFlightClauses = (android: boolean, ios: boolean): Record<string, unknown>[] => {
+  const clauses: Record<string, unknown>[] = [];
+  if (android) {
+    clauses.push({ 'platforms.android.status': { $in: ['queued', 'building'] } });
+  }
+  if (ios) {
+    clauses.push({ 'platforms.ios.status': { $in: ['queued', 'building'] } });
+  }
+  return clauses;
+};
+
+/**
+ * One automated build at a time per requested platform. A second create while
+ * another is queued or building would spend another run on the shared Expo
+ * account. Manual mode (credentials unset) does not use this guard.
+ * `earlierThan` keeps the first inserted request when two creates race.
+ */
+const assertNoInFlightAutomatedBuild = async (
+  storeId: mongoose.Types.ObjectId,
+  android: boolean,
+  ios: boolean,
+  earlierThan?: mongoose.Types.ObjectId
+): Promise<void> => {
+  if (!isEasAutomationConfigured()) {
+    return;
+  }
+  const clauses = inFlightClauses(android, ios);
+  if (clauses.length === 0) {
+    return;
+  }
+  const filter: mongoose.FilterQuery<IBuildRequest> = { storeId, $or: clauses };
+  if (earlierThan) {
+    filter._id = { $lt: earlierThan };
+  }
+  const existing = await BuildRequest.findOne(filter).select('_id');
+  if (existing) {
+    throw new BuildRequestInProgressError();
+  }
+};
+
 const parseStatus = (value: unknown, platform: 'android' | 'ios'): BuildPlatformStatus => {
   if (typeof value !== 'string' || !BUILD_PLATFORM_STATUSES.includes(value as BuildPlatformStatus)) {
     throw new BuildRequestValidationError(
@@ -194,73 +268,8 @@ const parseStatus = (value: unknown, platform: 'android' | 'ios'): BuildPlatform
   return value as BuildPlatformStatus;
 };
 
-/**
- * Same token markers as admin branding GET and public store config.
- * Also drops OAuth and signed-upload secrets that must not ride along
- * on an EAS handoff URL.
- */
-const TOKEN_SHAPED_URL =
-  /shpat_|shpss_|shpca_|shpct_|shpua_|access_token|bearer\s|api_secret|client_secret|refresh_token|api_key/i;
-
 const installUrlError = (platform: 'android' | 'ios'): string =>
   `${platform}.installUrl must be an https URL on expo.dev or expo.io`;
-
-const isExpoInstallHost = (hostname: string): boolean => {
-  const host = hostname.toLowerCase();
-  return (
-    host === 'expo.dev' ||
-    host.endsWith('.expo.dev') ||
-    host === 'expo.io' ||
-    host.endsWith('.expo.io')
-  );
-};
-
-const PERCENT_DECODE_PASSES = 3;
-
-/**
- * Decode each valid `%XX` escape. A stray `%` is left in place so it cannot
- * abort the scan and hide an earlier encoded marker. Repeated passes catch
- * double-encoding such as `%255F`.
- */
-const decodePercentEscapes = (value: string): string => {
-  let current = value;
-  for (let pass = 0; pass < PERCENT_DECODE_PASSES; pass += 1) {
-    const decoded = current.replace(/%[0-9A-Fa-f]{2}/g, (escape) => {
-      try {
-        return decodeURIComponent(escape);
-      } catch {
-        return escape;
-      }
-    });
-    if (decoded === current) {
-      return current;
-    }
-    current = decoded;
-  }
-  return current;
-};
-
-const hasTokenShapedText = (value: string): boolean =>
-  TOKEN_SHAPED_URL.test(value) || TOKEN_SHAPED_URL.test(decodePercentEscapes(value));
-
-/**
- * Path and query stay percent-encoded on the URL object. Search params are
- * decoded once already. Scan both, plus host and hash, so an encoded marker
- * is not stored and later returned to the merchant.
- */
-const installUrlContainsToken = (parsed: URL): boolean => {
-  const parts: string[] = [parsed.pathname, parsed.hostname];
-  if (parsed.hash) {
-    parts.push(parsed.hash);
-  }
-  if (parsed.search.length > 1) {
-    parts.push(parsed.search.slice(1));
-  }
-  parsed.searchParams.forEach((paramValue, paramName) => {
-    parts.push(paramName, paramValue);
-  });
-  return parts.some((part) => hasTokenShapedText(part));
-};
 
 /** `null` clears. A non-null value must be an https Expo/EAS URL with no credentials. */
 const parseInstallUrl = (value: unknown, platform: 'android' | 'ios'): string | null => {
@@ -270,30 +279,11 @@ const parseInstallUrl = (value: unknown, platform: 'android' | 'ios'): string | 
   if (typeof value !== 'string') {
     throw new BuildRequestValidationError(`${platform}.installUrl must be a string or null`);
   }
-
-  const trimmed = value.trim();
-  if (!trimmed || hasTokenShapedText(trimmed)) {
+  const safe = safeExpoInstallUrl(value);
+  if (!safe) {
     throw new BuildRequestValidationError(installUrlError(platform));
   }
-
-  let parsed: URL;
-  try {
-    parsed = new URL(trimmed);
-  } catch {
-    throw new BuildRequestValidationError(installUrlError(platform));
-  }
-
-  if (
-    parsed.protocol !== 'https:' ||
-    parsed.username ||
-    parsed.password ||
-    !isExpoInstallHost(parsed.hostname) ||
-    installUrlContainsToken(parsed)
-  ) {
-    throw new BuildRequestValidationError(installUrlError(platform));
-  }
-
-  return trimmed;
+  return safe;
 };
 
 interface OpsPlatformPatch {
@@ -356,6 +346,7 @@ export const createStoreBuildRequest = async (input: {
 
   // Client storeId is ignored. Eligibility uses the authenticated store only.
   await assertBuildEligible(storeId.toString());
+  await assertNoInFlightAutomatedBuild(storeId, android, ios);
 
   const now = new Date();
   const created = await BuildRequest.create({
@@ -368,7 +359,33 @@ export const createStoreBuildRequest = async (input: {
     checklist: checklist?.accessNotes ? { accessNotes: checklist.accessNotes } : {},
   });
 
-  return toPublicBuildRequest(created.toObject() as BuildRequestRecord);
+  try {
+    await assertNoInFlightAutomatedBuild(
+      storeId,
+      android,
+      ios,
+      new mongoose.Types.ObjectId(String(created._id))
+    );
+  } catch (error) {
+    if (error instanceof BuildRequestInProgressError) {
+      await BuildRequest.deleteOne({ _id: created._id, storeId });
+    }
+    throw error;
+  }
+
+  const automation = await startAutomatedEasBuilds({
+    requestId: created._id.toString(),
+    storeId: storeId.toString(),
+  });
+  if (automation === 'unchanged') {
+    return toPublicBuildRequest(created.toObject() as BuildRequestRecord);
+  }
+
+  const fresh = await BuildRequest.findOne({
+    _id: created._id,
+    storeId,
+  }).lean<BuildRequestRecord | null>();
+  return toPublicBuildRequest((fresh ?? created.toObject()) as BuildRequestRecord);
 };
 
 export const listStoreBuildRequests = async (storeId: string): Promise<PublicBuildRequest[]> => {
@@ -461,6 +478,9 @@ const applyPlatformPatch = (
       $set[`${prefix}.installUrl`] = patch.installUrl;
     }
   }
+  // A manual edit owns the platform. Stop the poller from replacing it.
+  $unset[`${prefix}.message`] = '';
+  $unset[`${prefix}.eas`] = '';
   $set[`${prefix}.updatedAt`] = now;
 };
 
