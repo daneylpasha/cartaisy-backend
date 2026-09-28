@@ -2,7 +2,7 @@
 
 Dashboard contract for "Build my app" (dashboard issue `daneylpasha/cartaisy-dashboard#17`, backend issue #155, parent epic #152). Platform ops queue: backend issue #164, dashboard `daneylpasha/cartaisy-dashboard#24`. Store owners are not platform operators: backend issue #170. Ops branding handoff for EAS: backend issue #177.
 
-v1 stores a request and live per-platform status. When Cartaisy Expo credentials are set on the API process, create also starts an EAS Workflow build for each requested platform and a background poll writes the Expo install URL. Android and iOS are independent: Android can be `ready` while iOS is still `waiting_on_merchant`. Store-owner Apple/Google connect and EAS Submit are not part of this API. App Store Connect and Play Console are not started here.
+v1 stores a request and live per-platform status. When Cartaisy Expo credentials are set on the API process, create also starts an EAS Workflow build for each requested platform and a background poll writes the Expo install URL. Android and iOS are independent: Android can be `ready` while iOS is still `waiting_on_merchant`. Store-owner Apple and Google credential storage lives in `STORE_CREDENTIALS_API.md`. This API does not read those credentials, and it does not start EAS Submit, App Store Connect, or Play Console.
 
 Poll `GET /api/v1/build-requests/:id` for status. There is no push channel in v1. Platform ops list every store with `GET /api/v1/admin/build-requests`.
 
@@ -320,11 +320,11 @@ Dispatch calls `POST https://api.expo.dev/v2/workflows/dispatch`. About once a m
 
 Platform ops `PATCH` of status or `installUrl` clears automation tracking for that platform. The poller will not replace a link ops already pasted. The manual paste rules below stay in force.
 
-Per-store bundle ids, Apple Developer connect, Google Play connect, and EAS Submit are follow-up work. This route does not create an Expo project per store.
+Per-store bundle ids and EAS Submit are follow-up work. Apple and Google credential storage is a separate API (`STORE_CREDENTIALS_API.md`); this route does not read it. This route does not create an Expo project per store.
 
 ## Out of scope
 
 - EAS Submit, App Store Connect, and Play Console automation.
-- Store-owner Apple Developer or Google Play credential connect.
+- Submitting with the store's Apple or Google credentials. Storage is `STORE_CREDENTIALS_API.md`. Submit is not implemented.
 - Merchant dashboard UI (issue #17 in the dashboard repo consumes the store-admin contract).
 - Ops queue UI (dashboard issue #24 consumes the platform list and the existing status PATCH).

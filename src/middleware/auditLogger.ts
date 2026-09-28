@@ -15,7 +15,14 @@ const SENSITIVE_FIELDS = [
   'cardNumber',
   'cvv',
   'ssn',
+  'privatekey',
+  'private_key',
+  'ciphertext',
+  'credentialsencrypted',
+  'serviceaccount',
 ];
+
+const SECRET_VALUE_MARKERS = ['-----BEGIN', 'PRIVATE KEY'];
 
 /**
  * Sanitize request body to remove sensitive fields
@@ -29,12 +36,15 @@ const sanitizeBody = (body: any): any => {
 
   for (const key of Object.keys(body)) {
     const lowerKey = key.toLowerCase();
-    if (SENSITIVE_FIELDS.some((field) => lowerKey.includes(field.toLowerCase()))) {
+    const value = body[key];
+    const secretValue = typeof value === 'string'
+      && SECRET_VALUE_MARKERS.some(marker => value.includes(marker));
+    if (secretValue || SENSITIVE_FIELDS.some((field) => lowerKey.includes(field.toLowerCase()))) {
       sanitized[key] = '[REDACTED]';
-    } else if (typeof body[key] === 'object' && body[key] !== null) {
-      sanitized[key] = sanitizeBody(body[key]);
+    } else if (typeof value === 'object' && value !== null) {
+      sanitized[key] = sanitizeBody(value);
     } else {
-      sanitized[key] = body[key];
+      sanitized[key] = value;
     }
   }
 
