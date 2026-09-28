@@ -1,6 +1,6 @@
 # Build request API
 
-Dashboard contract for "Build my app" (dashboard issue `daneylpasha/cartaisy-dashboard#17`, backend issue #155, parent epic #152). Platform ops queue: backend issue #164, dashboard `daneylpasha/cartaisy-dashboard#24`. Store owners are not platform operators: backend issue #170.
+Dashboard contract for "Build my app" (dashboard issue `daneylpasha/cartaisy-dashboard#17`, backend issue #155, parent epic #152). Platform ops queue: backend issue #164, dashboard `daneylpasha/cartaisy-dashboard#24`. Store owners are not platform operators: backend issue #170. Ops branding handoff for EAS: backend issue #177.
 
 v1 stores a request and live per-platform status. It does not start EAS, App Store Connect, or Play Console. Android and iOS are independent: Android can be `ready` while iOS is still `waiting_on_merchant`.
 
@@ -217,7 +217,10 @@ Android builds that are queued:
         "store": {
           "id": "66f1c2e0a1b2c3d4e5f60710",
           "name": "Northwind",
-          "domain": "northwind.myshopify.com"
+          "domain": "northwind.myshopify.com",
+          "appName": "Northwind",
+          "iconUrl": "https://cdn.example.com/northwind-icon.png",
+          "splashUrl": "https://cdn.example.com/northwind-splash.png"
         },
         "requestedBy": "66f1c2e0a1b2c3d4e5f60711",
         "platforms": {
@@ -247,7 +250,19 @@ Android builds that are queued:
 }
 ```
 
-Each item is the same build-request object as create and get, plus `store`. `store.id` equals `storeId`. `store.name` is the Cartaisy store name. `store.domain` is the Shopify shop domain (`shopify.shop`), or null when the store has no shop. A request whose store record is gone stays in the list with `store.name` and `store.domain` null. A platform is requested when its status is not `not_requested`. `checklist.accessNotes` is the merchant note ops need for a manual build.
+Each item is the same build-request object as create and get, plus `store`. `store.id` equals `storeId`. `store.name` is the Cartaisy store name. `store.domain` is the Shopify shop domain (`shopify.shop`), or null when the store has no shop. A request whose store record is gone stays in the list with `store.name`, `store.domain`, `store.appName`, `store.iconUrl`, and `store.splashUrl` null. A platform is requested when its status is not `not_requested`. `checklist.accessNotes` is the merchant note ops need for a manual build.
+
+### Store branding for EAS (issue #177)
+
+`store.appName`, `store.iconUrl`, and `store.splashUrl` are on this ops list so a platform operator can set EAS env (`SPLASH_IMAGE_URL`, and the icon URL) without opening Mongo or the dashboard Settings page. This route still does not start EAS.
+
+`store.appName` is the Cartaisy store name, the same string as `store.name`. There is no separate stored app-display-name field.
+
+`store.iconUrl` and `store.splashUrl` are read from `Store.branding.iconUrl` and `Store.branding.splashUrl`. Those are the same stored fields as `GET /api/v1/admin/stores/:storeId/branding` (`iconUrl` / `appIconUrl`, `splashUrl` / `splashImageUrl`) and public `GET /api/v1/store/config`. The list query selects `name`, `shopify.shop`, `branding.iconUrl`, and `branding.splashUrl` only. It does not select Shopify Admin tokens, OAuth secrets, or signed-upload credentials.
+
+A URL is returned only when it is an absolute `https` URL and is not token-shaped. The same markers as branding GET and public store config apply (`shpat_`, `shpss_`, `shpca_`, `shpct_`, `shpua_`, `access_token`, bearer), including when they sit in the path or query. `api_secret`, `client_secret`, `refresh_token`, and `api_key` are dropped too. An `https` URL with a username or password is dropped. `http`, relative paths, and other schemes are `null` on this route even when branding GET would still return an already-stored `http` URL. Missing branding, a blank value, and an unsafe value are `null`. The API does not invent a Cartaisy CDN URL.
+
+Merchant create, list, get, and checklist responses do not include `appName`, `iconUrl`, or `splashUrl`. The platform-ops gate (issue #170) is unchanged.
 
 Empty queue:
 
