@@ -13,7 +13,7 @@ const router = express.Router();
 
 /**
  * GET /api/v1/store/config
- * Get store configuration (currency, timezone, language, name)
+ * Get store configuration (currency, timezone, language, name, branding)
  * Requires X-Store-ID header
  */
 router.get('/config', getStoreConfig);
