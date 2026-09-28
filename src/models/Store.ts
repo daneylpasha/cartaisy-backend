@@ -114,6 +114,10 @@ export interface IStoreEmail {
 
 export interface IStoreBranding {
   logoUrl?: string;
+  /** App icon. Read aliases on the admin branding API: appIconUrl. */
+  iconUrl?: string;
+  /** Splash image. Read aliases on the admin branding API: splashImageUrl. */
+  splashUrl?: string;
   primaryColor?: string;
   secondaryColor?: string;
 }
@@ -383,6 +387,19 @@ const StoreBrandingSchema = new Schema<IStoreBranding>(
     logoUrl: {
       type: String,
       trim: true,
+    },
+    // App icon and splash are build-time assets. They live on the branding
+    // document so the dashboard can reload them. They are not part of the
+    // public /store/config runtime override.
+    iconUrl: {
+      type: String,
+      trim: true,
+      maxlength: [2048, 'Icon URL cannot exceed 2048 characters'],
+    },
+    splashUrl: {
+      type: String,
+      trim: true,
+      maxlength: [2048, 'Splash URL cannot exceed 2048 characters'],
     },
     primaryColor: {
       type: String,

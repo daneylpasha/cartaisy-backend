@@ -1,17 +1,109 @@
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
-import Store from '../../models/Store';
+import Store, { IStoreBranding } from '../../models/Store';
 import { cloudinaryService } from '../../services/cloudinaryService';
 
 /**
  * Store Branding Controller
  *
  * Provides admin endpoints for:
- * - Uploading store logo
+ * - Uploading store logo, app icon, and splash
  * - Updating store branding (colors)
  * - Getting store branding
  * - Deleting store logo
  */
+
+/**
+ * Same rejection the dashboard uses before it will draw or store a brand
+ * image. A URL that merely contains a Shopify token must never be persisted
+ * or returned.
+ */
+const TOKEN_SHAPED_URL = /shpat_|shpss_|shpca_|shpct_|shpua_|access_token|bearer\s/i;
+
+const redactSecrets = (value: unknown): string => {
+  const text = value instanceof Error ? `${value.name}: ${value.message}` : String(value ?? '');
+  return text
+    .replace(/shpat_[^\s"'&]+/gi, '[redacted]')
+    .replace(/shpss_[^\s"'&]+/gi, '[redacted]')
+    .replace(/shpca_[^\s"'&]+/gi, '[redacted]')
+    .replace(/shpct_[^\s"'&]+/gi, '[redacted]')
+    .replace(/shpua_[^\s"'&]+/gi, '[redacted]')
+    .replace(/access_token(?:=|%3d)[^\s"'&]+/gi, 'access_token=[redacted]')
+    .replace(/bearer\s+\S+/gi, 'bearer [redacted]');
+};
+
+/** Absolute http(s) URL safe to return. Token-shaped values become null. */
+const readBrandImageUrl = (value: unknown): string | null => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed || TOKEN_SHAPED_URL.test(trimmed)) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? trimmed : null;
+  } catch {
+    return null;
+  }
+};
+
+/** Https URL safe to persist. Http, blob, and token-shaped values are rejected. */
+const persistedBrandImageUrl = (value: unknown): string | null => {
+  const url = readBrandImageUrl(value);
+  if (!url || !url.startsWith('https:')) {
+    return null;
+  }
+  return url;
+};
+
+const safePublicId = (value: unknown): string | undefined => {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed || TOKEN_SHAPED_URL.test(trimmed)) {
+    return undefined;
+  }
+
+  return trimmed;
+};
+
+const uploadFilename = (kind: 'logo' | 'icon' | 'splash', originalName: string): string => {
+  // A fresh regex so the shared TOKEN_SHAPED_URL detector keeps lastIndex at 0.
+  const stripped = originalName.replace(new RegExp(TOKEN_SHAPED_URL.source, 'gi'), '');
+  const base = stripped.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 48);
+  return `${kind}_${base || 'image'}`;
+};
+
+interface BrandingResponseData {
+  logoUrl: string | null;
+  primaryColor: string;
+  secondaryColor: string | null;
+  iconUrl: string | null;
+  appIconUrl: string | null;
+  splashUrl: string | null;
+  splashImageUrl: string | null;
+}
+
+const brandingResponse = (branding?: IStoreBranding | null): BrandingResponseData => {
+  const iconUrl = readBrandImageUrl(branding?.iconUrl);
+  const splashUrl = readBrandImageUrl(branding?.splashUrl);
+
+  return {
+    logoUrl: readBrandImageUrl(branding?.logoUrl),
+    primaryColor: branding?.primaryColor || '#FF6B6B',
+    secondaryColor: branding?.secondaryColor || null,
+    iconUrl,
+    appIconUrl: iconUrl,
+    splashUrl,
+    splashImageUrl: splashUrl,
+  };
+};
 
 // =============================================================================
 // GET STORE BRANDING
@@ -20,7 +112,7 @@ import { cloudinaryService } from '../../services/cloudinaryService';
 /**
  * GET /api/v1/admin/stores/:storeId/branding
  *
- * Get store branding settings (logo, colors)
+ * Get store branding settings (logo, icon, splash, colors)
  */
 export const getStoreBranding = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -46,14 +138,10 @@ export const getStoreBranding = async (req: Request, res: Response): Promise<voi
 
     res.json({
       success: true,
-      data: {
-        logoUrl: store.branding?.logoUrl || null,
-        primaryColor: store.branding?.primaryColor || '#FF6B6B',
-        secondaryColor: store.branding?.secondaryColor || null,
-      },
+      data: brandingResponse(store.branding),
     });
   } catch (error) {
-    console.error('Error getting store branding:', error);
+    console.error('Error getting store branding:', redactSecrets(error));
     res.status(500).json({
       success: false,
       error: 'Failed to get store branding',
@@ -69,7 +157,8 @@ export const getStoreBranding = async (req: Request, res: Response): Promise<voi
  * PATCH /api/v1/admin/stores/:storeId/branding
  *
  * Update store branding settings (colors)
- * Note: Use POST /branding/logo for logo upload
+ * Note: Use POST /branding/logo, /branding/icon, and /branding/splash for images.
+ * Image URLs in this body are ignored.
  *
  * Contract for `primaryColor`/`secondaryColor` in the request body, each
  * evaluated independently (see cartaisy-dashboard PR #13's
@@ -181,15 +270,11 @@ export const updateStoreBranding = async (req: Request, res: Response): Promise<
 
     res.json({
       success: true,
-      data: {
-        logoUrl: store.branding?.logoUrl || null,
-        primaryColor: store.branding?.primaryColor || '#FF6B6B',
-        secondaryColor: store.branding?.secondaryColor || null,
-      },
+      data: brandingResponse(store.branding),
       message: 'Store branding updated successfully',
     });
   } catch (error) {
-    console.error('Error updating store branding:', error);
+    console.error('Error updating store branding:', redactSecrets(error));
     res.status(500).json({
       success: false,
       error: 'Failed to update store branding',
@@ -198,16 +283,29 @@ export const updateStoreBranding = async (req: Request, res: Response): Promise<
 };
 
 // =============================================================================
-// UPLOAD STORE LOGO
+// UPLOAD BRAND IMAGES (logo, icon, splash)
 // =============================================================================
 
+type BrandImageField = 'logoUrl' | 'iconUrl' | 'splashUrl';
+
+interface BrandImageUploadSpec {
+  field: BrandImageField;
+  kind: 'logo' | 'icon' | 'splash';
+  successMessage: string;
+  failureMessage: string;
+}
+
 /**
- * POST /api/v1/admin/stores/:storeId/branding/logo
- *
- * Upload store logo image
- * Accepts: JPG, PNG, WebP (max 2MB)
+ * Shared upload used by logo, icon, and splash. The multipart field name is
+ * chosen by the route (`logo` for the logo, `image` for icon and splash).
+ * Only an https URL that is not token-shaped is stored. The Shopify admin
+ * token is never selected and never copied into the response.
  */
-export const uploadStoreLogo = async (req: Request, res: Response): Promise<void> => {
+const uploadBrandImage = async (
+  req: Request,
+  res: Response,
+  spec: BrandImageUploadSpec
+): Promise<void> => {
   try {
     const { storeId } = req.params;
 
@@ -219,7 +317,6 @@ export const uploadStoreLogo = async (req: Request, res: Response): Promise<void
       return;
     }
 
-    // Check if file was uploaded
     if (!req.file) {
       res.status(400).json({
         success: false,
@@ -228,7 +325,6 @@ export const uploadStoreLogo = async (req: Request, res: Response): Promise<void
       return;
     }
 
-    // Check if Cloudinary is configured
     if (!cloudinaryService.isConfigured()) {
       res.status(500).json({
         success: false,
@@ -237,7 +333,6 @@ export const uploadStoreLogo = async (req: Request, res: Response): Promise<void
       return;
     }
 
-    // Find the store
     const store = await Store.findById(storeId);
     if (!store) {
       res.status(404).json({
@@ -247,39 +342,111 @@ export const uploadStoreLogo = async (req: Request, res: Response): Promise<void
       return;
     }
 
-    // Upload to Cloudinary with logo-specific folder
     const uploadResult = await cloudinaryService.uploadImage(
       req.file.buffer,
       storeId,
-      `logo_${req.file.originalname}`
+      uploadFilename(spec.kind, req.file.originalname || 'image')
     );
 
-    // Update store branding with new logo URL
-    store.branding = {
-      ...store.branding,
-      logoUrl: uploadResult.secureUrl,
-    };
+    const imageUrl = persistedBrandImageUrl(uploadResult.secureUrl);
+    if (!imageUrl) {
+      const publicId = safePublicId(uploadResult.publicId);
+      if (publicId) {
+        await cloudinaryService.deleteImage(publicId);
+      }
+      res.status(502).json({
+        success: false,
+        error: spec.failureMessage,
+      });
+      return;
+    }
+
+    // Set only this path so sibling branding fields and the unselected
+    // Shopify access token stay untouched.
+    store.set(`branding.${spec.field}`, imageUrl);
     await store.save();
+
+    const data: Record<string, unknown> = {
+      size: uploadResult.size,
+      width: uploadResult.width,
+      height: uploadResult.height,
+      format: uploadResult.format,
+    };
+
+    if (spec.field === 'logoUrl') {
+      data.logoUrl = imageUrl;
+    } else if (spec.field === 'iconUrl') {
+      data.url = imageUrl;
+      data.iconUrl = imageUrl;
+      data.appIconUrl = imageUrl;
+    } else {
+      data.url = imageUrl;
+      data.splashUrl = imageUrl;
+      data.splashImageUrl = imageUrl;
+    }
+
+    const publicId = safePublicId(uploadResult.publicId);
+    if (publicId) {
+      data.publicId = publicId;
+    }
 
     res.json({
       success: true,
-      data: {
-        logoUrl: uploadResult.secureUrl,
-        publicId: uploadResult.publicId,
-        size: uploadResult.size,
-        width: uploadResult.width,
-        height: uploadResult.height,
-        format: uploadResult.format,
-      },
-      message: 'Store logo uploaded successfully',
+      data,
+      message: spec.successMessage,
     });
   } catch (error) {
-    console.error('Error uploading store logo:', error);
+    console.error(`Error uploading store ${spec.kind}:`, redactSecrets(error));
     res.status(500).json({
       success: false,
-      error: 'Failed to upload store logo',
+      error: spec.failureMessage,
     });
   }
+};
+
+/**
+ * POST /api/v1/admin/stores/:storeId/branding/logo
+ *
+ * Upload store logo image
+ * Accepts: JPG, PNG, WebP (max 2MB), multipart field `logo`
+ */
+export const uploadStoreLogo = async (req: Request, res: Response): Promise<void> => {
+  await uploadBrandImage(req, res, {
+    field: 'logoUrl',
+    kind: 'logo',
+    successMessage: 'Store logo uploaded successfully',
+    failureMessage: 'Failed to upload store logo',
+  });
+};
+
+/**
+ * POST /api/v1/admin/stores/:storeId/branding/icon
+ *
+ * Upload the app icon
+ * Accepts: JPG, PNG, WebP (max 2MB), multipart field `image`
+ */
+export const uploadStoreIcon = async (req: Request, res: Response): Promise<void> => {
+  await uploadBrandImage(req, res, {
+    field: 'iconUrl',
+    kind: 'icon',
+    successMessage: 'Store icon uploaded successfully',
+    failureMessage: 'Failed to upload store icon',
+  });
+};
+
+/**
+ * POST /api/v1/admin/stores/:storeId/branding/splash
+ *
+ * Upload the splash image
+ * Accepts: JPG, PNG, WebP (max 2MB), multipart field `image`
+ */
+export const uploadStoreSplash = async (req: Request, res: Response): Promise<void> => {
+  await uploadBrandImage(req, res, {
+    field: 'splashUrl',
+    kind: 'splash',
+    successMessage: 'Store splash uploaded successfully',
+    failureMessage: 'Failed to upload store splash',
+  });
 };
 
 // =============================================================================
@@ -322,16 +489,17 @@ export const deleteStoreLogo = async (req: Request, res: Response): Promise<void
       return;
     }
 
-    // Extract public ID from URL and delete from Cloudinary
+    // Extract public ID from URL and delete from Cloudinary.
+    // Skip the remote delete when the stored URL is token-shaped so the
+    // token is not sent to Cloudinary or written to its error log.
     const logoUrl = store.branding.logoUrl;
-    const publicIdMatch = logoUrl.match(/\/stores\/[^/]+\/[^/]+\/([^.]+)/);
+    const publicIdMatch = !TOKEN_SHAPED_URL.test(logoUrl)
+      && /\/stores\/[^/]+\/[^/]+\/([^.]+)/.test(logoUrl);
 
     if (publicIdMatch && cloudinaryService.isConfigured()) {
-      // Try to delete from Cloudinary (don't fail if deletion fails)
-      const fullPublicId = logoUrl
-        .split('/upload/')[1]
-        ?.split('.')[0]
-        ?.replace(/^v\d+\//, '');
+      const fullPublicId = safePublicId(
+        logoUrl.split('/upload/')[1]?.split('.')[0]?.replace(/^v\d+\//, '')
+      );
 
       if (fullPublicId) {
         await cloudinaryService.deleteImage(fullPublicId);
@@ -344,15 +512,11 @@ export const deleteStoreLogo = async (req: Request, res: Response): Promise<void
 
     res.json({
       success: true,
-      data: {
-        logoUrl: null,
-        primaryColor: store.branding?.primaryColor || '#FF6B6B',
-        secondaryColor: store.branding?.secondaryColor || null,
-      },
+      data: brandingResponse(store.branding),
       message: 'Store logo deleted successfully',
     });
   } catch (error) {
-    console.error('Error deleting store logo:', error);
+    console.error('Error deleting store logo:', redactSecrets(error));
     res.status(500).json({
       success: false,
       error: 'Failed to delete store logo',
