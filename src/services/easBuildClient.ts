@@ -272,3 +272,216 @@ export const getEasBuild = async (input: {
     },
   };
 };
+
+const CREATE_IOS_SUBMISSION = `mutation CreateIosSubmission(
+  $appId: ID!
+  $config: IosSubmissionConfigInput!
+  $submittedBuildId: ID
+) {
+  submission {
+    createIosSubmission(
+      input: { appId: $appId, config: $config, submittedBuildId: $submittedBuildId }
+    ) {
+      submission { id status }
+    }
+  }
+}`;
+
+const CREATE_ANDROID_SUBMISSION = `mutation CreateAndroidSubmission(
+  $appId: ID!
+  $config: AndroidSubmissionConfigInput!
+  $submittedBuildId: ID
+) {
+  submission {
+    createAndroidSubmission(
+      input: { appId: $appId, config: $config, submittedBuildId: $submittedBuildId }
+    ) {
+      submission { id status }
+    }
+  }
+}`;
+
+const SUBMISSION_BY_ID = `query SubmissionById($submissionId: ID!) {
+  submissions {
+    byId(submissionId: $submissionId) {
+      id
+      status
+      platform
+    }
+  }
+}`;
+
+export interface EasSubmissionRecord {
+  id: string;
+  status: string;
+  platform: string;
+}
+
+export type EasSubmissionCreateResult =
+  | { ok: true; submissionId: string; status: string }
+  | EasCallFailure;
+
+export type EasSubmissionLookupResult =
+  | { ok: true; submission: EasSubmissionRecord | null }
+  | EasCallFailure;
+
+const graphqlData = (
+  payload: unknown
+): { failed: true } | { failed: false; data: Record<string, unknown> | null } => {
+  if (!isRecord(payload)) {
+    return { failed: true };
+  }
+  if (Array.isArray(payload.errors) && payload.errors.length > 0 && !isRecord(payload.data)) {
+    return { failed: true };
+  }
+  if (Array.isArray(payload.errors) && payload.errors.length > 0) {
+    const data = payload.data;
+    if (!isRecord(data) || Object.keys(data).length === 0) {
+      return { failed: true };
+    }
+  }
+  return { failed: false, data: isRecord(payload.data) ? payload.data : null };
+};
+
+const submissionNode = (value: unknown): { id: string; status: string } | null => {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const id = textOrNull(value.id);
+  const status = textOrNull(value.status);
+  if (!id || !isEasUuid(id) || !status) {
+    return null;
+  }
+  return { id, status: status.toUpperCase() };
+};
+
+const postGraphql = async (input: {
+  token: string;
+  query: string;
+  variables: Record<string, unknown>;
+}): Promise<{ ok: true; data: Record<string, unknown> | null; status: number } | EasCallFailure> => {
+  const result = await easHttp({
+    token: input.token,
+    method: 'POST',
+    path: '/graphql',
+    body: { query: input.query, variables: input.variables },
+  });
+  if (result.ok === false) {
+    return { ok: false, status: result.status, kind: result.kind };
+  }
+  const parsed = graphqlData(result.data);
+  if (parsed.failed === true) {
+    return { ok: false, status: result.status, kind: 'http' };
+  }
+  return { ok: true, data: parsed.data, status: result.status };
+};
+
+/**
+ * Schedules an App Store submission. `keyP8` is the store .p8 PEM.
+ * Callers must not log `input`.
+ */
+export const createEasIosSubmission = async (input: {
+  token: string;
+  appId: string;
+  buildId: string;
+  keyId: string;
+  issuerId: string;
+  keyP8: string;
+}): Promise<EasSubmissionCreateResult> => {
+  const result = await postGraphql({
+    token: input.token,
+    query: CREATE_IOS_SUBMISSION,
+    variables: {
+      appId: input.appId,
+      submittedBuildId: input.buildId,
+      config: {
+        ascApiKey: {
+          keyP8: input.keyP8,
+          keyIdentifier: input.keyId,
+          issuerIdentifier: input.issuerId,
+        },
+      },
+    },
+  });
+  if (result.ok === false) {
+    return { ok: false, status: result.status, kind: result.kind };
+  }
+  const submission = isRecord(result.data) ? result.data.submission : null;
+  const created = isRecord(submission) ? submission.createIosSubmission : null;
+  const node = isRecord(created) ? submissionNode(created.submission) : null;
+  if (!node) {
+    return { ok: false, status: result.status, kind: 'parse' };
+  }
+  return { ok: true, submissionId: node.id, status: node.status };
+};
+
+/**
+ * Schedules a Play submission. `serviceAccountJson` is the store's
+ * service-account JSON. Callers must not log `input`. Android uses the
+ * Play internal track.
+ */
+export const createEasAndroidSubmission = async (input: {
+  token: string;
+  appId: string;
+  buildId: string;
+  serviceAccountJson: string;
+}): Promise<EasSubmissionCreateResult> => {
+  const result = await postGraphql({
+    token: input.token,
+    query: CREATE_ANDROID_SUBMISSION,
+    variables: {
+      appId: input.appId,
+      submittedBuildId: input.buildId,
+      config: {
+        track: 'INTERNAL',
+        googleServiceAccountKeyJson: input.serviceAccountJson,
+      },
+    },
+  });
+  if (result.ok === false) {
+    return { ok: false, status: result.status, kind: result.kind };
+  }
+  const submission = isRecord(result.data) ? result.data.submission : null;
+  const created = isRecord(submission) ? submission.createAndroidSubmission : null;
+  const node = isRecord(created) ? submissionNode(created.submission) : null;
+  if (!node) {
+    return { ok: false, status: result.status, kind: 'parse' };
+  }
+  return { ok: true, submissionId: node.id, status: node.status };
+};
+
+/** Status only. Expo error text is not returned. */
+export const getEasSubmission = async (input: {
+  token: string;
+  submissionId: string;
+}): Promise<EasSubmissionLookupResult> => {
+  if (!isEasUuid(input.submissionId)) {
+    return { ok: false, status: 400, kind: 'parse' };
+  }
+  const result = await postGraphql({
+    token: input.token,
+    query: SUBMISSION_BY_ID,
+    variables: { submissionId: input.submissionId },
+  });
+  if (result.ok === false) {
+    return { ok: false, status: result.status, kind: result.kind };
+  }
+  const submissions = isRecord(result.data) ? result.data.submissions : null;
+  const byId = isRecord(submissions) ? submissions.byId : null;
+  if (!isRecord(byId)) {
+    return { ok: true, submission: null };
+  }
+  const node = submissionNode(byId);
+  const platform = textOrNull(byId.platform);
+  if (!node || !platform) {
+    return { ok: true, submission: null };
+  }
+  return {
+    ok: true,
+    submission: {
+      id: node.id,
+      status: node.status,
+      platform: platform.toUpperCase(),
+    },
+  };
+};

@@ -2,7 +2,7 @@
 
 Dashboard contract for connecting a store's own Apple App Store Connect and Google Play accounts (backend issue #185, dashboard issue `daneylpasha/cartaisy-dashboard#63`).
 
-This API stores credentials and reports status. It does not submit to App Store Connect or Google Play, and it does not change Expo build dispatch (`easBuildService`, `EXPO_TOKEN`, or the build-request workflow).
+This API stores credentials and reports status. It does not itself call App Store Connect or Google Play, and it does not change Expo build dispatch (`easBuildService`, `EXPO_TOKEN`, `EAS_WORKFLOW_FILE`). Submitting a finished build with these keys is `STORE_SUBMIT_API.md`.
 
 Secrets stay on the server after save. Responses and logs do not include the Apple private key or the Google service-account JSON.
 
@@ -20,7 +20,7 @@ MVP is an App Store Connect API key, not an Apple ID password.
 | `issuerId` | Issuer ID. A UUID. |
 | `privateKey` | Contents of the `.p8` file (`AuthKey_<keyId>.p8`). PKCS#8 PEM, `-----BEGIN PRIVATE KEY-----`. |
 
-A later EAS Submit step can map these to `ascApiKeyId`, `ascApiKeyIssuerId`, and the `.p8` file. The App Store app id (`ascAppId`) is not stored here.
+EAS Submit (`STORE_SUBMIT_API.md`) maps these to `ascApiKeyId`, `ascApiKeyIssuerId`, and the `.p8` file. The App Store app id (`ascAppId`) is not stored here.
 
 ### Google Play — service account JSON
 

@@ -10,9 +10,9 @@ import { BusinessLogicError, NotFoundError } from '../utils/errors';
 /**
  * Store-owned App Store Connect and Google Play credentials (issue #185).
  *
- * Storage and status only. EAS Submit and Expo build dispatch are untouched.
- * The store id always comes from the caller (auth context for merchants).
- * This module never logs key material.
+ * Storage, status, and in-process decrypt for EAS Submit. This module does not
+ * call Expo and does not change build dispatch. The store id always comes from
+ * the caller (auth context for merchants). This module never logs key material.
  */
 
 const CREDENTIAL_VERSION = 1;
@@ -51,6 +51,8 @@ const FORBIDDEN_RESPONSE_KEYS = new Set([
   'credentialsencrypted',
   'serviceaccount',
   'pem',
+  'keyp8',
+  'googleserviceaccountkeyjson',
 ]);
 
 export type CredentialConnectionStatus = 'connected' | 'missing' | 'needsAttention';
@@ -292,6 +294,78 @@ export async function disconnectGoogleCredentials(storeId: string): Promise<Publ
   await StoreAppCredentials.updateOne({ storeId }, { $unset: { google: 1 } });
   await deleteDocIfEmpty(storeId);
   return getStoreCredentialsStatus(storeId);
+}
+
+export type OpenedAppleSubmitCredential =
+  | { status: 'missing' }
+  | { status: 'needsAttention' }
+  | { status: 'connected'; keyId: string; issuerId: string; privateKey: Buffer };
+
+export type OpenedGoogleSubmitCredential =
+  | { status: 'missing' }
+  | { status: 'needsAttention' }
+  | { status: 'connected'; serviceAccountJson: Buffer };
+
+/**
+ * Decrypt the Apple key for an in-process EAS Submit call.
+ * The PEM is returned only as a Buffer. Callers must zero it and must not log it.
+ */
+export async function openAppleCredentialForSubmit(storeId: string): Promise<OpenedAppleSubmitCredential> {
+  if (!STORE_ID.test(storeId)) {
+    return { status: 'missing' };
+  }
+  const doc = await loadCredentialDoc(storeId);
+  if (!doc?.apple || !hasText(doc.apple.ciphertext)) {
+    return { status: 'missing' };
+  }
+  try {
+    const envelope = readCredentialJson(doc.apple.ciphertext);
+    if (envelope.kind !== APPLE_KIND) {
+      return { status: 'needsAttention' };
+    }
+    const keyId = typeof envelope.keyId === 'string' ? envelope.keyId : '';
+    const issuerId = typeof envelope.issuerId === 'string' ? envelope.issuerId : '';
+    const privateKey = typeof envelope.privateKey === 'string' ? envelope.privateKey : '';
+    const pem = normalizePrivateKeyPem(privateKey);
+    if (!APPLE_KEY_ID.test(keyId) || !APPLE_ISSUER_ID.test(issuerId) || !pem) {
+      return { status: 'needsAttention' };
+    }
+    return {
+      status: 'connected',
+      keyId,
+      issuerId,
+      privateKey: Buffer.from(pem, 'utf8'),
+    };
+  } catch {
+    return { status: 'needsAttention' };
+  }
+}
+
+/**
+ * Decrypt the Google service-account JSON for an in-process EAS Submit call.
+ * Callers must zero the buffer and must not log it.
+ */
+export async function openGoogleCredentialForSubmit(storeId: string): Promise<OpenedGoogleSubmitCredential> {
+  if (!STORE_ID.test(storeId)) {
+    return { status: 'missing' };
+  }
+  const doc = await loadCredentialDoc(storeId);
+  if (!doc?.google || !hasText(doc.google.ciphertext)) {
+    return { status: 'missing' };
+  }
+  try {
+    const envelope = readCredentialJson(doc.google.ciphertext);
+    if (envelope.kind !== GOOGLE_KIND) {
+      return { status: 'needsAttention' };
+    }
+    const account = parseServiceAccountObject(envelope.serviceAccount);
+    return {
+      status: 'connected',
+      serviceAccountJson: Buffer.from(JSON.stringify(account), 'utf8'),
+    };
+  } catch {
+    return { status: 'needsAttention' };
+  }
 }
 
 export async function getAdminStoreCredentialsStatus(storeId: string): Promise<AdminStoreCredentialsStatus> {

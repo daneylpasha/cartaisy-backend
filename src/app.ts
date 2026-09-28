@@ -264,6 +264,7 @@ import storeSettingsRoutes from './routes/storeSettingsRoutes';
 import storeBrandingRoutes from './routes/storeBrandingRoutes';
 import storeConfigRoutes from './routes/storeConfigRoutes';
 import buildRequestRoutes from './routes/buildRequestRoutes';
+import storeSubmitRoutes from './routes/storeSubmitRoutes';
 import storeCredentialsRoutes from './routes/storeCredentialsRoutes';
 
 // API Routes with versioning
@@ -286,10 +287,13 @@ app.use(`/api/webhooks`, webhookRoutes);
 // Mounted before the general admin router so /admin/build-requests is not
 // treated as a store-admin analytics route.
 app.use(`/api/${apiConfig.version}`, buildRequestRoutes);
+// EAS Submit for a finished build request. Store admin, auth store only.
+// Uses stored Apple/Google credentials and does not change build dispatch.
+app.use(`/api/${apiConfig.version}`, storeSubmitRoutes);
 // Store submit credentials: store-admin upsert/status/delete for the
 // authenticated store. Platform operators can read status for one store.
 // Mounted before the general admin router so /admin/store-credentials is not
-// handled as a store-admin analytics route. Does not start EAS Submit.
+// handled as a store-admin analytics route.
 app.use(`/api/${apiConfig.version}`, storeCredentialsRoutes);
 app.use(`/api/${apiConfig.version}/admin`, adminRoutes);
 // Order management routes (admin)

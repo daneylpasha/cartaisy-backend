@@ -301,6 +301,14 @@ Known gap: exact original decision dates are not known for most entries. Use "Da
 - Impact: The API process polls in-flight runs about once a minute. The workflow file lives in the Expo project's repository and must accept the documented inputs (`platform`, `storeId`, and optional `appName`, `storeSlug`, `iconUrl`, `splashUrl`). There is still no per-store bundle id or package name. Icon and splash are sent only when they are absolute `https` URLs with no token-shaped text.
 - Related docs: `docs/cartaisy/BUILD_REQUEST_API.md`, `.env.example`. GitHub issue: #182.
 
+### EAS Submit uses the store's Apple and Google credentials
+
+- Date: 2026-09-28.
+- Decision: A store admin can submit one finished platform of a build request to App Store Connect or Google Play. The API decrypts that store's `StoreAppCredentials` in process, passes them to EAS Submit, then wipes the temp file. Cartaisy's `EXPO_TOKEN` and `EAS_PROJECT_ID` stay server-side and are the same variables build dispatch already uses. `EAS_WORKFLOW_FILE` and `EAS_GIT_REF` are unchanged and are not read by submit. The store id comes from auth. Job status is `queued`, `submitting`, `submitted`, or `failed`, with a fixed message and no key material. Android uses the Play internal track. `ascAppId` is still not stored.
+- Reason: Issue #187. Merchants submit under their own Apple and Google accounts. The 2026-09-28 build decision left EAS Submit out of scope; this entry is that follow-up and does not reopen merchant-owned Expo projects.
+- Impact: Dashboard issue #67 calls `POST /api/v1/build-requests/:id/submits` and polls the GET routes in `docs/cartaisy/STORE_SUBMIT_API.md`. Missing or unreadable credentials and a missing finished artifact are rejected before a job is stored. Build create and the workflow poller are unchanged.
+- Related docs: `docs/cartaisy/STORE_SUBMIT_API.md`, `docs/cartaisy/STORE_CREDENTIALS_API.md`, `docs/cartaisy/BUILD_REQUEST_API.md`, `.env.example`. GitHub issue: #187.
+
 ## Related docs/issues
 
 - GitHub issue: #52.
