@@ -8,6 +8,8 @@ Last audited: 2026-07-01.
 
 > Update (2026-09-24, issue #165): hosted checkout handoff is unchanged. Legacy native checkout stays unreachable in SaaS/production via `assertNativeCheckoutAllowed()`. The unscoped helpers those endpoints used (`getCart` without a store client, `updateCartBuyerIdentity`, `applyDiscountCodes`, and the other singleton `query` / `queryAdmin` methods) now also fail closed inside `ShopifyStorefrontService` before process-wide Storefront or Admin env credentials can be sent. Cart metafield enrichment no longer calls the global Admin client.
 >
+> Update (2026-09-28, issue #181): Shopify owns settlement. `POST /checkout/handoff` rejects any cart id that is not a Shopify Storefront cart GID. Stripe payment-intent create/confirm/refund, `POST /api/v1/customer/orders`, and the unrouted legacy order-create helpers fail closed in SaaS/production with the same rule as native checkout. Webhook order ingest is unchanged.
+>
 > Update (2026-07-03, issue #76): follow-up ticket 2 is implemented. Shopify order webhooks (`orders/create`, `orders/updated`, `orders/paid`) reconcile orders into store-scoped local `Order` records via `src/services/orderReconciliationService.ts`, using only the trusted webhook store context: the matching `CheckoutHandoff` is found by cart/checkout token within the store and marked `reconciled`, orders are attributed to the store's `Customer` or a guest session/contact (never a dashboard `User`), duplicate webhooks are idempotent, and `shopifyOrderId`/`orderNumber` are unique per store instead of globally (see `docs/DECISIONS.md`). Native Stripe tenant-safety (ticket 4) remains open.
 
 ## Scope and method

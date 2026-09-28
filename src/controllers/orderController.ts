@@ -7,6 +7,10 @@ import User from '../models/User';
 import { AuthenticatedRequest } from '../types';
 import { ShopifyOrderSyncService } from '../services/shopifyOrderSyncService';
 import { findStoreProductById } from '../utils/productOwnership';
+import {
+  isLegacyStripeSettlementDisabled,
+  LEGACY_STRIPE_SETTLEMENT_MESSAGE,
+} from '../utils/legacySettlement';
 
 export const getUserOrders = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
@@ -188,6 +192,14 @@ export const getOrder = async (req: AuthenticatedRequest, res: Response): Promis
 };
 
 export const createOrder = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  if (isLegacyStripeSettlementDisabled()) {
+    res.status(403).json({
+      success: false,
+      message: LEGACY_STRIPE_SETTLEMENT_MESSAGE,
+    });
+    return;
+  }
+
   try {
     const userId = req.user?._id;
     const {

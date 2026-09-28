@@ -6,6 +6,10 @@ import Product, { IProductDocument } from '../models/Product';
 import Customer from '../models/Customer';
 import { CustomerInfo } from '../middleware/customerAuth';
 import { findStoreProductById } from '../utils/productOwnership';
+import {
+  isLegacyStripeSettlementDisabled,
+  LEGACY_STRIPE_SETTLEMENT_MESSAGE,
+} from '../utils/legacySettlement';
 
 // Extend Request to include customer info from authenticateCustomer middleware
 interface CustomerRequest extends Request {
@@ -160,6 +164,16 @@ export const getOrders = async (req: CustomerRequest, res: Response): Promise<vo
  * Create a new order for the authenticated customer
  */
 export const createOrder = async (req: CustomerRequest, res: Response): Promise<void> => {
+  // Shopify owns settlement. Local order creation would record a Cartaisy
+  // order (default payment method: stripe) without a Shopify checkout.
+  if (isLegacyStripeSettlementDisabled()) {
+    res.status(403).json({
+      status: 'error',
+      message: LEGACY_STRIPE_SETTLEMENT_MESSAGE,
+    });
+    return;
+  }
+
   try {
     const customerId = req.customer.id;
     const {

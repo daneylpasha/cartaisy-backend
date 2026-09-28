@@ -13,6 +13,10 @@ import stripeService from '../services/stripeService';
 import { normalizeAddressForShopify } from '../utils/addressHelper';
 import { getCurrencyForCountry } from '../utils/currency';
 import { ShopifyOrderSyncService } from '../services/shopifyOrderSyncService';
+import {
+  assertLegacyStripeSettlementAllowed,
+  isShopifyStorefrontCartGid,
+} from '../utils/legacySettlement';
 
 /**
  * Get the default currency based on store configuration.
@@ -125,26 +129,14 @@ export class CheckoutController extends Controller {
    * The legacy native (Stripe) checkout flow still uses global Storefront
    * credentials and process-wide Stripe configuration, so it must fail
    * closed in production/SaaS mode. Shopify-hosted checkout handoff
-   * (POST /checkout/handoff) is the SaaS checkout v1 path.
-   * See docs/CHECKOUT_TENANT_SAFETY_AUDIT.md and issue #68.
-   * Issue #165 keeps this gate (no handoff behavior change) and the
-   * singleton helpers fail closed again inside the Storefront service.
+   * (POST /checkout/handoff) is the only SaaS settlement entry.
+   * See docs/CHECKOUT_TENANT_SAFETY_AUDIT.md, issue #68, and issue #181.
+   * Issue #165 keeps this gate and the singleton helpers fail closed again
+   * inside the Storefront service. Stripe payment-intent helpers fail
+   * closed with the same rule.
    */
   private assertNativeCheckoutAllowed(): void {
-    const isProduction = process.env.NODE_ENV === 'production';
-    const isSaasMode =
-      ['1', 'true', 'yes', 'on'].includes((process.env.SAAS_MODE || '').toLowerCase()) ||
-      ['1', 'true', 'yes', 'on'].includes((process.env.MULTI_TENANT_MODE || '').toLowerCase());
-
-    if (isProduction || isSaasMode) {
-      throw new ApiError(
-        'Native checkout is disabled; use the Shopify-hosted checkout handoff',
-        403,
-        true,
-        undefined,
-        true
-      );
-    }
+    assertLegacyStripeSettlementAllowed();
   }
 
   /**
@@ -176,6 +168,18 @@ export class CheckoutController extends Controller {
 
       if (!cartId) {
         throw new ApiError('Cart ID is required', 400, true, undefined, true);
+      }
+
+      // Cartaisy local carts (customer/guest ObjectIds, session ids) are not
+      // Shopify carts. Only a Storefront cart GID can be handed to checkout.
+      if (!isShopifyStorefrontCartGid(cartId)) {
+        throw new ApiError(
+          'Cart ID must be a Shopify Storefront cart GID',
+          400,
+          true,
+          undefined,
+          true
+        );
       }
 
       const cartResponse = await shopifyStorefront.getCheckoutUrlForStore(
