@@ -450,6 +450,46 @@ describe('Build request API (issue #155)', () => {
     expect(tokenShaped.body.code).toBe('BUILD_REQUEST_INVALID');
     expect(JSON.stringify(tokenShaped.body)).not.toContain('shpat_');
 
+    const benignEncodedUrl = 'https://u.expo.dev/%62uilds/ok-id';
+    const benignEncoded = await request(app)
+      .patch(`/api/v1/admin/build-requests/${id}/status`)
+      .set('Authorization', `Bearer ${opsToken}`)
+      .send({ android: { installUrl: benignEncodedUrl } });
+    expect(benignEncoded.status).toBe(200);
+    expect(benignEncoded.body.data.platforms.android.installUrl).toBe(benignEncodedUrl);
+
+    const encodedPath = 'https://expo.dev/builds/shpat%5Fsecret';
+    const encodedQuery = 'https://expo.dev/build?access%5Ftoken=x';
+    const encodedQueryValue = 'https://u.expo.dev/build?token=shpss%5Fsecret';
+    const encodedKey = 'https://expo.io/artifacts/1?api%5Fkey=secret';
+    const encodedHost = 'https://shpat%5F.expo.dev/builds/1';
+    const encodedHash = 'https://expo.dev/builds/1#access%5Ftoken=secret';
+
+    const encodedCases = [
+      encodedPath,
+      encodedQuery,
+      encodedQueryValue,
+      encodedKey,
+      encodedHost,
+      encodedHash,
+    ];
+    for (const installUrl of encodedCases) {
+      const rejected = await request(app)
+        .patch(`/api/v1/admin/build-requests/${id}/status`)
+        .set('Authorization', `Bearer ${opsToken}`)
+        .send({ android: { installUrl } });
+      expect(rejected.status).toBe(400);
+      expect(rejected.body.code).toBe('BUILD_REQUEST_INVALID');
+      const body = JSON.stringify(rejected.body);
+      expect(body).not.toContain('shpat_');
+      expect(body).not.toContain('shpat%5F');
+      expect(body).not.toContain('access_token');
+      expect(body).not.toContain('access%5Ftoken');
+      expect(body).not.toContain('shpss');
+      expect(body).not.toContain('api_key');
+      expect(body).not.toContain('api%5Fkey');
+    }
+
     const withPassword = await request(app)
       .patch(`/api/v1/admin/build-requests/${id}/status`)
       .set('Authorization', `Bearer ${opsToken}`)
@@ -487,11 +527,17 @@ describe('Build request API (issue #155)', () => {
 
     const stored = await BuildRequest.findById(id).lean();
     expect(stored?.platforms.android.status).toBe('ready');
-    expect(stored?.platforms.android.installUrl).toBe(expoIoUrl);
+    expect(stored?.platforms.android.installUrl).toBe(benignEncodedUrl);
     expect(stored?.platforms.ios.status).toBe('ready');
     expect(stored?.platforms.ios.installUrl).toBe(shortUrl);
-    expect(JSON.stringify(stored)).not.toContain('shpat_');
-    expect(JSON.stringify(stored)).not.toContain('example.com');
+    const storedBody = JSON.stringify(stored);
+    expect(storedBody).not.toContain('shpat_');
+    expect(storedBody).not.toContain('shpat%5F');
+    expect(storedBody).not.toContain('access_token');
+    expect(storedBody).not.toContain('access%5Ftoken');
+    expect(storedBody).not.toContain('shpss');
+    expect(storedBody).not.toContain('api_key');
+    expect(storedBody).not.toContain('example.com');
   });
 
   test('rejects an empty platform choice, a long note, and a runbook field', async () => {

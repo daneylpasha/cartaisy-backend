@@ -215,6 +215,53 @@ const isExpoInstallHost = (hostname: string): boolean => {
   );
 };
 
+const PERCENT_DECODE_PASSES = 3;
+
+/**
+ * Decode each valid `%XX` escape. A stray `%` is left in place so it cannot
+ * abort the scan and hide an earlier encoded marker. Repeated passes catch
+ * double-encoding such as `%255F`.
+ */
+const decodePercentEscapes = (value: string): string => {
+  let current = value;
+  for (let pass = 0; pass < PERCENT_DECODE_PASSES; pass += 1) {
+    const decoded = current.replace(/%[0-9A-Fa-f]{2}/g, (escape) => {
+      try {
+        return decodeURIComponent(escape);
+      } catch {
+        return escape;
+      }
+    });
+    if (decoded === current) {
+      return current;
+    }
+    current = decoded;
+  }
+  return current;
+};
+
+const hasTokenShapedText = (value: string): boolean =>
+  TOKEN_SHAPED_URL.test(value) || TOKEN_SHAPED_URL.test(decodePercentEscapes(value));
+
+/**
+ * Path and query stay percent-encoded on the URL object. Search params are
+ * decoded once already. Scan both, plus host and hash, so an encoded marker
+ * is not stored and later returned to the merchant.
+ */
+const installUrlContainsToken = (parsed: URL): boolean => {
+  const parts: string[] = [parsed.pathname, parsed.hostname];
+  if (parsed.hash) {
+    parts.push(parsed.hash);
+  }
+  if (parsed.search.length > 1) {
+    parts.push(parsed.search.slice(1));
+  }
+  parsed.searchParams.forEach((paramValue, paramName) => {
+    parts.push(paramName, paramValue);
+  });
+  return parts.some((part) => hasTokenShapedText(part));
+};
+
 /** `null` clears. A non-null value must be an https Expo/EAS URL with no credentials. */
 const parseInstallUrl = (value: unknown, platform: 'android' | 'ios'): string | null => {
   if (value === null) {
@@ -225,7 +272,7 @@ const parseInstallUrl = (value: unknown, platform: 'android' | 'ios'): string | 
   }
 
   const trimmed = value.trim();
-  if (!trimmed || TOKEN_SHAPED_URL.test(trimmed)) {
+  if (!trimmed || hasTokenShapedText(trimmed)) {
     throw new BuildRequestValidationError(installUrlError(platform));
   }
 
@@ -240,7 +287,8 @@ const parseInstallUrl = (value: unknown, platform: 'android' | 'ios'): string | 
     parsed.protocol !== 'https:' ||
     parsed.username ||
     parsed.password ||
-    !isExpoInstallHost(parsed.hostname)
+    !isExpoInstallHost(parsed.hostname) ||
+    installUrlContainsToken(parsed)
   ) {
     throw new BuildRequestValidationError(installUrlError(platform));
   }
