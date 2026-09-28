@@ -22,6 +22,8 @@ export type BuildPlatformStatus = (typeof BUILD_PLATFORM_STATUSES)[number];
 export interface IBuildPlatformState {
   status: BuildPlatformStatus;
   updatedAt: Date;
+  /** Expo/EAS install handoff. Absent until platform ops set it. `ready` does not require it. */
+  installUrl?: string | null;
 }
 
 export interface IBuildRequestChecklist {
@@ -50,6 +52,10 @@ const PlatformStateSchema = new Schema<IBuildPlatformState>(
     updatedAt: {
       type: Date,
       required: true,
+    },
+    installUrl: {
+      type: String,
+      trim: true,
     },
   },
   { _id: false }

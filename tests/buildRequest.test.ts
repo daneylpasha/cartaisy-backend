@@ -350,6 +350,196 @@ describe('Build request API (issue #155)', () => {
     expect(stored?.storeId.toString()).toBe(storeBId);
   });
 
+  test('platform ops can set and clear an Expo install URL; merchants can read it', async () => {
+    await markEligible(storeAId, SHOP_A);
+    const created = await createRequest(adminAToken, { android: true, ios: true });
+    const id = created.body.data.id as string;
+    const expoUrl = 'https://expo.dev/accounts/cartaisy/projects/app/builds/8c0b';
+    const shortUrl = 'https://u.expo.dev/8c0b';
+    const expoIoUrl = 'https://expo.io/artifacts/abc';
+
+    expect(created.body.data.platforms.android.installUrl).toBeNull();
+    expect(created.body.data.platforms.ios.installUrl).toBeNull();
+
+    const merchantAttempt = await request(app)
+      .patch(`/api/v1/admin/build-requests/${id}/status`)
+      .set('Authorization', `Bearer ${adminAToken}`)
+      .send({ android: { status: 'ready', installUrl: expoUrl } });
+    expect(merchantAttempt.status).toBe(403);
+    expect(merchantAttempt.body.error).toBe('Platform admin access required');
+
+    const urlWhileQueued = await request(app)
+      .patch(`/api/v1/admin/build-requests/${id}/status`)
+      .set('Authorization', `Bearer ${opsToken}`)
+      .send({ android: { installUrl: `  ${expoUrl}  ` } });
+    expect(urlWhileQueued.status).toBe(200);
+    expect(urlWhileQueued.body.data.platforms.android.status).toBe('queued');
+    expect(urlWhileQueued.body.data.platforms.android.installUrl).toBe(expoUrl);
+    expect(urlWhileQueued.body.data.platforms.ios.installUrl).toBeNull();
+
+    const readyWithoutResendingUrl = await request(app)
+      .patch(`/api/v1/admin/build-requests/${id}/status`)
+      .set('Authorization', `Bearer ${opsToken}`)
+      .send({ android: { status: 'ready' } });
+    expect(readyWithoutResendingUrl.status).toBe(200);
+    expect(readyWithoutResendingUrl.body.data.platforms.android.status).toBe('ready');
+    expect(readyWithoutResendingUrl.body.data.platforms.android.installUrl).toBe(expoUrl);
+
+    const readyWithUrl = await request(app)
+      .patch(`/api/v1/admin/build-requests/${id}/status`)
+      .set('Authorization', `Bearer ${opsToken}`)
+      .send({ ios: { status: 'ready', installUrl: shortUrl } });
+    expect(readyWithUrl.status).toBe(200);
+    expect(readyWithUrl.body.data.platforms.ios.status).toBe('ready');
+    expect(readyWithUrl.body.data.platforms.ios.installUrl).toBe(shortUrl);
+    expect(readyWithUrl.body.data.platforms.android.installUrl).toBe(expoUrl);
+
+    const merchantGet = await request(app)
+      .get(`/api/v1/build-requests/${id}`)
+      .set('Authorization', `Bearer ${adminAToken}`);
+    expect(merchantGet.status).toBe(200);
+    expect(merchantGet.body.data.platforms.android.installUrl).toBe(expoUrl);
+    expect(merchantGet.body.data.platforms.ios.installUrl).toBe(shortUrl);
+
+    const merchantList = await request(app)
+      .get('/api/v1/build-requests')
+      .set('Authorization', `Bearer ${adminAToken}`);
+    expect(merchantList.status).toBe(200);
+    expect(merchantList.body.data.requests[0].platforms.android.installUrl).toBe(expoUrl);
+    expect(merchantList.body.data.requests[0].platforms.ios.installUrl).toBe(shortUrl);
+
+    const cleared = await request(app)
+      .patch(`/api/v1/admin/build-requests/${id}/status`)
+      .set('Authorization', `Bearer ${opsToken}`)
+      .send({ android: { installUrl: null } });
+    expect(cleared.status).toBe(200);
+    expect(cleared.body.data.platforms.android.status).toBe('ready');
+    expect(cleared.body.data.platforms.android.installUrl).toBeNull();
+    expect(cleared.body.data.platforms.ios.installUrl).toBe(shortUrl);
+
+    const expoIo = await request(app)
+      .patch(`/api/v1/admin/build-requests/${id}/status`)
+      .set('Authorization', `Bearer ${opsToken}`)
+      .send({ android: { installUrl: expoIoUrl } });
+    expect(expoIo.status).toBe(200);
+    expect(expoIo.body.data.platforms.android.installUrl).toBe(expoIoUrl);
+
+    const httpUrl = await request(app)
+      .patch(`/api/v1/admin/build-requests/${id}/status`)
+      .set('Authorization', `Bearer ${opsToken}`)
+      .send({ android: { installUrl: 'http://expo.dev/accounts/cartaisy/builds/1' } });
+    expect(httpUrl.status).toBe(400);
+    expect(httpUrl.body.code).toBe('BUILD_REQUEST_INVALID');
+
+    const badHost = await request(app)
+      .patch(`/api/v1/admin/build-requests/${id}/status`)
+      .set('Authorization', `Bearer ${opsToken}`)
+      .send({ android: { installUrl: 'https://example.com/app.apk' } });
+    expect(badHost.status).toBe(400);
+    expect(badHost.body.code).toBe('BUILD_REQUEST_INVALID');
+
+    const tokenShaped = await request(app)
+      .patch(`/api/v1/admin/build-requests/${id}/status`)
+      .set('Authorization', `Bearer ${opsToken}`)
+      .send({
+        android: {
+          installUrl: 'https://expo.dev/accounts/cartaisy/builds/shpat_should_not_store',
+        },
+      });
+    expect(tokenShaped.status).toBe(400);
+    expect(tokenShaped.body.code).toBe('BUILD_REQUEST_INVALID');
+    expect(JSON.stringify(tokenShaped.body)).not.toContain('shpat_');
+
+    const benignEncodedUrl = 'https://u.expo.dev/%62uilds/ok-id';
+    const benignEncoded = await request(app)
+      .patch(`/api/v1/admin/build-requests/${id}/status`)
+      .set('Authorization', `Bearer ${opsToken}`)
+      .send({ android: { installUrl: benignEncodedUrl } });
+    expect(benignEncoded.status).toBe(200);
+    expect(benignEncoded.body.data.platforms.android.installUrl).toBe(benignEncodedUrl);
+
+    const encodedPath = 'https://expo.dev/builds/shpat%5Fsecret';
+    const encodedQuery = 'https://expo.dev/build?access%5Ftoken=x';
+    const encodedQueryValue = 'https://u.expo.dev/build?token=shpss%5Fsecret';
+    const encodedKey = 'https://expo.io/artifacts/1?api%5Fkey=secret';
+    const encodedHost = 'https://shpat%5F.expo.dev/builds/1';
+    const encodedHash = 'https://expo.dev/builds/1#access%5Ftoken=secret';
+
+    const encodedCases = [
+      encodedPath,
+      encodedQuery,
+      encodedQueryValue,
+      encodedKey,
+      encodedHost,
+      encodedHash,
+    ];
+    for (const installUrl of encodedCases) {
+      const rejected = await request(app)
+        .patch(`/api/v1/admin/build-requests/${id}/status`)
+        .set('Authorization', `Bearer ${opsToken}`)
+        .send({ android: { installUrl } });
+      expect(rejected.status).toBe(400);
+      expect(rejected.body.code).toBe('BUILD_REQUEST_INVALID');
+      const body = JSON.stringify(rejected.body);
+      expect(body).not.toContain('shpat_');
+      expect(body).not.toContain('shpat%5F');
+      expect(body).not.toContain('access_token');
+      expect(body).not.toContain('access%5Ftoken');
+      expect(body).not.toContain('shpss');
+      expect(body).not.toContain('api_key');
+      expect(body).not.toContain('api%5Fkey');
+    }
+
+    const withPassword = await request(app)
+      .patch(`/api/v1/admin/build-requests/${id}/status`)
+      .set('Authorization', `Bearer ${opsToken}`)
+      .send({ android: { installUrl: 'https://ops:secret@u.expo.dev/8c0b' } });
+    expect(withPassword.status).toBe(400);
+    expect(withPassword.body.code).toBe('BUILD_REQUEST_INVALID');
+
+    const emptyPlatform = await request(app)
+      .patch(`/api/v1/admin/build-requests/${id}/status`)
+      .set('Authorization', `Bearer ${opsToken}`)
+      .send({ android: {} });
+    expect(emptyPlatform.status).toBe(400);
+    expect(emptyPlatform.body.code).toBe('BUILD_REQUEST_INVALID');
+
+    const emptyBody = await request(app)
+      .patch(`/api/v1/admin/build-requests/${id}/status`)
+      .set('Authorization', `Bearer ${opsToken}`)
+      .send({});
+    expect(emptyBody.status).toBe(400);
+    expect(emptyBody.body.code).toBe('BUILD_REQUEST_INVALID');
+
+    const lookalikeHost = await request(app)
+      .patch(`/api/v1/admin/build-requests/${id}/status`)
+      .set('Authorization', `Bearer ${opsToken}`)
+      .send({ android: { installUrl: 'https://evilexpo.dev/builds/1' } });
+    expect(lookalikeHost.status).toBe(400);
+    expect(lookalikeHost.body.code).toBe('BUILD_REQUEST_INVALID');
+
+    const unknownKey = await request(app)
+      .patch(`/api/v1/admin/build-requests/${id}/status`)
+      .set('Authorization', `Bearer ${opsToken}`)
+      .send({ android: { status: 'building', note: 'ignore' } });
+    expect(unknownKey.status).toBe(400);
+    expect(unknownKey.body.code).toBe('BUILD_REQUEST_INVALID');
+
+    const stored = await BuildRequest.findById(id).lean();
+    expect(stored?.platforms.android.status).toBe('ready');
+    expect(stored?.platforms.android.installUrl).toBe(benignEncodedUrl);
+    expect(stored?.platforms.ios.status).toBe('ready');
+    expect(stored?.platforms.ios.installUrl).toBe(shortUrl);
+    const storedBody = JSON.stringify(stored);
+    expect(storedBody).not.toContain('shpat_');
+    expect(storedBody).not.toContain('shpat%5F');
+    expect(storedBody).not.toContain('access_token');
+    expect(storedBody).not.toContain('access%5Ftoken');
+    expect(storedBody).not.toContain('shpss');
+    expect(storedBody).not.toContain('api_key');
+    expect(storedBody).not.toContain('example.com');
+  });
+
   test('rejects an empty platform choice, a long note, and a runbook field', async () => {
     await markEligible(storeAId, SHOP_A);
 
@@ -533,10 +723,12 @@ describe('Build request API (issue #155)', () => {
         android: {
           status: 'ready',
           updatedAt: '2026-09-20T15:30:00.000Z',
+          installUrl: null,
         },
         ios: {
           status: 'waiting_on_merchant',
           updatedAt: '2026-09-20T15:30:00.000Z',
+          installUrl: null,
         },
       },
       checklist: {
