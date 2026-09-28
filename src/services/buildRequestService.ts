@@ -48,6 +48,12 @@ export interface AdminBuildRequest extends PublicBuildRequest {
     id: string;
     name: string | null;
     domain: string | null;
+    /** Cartaisy store name. There is no separate stored app-display-name field. */
+    appName: string | null;
+    /** Absolute https app icon, or null. Same source as branding iconUrl / appIconUrl. */
+    iconUrl: string | null;
+    /** Absolute https splash, or null. Same source as branding splashUrl / splashImageUrl. */
+    splashUrl: string | null;
   };
 }
 
@@ -351,6 +357,43 @@ const textOrNull = (value: unknown): string | null => {
   return trimmed ? trimmed : null;
 };
 
+/**
+ * Same token markers as admin branding GET and public store config.
+ * Also drops OAuth and signed-upload secrets that must not ride along
+ * on an EAS handoff URL.
+ */
+const TOKEN_SHAPED_URL =
+  /shpat_|shpss_|shpca_|shpct_|shpua_|access_token|bearer\s|api_secret|client_secret|refresh_token|api_key/i;
+
+/**
+ * Absolute https brand URL safe to hand to platform ops.
+ * Http, other schemes, token-shaped query or path values, and URLs with
+ * embedded credentials become null. Missing branding stays null.
+ */
+const publicHttpsBrandUrl = (value: unknown): string | null => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed || TOKEN_SHAPED_URL.test(trimmed)) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol !== 'https:') {
+      return null;
+    }
+    if (parsed.username || parsed.password) {
+      return null;
+    }
+    return trimmed;
+  } catch {
+    return null;
+  }
+};
+
 const parsePositiveInt = (value: unknown, label: string, max: number): number | undefined => {
   if (value === undefined) {
     return undefined;
@@ -445,7 +488,26 @@ interface StoreListIdentity {
   _id: mongoose.Types.ObjectId;
   name?: string;
   shopify?: { shop?: string };
+  branding?: {
+    iconUrl?: string;
+    splashUrl?: string;
+  };
 }
+
+const toAdminStore = (
+  storeId: string,
+  store: StoreListIdentity | undefined
+): AdminBuildRequest['store'] => {
+  const name = textOrNull(store?.name);
+  return {
+    id: storeId,
+    name,
+    domain: textOrNull(store?.shopify?.shop),
+    appName: name,
+    iconUrl: publicHttpsBrandUrl(store?.branding?.iconUrl),
+    splashUrl: publicHttpsBrandUrl(store?.branding?.splashUrl),
+  };
+};
 
 /**
  * Cross-store queue for platform ops. The caller must already be a platform
@@ -478,23 +540,16 @@ export const listPlatformBuildRequests = async (
   const storeIds = [...new Set(docs.map((doc) => doc.storeId.toString()))];
   const stores = storeIds.length
     ? await Store.find({ _id: { $in: storeIds } })
-        .select('name shopify.shop')
+        .select('name shopify.shop branding.iconUrl branding.splashUrl')
         .lean<StoreListIdentity[]>()
     : [];
   const storesById = new Map(stores.map((store) => [store._id.toString(), store]));
 
   return {
-    requests: docs.map((doc) => {
-      const store = storesById.get(doc.storeId.toString());
-      return {
-        ...toPublicBuildRequest(doc),
-        store: {
-          id: doc.storeId.toString(),
-          name: textOrNull(store?.name),
-          domain: textOrNull(store?.shopify?.shop),
-        },
-      };
-    }),
+    requests: docs.map((doc) => ({
+      ...toPublicBuildRequest(doc),
+      store: toAdminStore(doc.storeId.toString(), storesById.get(doc.storeId.toString())),
+    })),
     pagination: {
       page,
       limit,

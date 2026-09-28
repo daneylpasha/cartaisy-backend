@@ -524,6 +524,9 @@ describe('Build request API (issue #155)', () => {
         id: storeBId,
         name: 'Build Store B',
         domain: SHOP_B,
+        appName: 'Build Store B',
+        iconUrl: null,
+        splashUrl: null,
       },
       requestedBy: adminBId,
       platforms: {
@@ -546,6 +549,9 @@ describe('Build request API (issue #155)', () => {
       id: storeAId,
       name: 'Build Store A',
       domain: SHOP_A,
+      appName: 'Build Store A',
+      iconUrl: null,
+      splashUrl: null,
     });
     expect(response.body.data.requests[1].checklist.accessNotes).toBe(
       'Play Console access granted.'
@@ -559,6 +565,205 @@ describe('Build request API (issue #155)', () => {
     expect(ownStore.status).toBe(200);
     expect(ownStore.body.data.requests.map((item: { id: string }) => item.id)).toEqual([olderId]);
     expect(JSON.stringify(ownStore.body)).not.toContain('Apple developer invite sent.');
+  });
+
+  test('platform queue includes https icon and splash and drops missing or unsafe branding', async () => {
+    const iconUrl = 'https://cdn.example.com/store-a-icon.png';
+    const splashUrl = 'https://cdn.example.com/store-a-splash.png';
+    const leakedQuery = 'https://cdn.example.com/icon.png?access_token=shpat_querysecret';
+    const leakedPath = 'https://cdn.example.com/shpca_pathsecret/splash.png';
+    const httpIcon = 'http://cdn.example.com/icon.png';
+    const signedUpload =
+      'https://api.cloudinary.com/v1_1/demo/image/upload?api_key=123&api_secret=signedsecret';
+    const oauthSplash =
+      'https://cdn.example.com/splash.png?client_secret=oauthsecret&refresh_token=refreshsecret';
+    const userinfoIcon = 'https://ops:upload-secret@cdn.example.com/icon.png';
+    const bearerSplash = 'https://cdn.example.com/splash.png?auth=bearer secretvalue';
+    const ftpIcon = 'ftp://cdn.example.com/icon.png';
+    const relativeSplash = '/images/splash.png';
+    const storeBToken = 'shpua_store_b_admin_token';
+
+    const setBranding = async (
+      storeId: string,
+      branding: { iconUrl?: string | null; splashUrl?: string | null },
+      accessToken?: string
+    ): Promise<void> => {
+      const $set: Record<string, unknown> = {};
+      if (branding.iconUrl !== undefined) {
+        $set['branding.iconUrl'] = branding.iconUrl;
+      }
+      if (branding.splashUrl !== undefined) {
+        $set['branding.splashUrl'] = branding.splashUrl;
+      }
+      if (accessToken) {
+        $set['shopify.accessToken'] = accessToken;
+      }
+      await Store.collection.updateOne({ _id: new mongoose.Types.ObjectId(storeId) }, { $set });
+    };
+
+    await setBranding(
+      storeAId,
+      { iconUrl: `  ${iconUrl}  `, splashUrl },
+      TOKEN_MARKER
+    );
+    await setBranding(
+      storeBId,
+      { iconUrl: leakedQuery, splashUrl: leakedPath },
+      storeBToken
+    );
+
+    const safeId = await insertBuildRequest({
+      storeId: storeAId,
+      requestedBy: adminAId,
+      android: 'queued',
+      ios: 'not_requested',
+      createdAt: '2026-09-02T00:00:00.000Z',
+    });
+    const unsafeId = await insertBuildRequest({
+      storeId: storeBId,
+      requestedBy: adminBId,
+      android: 'building',
+      ios: 'queued',
+      accessNotes: 'Do not leak branding secrets',
+      createdAt: '2026-09-21T00:00:00.000Z',
+    });
+
+    const listed = await request(app)
+      .get('/api/v1/admin/build-requests')
+      .set('Authorization', `Bearer ${opsToken}`);
+    expect(listed.status).toBe(200);
+
+    const byId = new Map<string, { id: string; store: Record<string, unknown> }>(
+      listed.body.data.requests.map((item: { id: string; store: Record<string, unknown> }) => [
+        item.id,
+        item,
+      ])
+    );
+    expect(byId.get(safeId)?.store).toEqual({
+      id: storeAId,
+      name: 'Build Store A',
+      domain: null,
+      appName: 'Build Store A',
+      iconUrl,
+      splashUrl,
+    });
+    expect(byId.get(unsafeId)?.store).toEqual({
+      id: storeBId,
+      name: 'Build Store B',
+      domain: null,
+      appName: 'Build Store B',
+      iconUrl: null,
+      splashUrl: null,
+    });
+
+    const listedBody = JSON.stringify(listed.body);
+    expect(listedBody).toContain(iconUrl);
+    expect(listedBody).toContain(splashUrl);
+    expect(listedBody).not.toContain(TOKEN_MARKER);
+    expect(listedBody).not.toContain(storeBToken);
+    expect(listedBody).not.toContain('shpat_');
+    expect(listedBody).not.toContain('shpca_');
+    expect(listedBody).not.toContain('shpua_');
+    expect(listedBody).not.toContain('access_token');
+    expect(listedBody).not.toContain(leakedQuery);
+    expect(listedBody).not.toContain(leakedPath);
+
+    const merchant = await request(app)
+      .get('/api/v1/build-requests')
+      .set('Authorization', `Bearer ${adminAToken}`);
+    expect(merchant.status).toBe(200);
+    expect(merchant.body.data.requests[0]).not.toHaveProperty('store');
+    expect(merchant.body.data.requests[0]).not.toHaveProperty('iconUrl');
+    expect(merchant.body.data.requests[0]).not.toHaveProperty('splashUrl');
+    expect(merchant.body.data.requests[0]).not.toHaveProperty('appName');
+    expect(JSON.stringify(merchant.body)).not.toContain(iconUrl);
+    expect(JSON.stringify(merchant.body)).not.toContain(splashUrl);
+
+    const denied = await request(app)
+      .get('/api/v1/admin/build-requests')
+      .set('Authorization', `Bearer ${adminAToken}`);
+    expect(denied.status).toBe(403);
+    expect(denied.body).toEqual({
+      success: false,
+      error: 'Platform admin access required',
+    });
+    expect(JSON.stringify(denied.body)).not.toContain(iconUrl);
+    expect(JSON.stringify(denied.body)).not.toContain('shpat_');
+
+    await setBranding(storeAId, { iconUrl: httpIcon, splashUrl: '   ' });
+    await setBranding(storeBId, { iconUrl: signedUpload, splashUrl: oauthSplash });
+
+    const unsafeSchemes = await request(app)
+      .get('/api/v1/admin/build-requests')
+      .set('Authorization', `Bearer ${opsToken}`);
+    expect(unsafeSchemes.status).toBe(200);
+    for (const item of unsafeSchemes.body.data.requests) {
+      expect(item.store.iconUrl).toBeNull();
+      expect(item.store.splashUrl).toBeNull();
+    }
+    const schemeBody = JSON.stringify(unsafeSchemes.body);
+    expect(schemeBody).not.toContain(httpIcon);
+    expect(schemeBody).not.toContain('api_secret');
+    expect(schemeBody).not.toContain('api_key');
+    expect(schemeBody).not.toContain('client_secret');
+    expect(schemeBody).not.toContain('refresh_token');
+    expect(schemeBody).not.toContain('signedsecret');
+    expect(schemeBody).not.toContain('oauthsecret');
+
+    await setBranding(storeAId, { iconUrl: userinfoIcon, splashUrl: bearerSplash });
+    await setBranding(storeBId, { iconUrl: ftpIcon, splashUrl: relativeSplash });
+
+    const embedded = await request(app)
+      .get('/api/v1/admin/build-requests')
+      .set('Authorization', `Bearer ${opsToken}`);
+    for (const item of embedded.body.data.requests) {
+      expect(item.store.iconUrl).toBeNull();
+      expect(item.store.splashUrl).toBeNull();
+    }
+    const embeddedBody = JSON.stringify(embedded.body);
+    expect(embeddedBody).not.toContain('upload-secret');
+    expect(embeddedBody).not.toContain('bearer');
+    expect(embeddedBody).not.toContain(ftpIcon);
+    expect(embeddedBody).not.toContain(relativeSplash);
+    expect(embeddedBody).not.toContain('secretvalue');
+
+    await Store.collection.updateOne(
+      { _id: new mongoose.Types.ObjectId(storeAId) },
+      { $unset: { 'branding.iconUrl': '', 'branding.splashUrl': '' } }
+    );
+    const absent = await request(app)
+      .get('/api/v1/admin/build-requests')
+      .set('Authorization', `Bearer ${opsToken}`);
+    const absentSafe = absent.body.data.requests.find(
+      (item: { id: string }) => item.id === safeId
+    );
+    expect(absentSafe.store).toEqual({
+      id: storeAId,
+      name: 'Build Store A',
+      domain: null,
+      appName: 'Build Store A',
+      iconUrl: null,
+      splashUrl: null,
+    });
+    expect(JSON.stringify(absent.body)).not.toContain('cdn.example.com');
+
+    await Store.deleteOne({ _id: storeBId });
+    const gone = await request(app)
+      .get('/api/v1/admin/build-requests')
+      .set('Authorization', `Bearer ${opsToken}`);
+    const goneUnsafe = gone.body.data.requests.find(
+      (item: { id: string }) => item.id === unsafeId
+    );
+    expect(goneUnsafe.store).toEqual({
+      id: storeBId,
+      name: null,
+      domain: null,
+      appName: null,
+      iconUrl: null,
+      splashUrl: null,
+    });
+    expect(JSON.stringify(gone.body)).not.toContain(storeBToken);
+    expect(JSON.stringify(gone.body)).not.toContain('shpat_');
   });
 
   test('platform queue filters by platform status and paginates', async () => {

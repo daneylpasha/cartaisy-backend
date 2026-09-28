@@ -67,6 +67,8 @@ Creation calls `assertBuildEligible(storeId)` from `src/services/catalogSyncServ
 
 Pull request: https://github.com/daneylpasha/cartaisy-backend/pull/159
 
+Issue #177 adds `store.appName`, `store.iconUrl`, and `store.splashUrl` to each item on `GET /api/v1/admin/build-requests`. `appName` is the Cartaisy store name. `iconUrl` and `splashUrl` come from `Store.branding` (the same fields as admin branding GET and public store config) and are returned only as absolute `https` URLs that are not token-shaped. Missing or unsafe branding is `null`. The list does not select Shopify tokens. The platform-ops gate from issue #170 is unchanged, and merchant build-request routes do not gain these fields. This does not start EAS.
+
 ## What appears complete
 
 - Backend context entrypoint and shared SaaS context docs now exist.
@@ -160,6 +162,8 @@ Issue #173. Merchants upload an app icon and splash through `POST /api/v1/admin/
 Token-shaped URLs (`shpat_`, `shpss_`, `shpca_`, `shpct_`, `shpua_`, `access_token`, or a bearer token) are not stored and are not returned. Upload logs are redacted. The Shopify Admin token stays `select: false` and is not part of the branding payload.
 
 Public `GET /api/v1/store/config` (issue #174) reads `iconUrl` and `splashUrl` from the same `Store.branding` document as `logoUrl` and the colors. The response includes the read aliases `appIconUrl` and `splashImageUrl` when the URL is valid. Validation matches `logoUrl`: absolute `http` or `https` only. Invalid, unset, and token-shaped values are omitted rather than returned as `null`, and a bad value does not fail the request. The query still selects `settings`, `name`, `isActive`, and `branding` for the store named by `X-Store-ID`. Decision: `docs/DECISIONS.md` ("App icon and splash live on store branding").
+
+Platform ops `GET /api/v1/admin/build-requests` (issue #177) reads those same icon and splash fields for EAS handoff. That response is stricter: absolute `https` only, and missing or unsafe values are `null`. See the build-request section above.
 
 ## Related docs/issues
 
