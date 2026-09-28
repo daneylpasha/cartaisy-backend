@@ -26,6 +26,7 @@ export class BuildRequestValidationError extends BusinessLogicError {
 export interface PublicPlatformState {
   status: BuildPlatformStatus;
   updatedAt: string;
+  installUrl: string | null;
 }
 
 export interface PublicBuildRequest {
@@ -105,6 +106,14 @@ const iso = (value: Date | string): string => {
   return date.toISOString();
 };
 
+const installUrlOrNull = (value: string | null | undefined): string | null => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+};
+
 export const toPublicBuildRequest = (doc: BuildRequestRecord): PublicBuildRequest => ({
   id: doc._id.toString(),
   storeId: doc.storeId.toString(),
@@ -113,10 +122,12 @@ export const toPublicBuildRequest = (doc: BuildRequestRecord): PublicBuildReques
     android: {
       status: doc.platforms.android.status,
       updatedAt: iso(doc.platforms.android.updatedAt),
+      installUrl: installUrlOrNull(doc.platforms.android.installUrl),
     },
     ios: {
       status: doc.platforms.ios.status,
       updatedAt: iso(doc.platforms.ios.updatedAt),
+      installUrl: installUrlOrNull(doc.platforms.ios.installUrl),
     },
   },
   checklist: {
@@ -183,18 +194,96 @@ const parseStatus = (value: unknown, platform: 'android' | 'ios'): BuildPlatform
   return value as BuildPlatformStatus;
 };
 
+/**
+ * Same token markers as admin branding GET and public store config.
+ * Also drops OAuth and signed-upload secrets that must not ride along
+ * on an EAS handoff URL.
+ */
+const TOKEN_SHAPED_URL =
+  /shpat_|shpss_|shpca_|shpct_|shpua_|access_token|bearer\s|api_secret|client_secret|refresh_token|api_key/i;
+
+const installUrlError = (platform: 'android' | 'ios'): string =>
+  `${platform}.installUrl must be an https URL on expo.dev or expo.io`;
+
+const isExpoInstallHost = (hostname: string): boolean => {
+  const host = hostname.toLowerCase();
+  return (
+    host === 'expo.dev' ||
+    host.endsWith('.expo.dev') ||
+    host === 'expo.io' ||
+    host.endsWith('.expo.io')
+  );
+};
+
+/** `null` clears. A non-null value must be an https Expo/EAS URL with no credentials. */
+const parseInstallUrl = (value: unknown, platform: 'android' | 'ios'): string | null => {
+  if (value === null) {
+    return null;
+  }
+  if (typeof value !== 'string') {
+    throw new BuildRequestValidationError(`${platform}.installUrl must be a string or null`);
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed || TOKEN_SHAPED_URL.test(trimmed)) {
+    throw new BuildRequestValidationError(installUrlError(platform));
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    throw new BuildRequestValidationError(installUrlError(platform));
+  }
+
+  if (
+    parsed.protocol !== 'https:' ||
+    parsed.username ||
+    parsed.password ||
+    !isExpoInstallHost(parsed.hostname)
+  ) {
+    throw new BuildRequestValidationError(installUrlError(platform));
+  }
+
+  return trimmed;
+};
+
+interface OpsPlatformPatch {
+  status?: BuildPlatformStatus;
+  /** Omitted means leave the stored URL unchanged. `null` clears it. */
+  installUrl?: string | null;
+}
+
 const parseOpsPlatform = (
   value: unknown,
   platform: 'android' | 'ios'
-): BuildPlatformStatus | undefined => {
+): OpsPlatformPatch | undefined => {
   if (value === undefined) {
     return undefined;
   }
   if (!isRecord(value)) {
-    throw new BuildRequestValidationError(`${platform} must be an object with status`);
+    throw new BuildRequestValidationError(
+      `${platform} must be an object with status, installUrl, or both`
+    );
   }
-  assertOnlyKeys(value, ['status'], platform);
-  return parseStatus(value.status, platform);
+  assertOnlyKeys(value, ['status', 'installUrl'], platform);
+
+  const hasStatus = Object.prototype.hasOwnProperty.call(value, 'status');
+  const hasInstallUrl = Object.prototype.hasOwnProperty.call(value, 'installUrl');
+  if (!hasStatus && !hasInstallUrl) {
+    throw new BuildRequestValidationError(
+      `${platform} must include status, installUrl, or both`
+    );
+  }
+
+  const patch: OpsPlatformPatch = {};
+  if (hasStatus) {
+    patch.status = parseStatus(value.status, platform);
+  }
+  if (hasInstallUrl) {
+    patch.installUrl = parseInstallUrl(value.installUrl, platform);
+  }
+  return patch;
 };
 
 export const createStoreBuildRequest = async (input: {
@@ -302,10 +391,36 @@ export const updateStoreBuildRequestChecklist = async (input: {
   return toPublicBuildRequest(doc);
 };
 
+const applyPlatformPatch = (
+  platform: 'android' | 'ios',
+  patch: OpsPlatformPatch | undefined,
+  now: Date,
+  $set: Record<string, unknown>,
+  $unset: Record<string, string>
+): void => {
+  if (!patch) {
+    return;
+  }
+
+  const prefix = `platforms.${platform}`;
+  if (patch.status !== undefined) {
+    $set[`${prefix}.status`] = patch.status;
+  }
+  if (patch.installUrl !== undefined) {
+    if (patch.installUrl === null) {
+      $unset[`${prefix}.installUrl`] = '';
+    } else {
+      $set[`${prefix}.installUrl`] = patch.installUrl;
+    }
+  }
+  $set[`${prefix}.updatedAt`] = now;
+};
+
 /**
- * Platform status is ops-owned. The caller must already be a platform admin.
- * The update is by request id and may target any store. Only the platforms
- * named in the body change.
+ * Platform status and install URL are ops-owned. The caller must already be
+ * a platform admin. The update is by request id and may target any store.
+ * Only the platforms named in the body change. Omitting `installUrl` leaves
+ * the stored URL in place. `ready` does not require an install URL.
  */
 export const updateBuildRequestPlatformStatus = async (input: {
   requestId: string;
@@ -319,7 +434,9 @@ export const updateBuildRequestPlatformStatus = async (input: {
   const android = parseOpsPlatform(input.body.android, 'android');
   const ios = parseOpsPlatform(input.body.ios, 'ios');
   if (!android && !ios) {
-    throw new BuildRequestValidationError('Provide android.status, ios.status, or both.');
+    throw new BuildRequestValidationError(
+      'Provide android or ios with status, installUrl, or both.'
+    );
   }
 
   if (!mongoose.Types.ObjectId.isValid(input.requestId)) {
@@ -328,18 +445,18 @@ export const updateBuildRequestPlatformStatus = async (input: {
 
   const now = new Date();
   const $set: Record<string, unknown> = {};
-  if (android) {
-    $set['platforms.android.status'] = android;
-    $set['platforms.android.updatedAt'] = now;
-  }
-  if (ios) {
-    $set['platforms.ios.status'] = ios;
-    $set['platforms.ios.updatedAt'] = now;
+  const $unset: Record<string, string> = {};
+  applyPlatformPatch('android', android, now, $set, $unset);
+  applyPlatformPatch('ios', ios, now, $set, $unset);
+
+  const update: { $set: Record<string, unknown>; $unset?: Record<string, string> } = { $set };
+  if (Object.keys($unset).length > 0) {
+    update.$unset = $unset;
   }
 
   const doc = await BuildRequest.findOneAndUpdate(
     { _id: new mongoose.Types.ObjectId(input.requestId) },
-    { $set },
+    update,
     { new: true }
   ).lean<BuildRequestRecord | null>();
 
@@ -356,14 +473,6 @@ const textOrNull = (value: unknown): string | null => {
   const trimmed = value.trim();
   return trimmed ? trimmed : null;
 };
-
-/**
- * Same token markers as admin branding GET and public store config.
- * Also drops OAuth and signed-upload secrets that must not ride along
- * on an EAS handoff URL.
- */
-const TOKEN_SHAPED_URL =
-  /shpat_|shpss_|shpca_|shpct_|shpua_|access_token|bearer\s|api_secret|client_secret|refresh_token|api_key/i;
 
 /**
  * Absolute https brand URL safe to hand to platform ops.
