@@ -33,6 +33,9 @@ export interface EasBuildRecord {
   status: string;
   platform: string;
   projectId: string | null;
+  /** INTERNAL, STORE, or SIMULATOR. Null when Expo omits the field. */
+  distribution: string | null;
+  isForIosSimulator: boolean;
   buildUrl: string | null;
   applicationArchiveUrl: string | null;
 }
@@ -61,6 +64,8 @@ const BUILD_BY_ID_QUERY = `query EasBuildById($buildId: ID!) {
       id
       status
       platform
+      distribution
+      isForIosSimulator
       project { id }
       artifacts { buildUrl applicationArchiveUrl }
     }
@@ -260,6 +265,7 @@ export const getEasBuild = async (input: {
 
   const project = isRecord(byId.project) ? textOrNull(byId.project.id) : null;
   const artifacts = isRecord(byId.artifacts) ? byId.artifacts : null;
+  const distribution = textOrNull(byId.distribution);
   return {
     ok: true,
     build: {
@@ -267,6 +273,8 @@ export const getEasBuild = async (input: {
       status: status.toUpperCase(),
       platform: platform.toUpperCase(),
       projectId: project,
+      distribution: distribution ? distribution.toUpperCase() : null,
+      isForIosSimulator: byId.isForIosSimulator === true,
       buildUrl: artifacts ? textOrNull(artifacts.buildUrl) : null,
       applicationArchiveUrl: artifacts ? textOrNull(artifacts.applicationArchiveUrl) : null,
     },
