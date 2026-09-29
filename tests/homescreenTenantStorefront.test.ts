@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import { HomescreenController, homescreenController } from '../src/controllers/homescreenController';
 import { HomescreenTsoaController } from '../src/controllers/homescreenTsoaController';
 import CollectionDisplay from '../src/models/CollectionDisplay';
+import HomeLayout from '../src/models/HomeLayout';
 import shopifyStorefront from '../src/services/shopifyStorefrontService';
 import { ApiError } from '../src/utils/errors';
 
@@ -66,6 +67,14 @@ const emptyHomescreenData = {
   },
 };
 
+async function publishCollectionDisplays(storeId: string) {
+  await HomeLayout.create({
+    storeId,
+    sections: [{ type: 'collection_displays', position: 0, isVisible: true }],
+    publishedAt: new Date('2026-01-01T00:00:00.000Z'),
+  });
+}
+
 describe('HomescreenController tenant-scoped Storefront enrichment', () => {
   beforeEach(() => {
     storefrontService.getCollectionByIdWithClient.mockReset();
@@ -78,6 +87,7 @@ describe('HomescreenController tenant-scoped Storefront enrichment', () => {
 
   it('enriches collection displays through one tenant-scoped Storefront client per request', async () => {
     const storeId = new mongoose.Types.ObjectId().toString();
+    await publishCollectionDisplays(storeId);
     await CollectionDisplay.create([
       {
         storeId,
@@ -144,6 +154,7 @@ describe('HomescreenController tenant-scoped Storefront enrichment', () => {
 
   it('fails the homescreen response with a controlled error when store Storefront credentials are invalid', async () => {
     const storeId = new mongoose.Types.ObjectId().toString();
+    await publishCollectionDisplays(storeId);
     await CollectionDisplay.create({
       storeId,
       type: 'large_row',

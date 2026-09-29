@@ -22,11 +22,18 @@ export interface IHomeLayoutSection {
 }
 
 /**
- * Home layout document interface
+ * Home layout document interface.
+ *
+ * `sections` is the published snapshot the installed app reads.
+ * `draftSections` is the editor draft and is not served on the homescreen.
+ * `publishedAt` is set by an explicit publish. A non-empty `sections` list
+ * with no `publishedAt` is a legacy live layout.
  */
 export interface IHomeLayout extends Document {
   storeId: string;
   sections: IHomeLayoutSection[];
+  draftSections: IHomeLayoutSection[];
+  publishedAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -67,6 +74,14 @@ const HomeLayoutSchema: Schema = new Schema(
       index: true,
     },
     sections: [HomeLayoutSectionSchema],
+    draftSections: {
+      type: [HomeLayoutSectionSchema],
+      default: [],
+    },
+    publishedAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,
