@@ -14,7 +14,12 @@ import {
   IMobileStatusHistory
 } from '../types/index';
 import { ApiError } from '../utils/errors';
-import { decrypt } from '../utils/encryption';
+import {
+  isEncryptedShopifyAdminToken,
+  migratePlaintextShopifyAdminToken,
+  readStoredShopifyAdminToken,
+  ShopifyAdminTokenError,
+} from '../utils/shopifyTokenStorage';
 
 /**
  * Default currency for new user preferences.
@@ -90,16 +95,12 @@ export const getShopifyClientForStore = async (storeId: string): Promise<AxiosIn
       return null;
     }
 
-    // Try to decrypt the access token, fallback to raw token if not encrypted
-    let accessToken = store.shopify.accessToken;
-    const isEncrypted = accessToken.includes(':') && accessToken.split(':').length === 3;
-
-    if (isEncrypted) {
-      try {
-        accessToken = decrypt(store.shopify.accessToken);
-      } catch (decryptError) {
-        console.warn(`Failed to decrypt token for store ${storeId}, using raw token`);
-      }
+    // Legacy rows store a raw Admin token. New rows store an encrypted envelope.
+    // A failed decrypt must not send the ciphertext to Shopify.
+    const storedToken = store.shopify.accessToken;
+    const accessToken = readStoredShopifyAdminToken(storedToken);
+    if (!isEncryptedShopifyAdminToken(storedToken.trim())) {
+      await migratePlaintextShopifyAdminToken(storeId, storedToken);
     }
 
     return axios.create({
@@ -111,7 +112,13 @@ export const getShopifyClientForStore = async (storeId: string): Promise<AxiosIn
       timeout: 30000,
     });
   } catch (error) {
-    console.error('Error creating Shopify client:', error);
+    if (error instanceof ShopifyAdminTokenError) {
+      throw error;
+    }
+    console.error(
+      'Error creating Shopify client:',
+      error instanceof Error ? error.message : 'Unknown error'
+    );
     return null;
   }
 };

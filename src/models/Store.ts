@@ -154,7 +154,9 @@ const ShopifyConnectionSchema = new Schema<IShopifyConnection>(
     storefrontAccessToken: {
       type: String,
       sparse: true,
-      // Note: storefrontAccessToken is a public token (used in client-side), so select: false not needed
+      // Public Storefront token (used client-side), so it is not select:false.
+      // Readers also accept a legacy key of the same name with surrounding
+      // whitespace and copy it onto this field. Do not add a spaced path here.
     },
     scope: {
       type: String,
