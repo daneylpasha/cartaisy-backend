@@ -22,6 +22,10 @@ import Order from '../models/Order';
 import User from '../models/User';
 import Customer from '../models/Customer';
 import Store from '../models/Store';
+import {
+  readStoredShopifyAdminToken,
+  ShopifyAdminTokenError,
+} from '../utils/shopifyTokenStorage';
 
 const router = express.Router();
 
@@ -259,12 +263,10 @@ router.post('/shopify/fetch-location', ...ownedStoreChain, async (req: Request, 
       });
     }
 
-    // Import the decrypt function and getPrimaryLocationId
-    const { decrypt } = await import('../utils/encryption');
     const { getPrimaryLocationId } = await import('../services/shopifyOAuthService');
 
-    // Decrypt access token
-    const accessToken = decrypt(store.shopify.accessToken);
+    // Plaintext legacy tokens and encrypted envelopes both resolve here.
+    const accessToken = readStoredShopifyAdminToken(store.shopify.accessToken);
 
     // Fetch primary location
     const locationId = await getPrimaryLocationId(store.shopify.shop, accessToken);
@@ -287,7 +289,14 @@ router.post('/shopify/fetch-location', ...ownedStoreChain, async (req: Request, 
       data: { locationId }
     });
   } catch (error: any) {
-    console.error('Error fetching Shopify location:', error);
+    if (error instanceof ShopifyAdminTokenError) {
+      return res.status(error.statusCode).json({
+        success: false,
+        error: error.message,
+        code: error.code,
+      });
+    }
+    console.error('Error fetching Shopify location:', error instanceof Error ? error.message : 'Unknown error');
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to fetch Shopify location'

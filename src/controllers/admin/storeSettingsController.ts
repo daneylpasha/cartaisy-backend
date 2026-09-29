@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import Store from '../../models/Store';
 import * as shopifyOAuth from '../../services/shopifyOAuthService';
+import { ShopifyAdminTokenError } from '../../utils/shopifyTokenStorage';
 
 /**
  * Store Settings Admin Controller
@@ -262,8 +263,22 @@ export const syncFromShopify = async (req: Request, res: Response): Promise<void
       return;
     }
 
-    // Get access token
-    const accessToken = await shopifyOAuth.getAccessToken(storeId);
+    // Get access token. Legacy plaintext and encrypted envelopes both resolve.
+    // An unreadable envelope asks the merchant to reconnect instead of failing opaquely.
+    let accessToken: string | null;
+    try {
+      accessToken = await shopifyOAuth.getAccessToken(storeId);
+    } catch (error) {
+      if (error instanceof ShopifyAdminTokenError) {
+        res.status(error.statusCode).json({
+          success: false,
+          error: error.message,
+          code: error.code,
+        });
+        return;
+      }
+      throw error;
+    }
 
     if (!accessToken) {
       res.status(400).json({

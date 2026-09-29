@@ -12,6 +12,7 @@ import {
 } from '../services/catalogSyncService';
 import Store from '../models/Store';
 import { startOperationalWebhookRegistration } from '../services/shopifyWebhookSubscriptionService';
+import { ShopifyAdminTokenError } from '../utils/shopifyTokenStorage';
 
 /**
  * Shopify OAuth Controller
@@ -540,6 +541,14 @@ export const getCollections = async (req: AuthenticatedRequest, res: Response) =
       },
     });
   } catch (error) {
+    if (error instanceof ShopifyAdminTokenError) {
+      return res.status(error.statusCode).json({
+        success: false,
+        error: error.message,
+        code: error.code,
+      });
+    }
+
     console.error('Get collections error:', safeErrorMessage(error, 'Failed to fetch collections'));
     return res.status(500).json({
       success: false,

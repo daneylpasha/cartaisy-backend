@@ -21,6 +21,7 @@ import {
 import { authenticate, authorize } from '../middleware/auth';
 import { requireOwnedStoreContext } from '../middleware/storeOwnership';
 import { createStorefrontAccessToken } from '../services/shopifyOAuthService';
+import { ShopifyAdminTokenError } from '../utils/shopifyTokenStorage';
 import Product from '../models/Product';
 import Order from '../models/Order';
 
@@ -620,11 +621,22 @@ router.get('/test-connection', async (req: Request, res: Response) => {
       }
     });
   } catch (error) {
-    console.error('Shopify connection test failed:', error);
+    if (error instanceof ShopifyAdminTokenError) {
+      res.status(error.statusCode).json({
+        success: false,
+        error: error.message,
+        code: error.code,
+      });
+      return;
+    }
+    console.error(
+      'Shopify connection test failed:',
+      error instanceof Error ? error.message : 'Unknown error'
+    );
     res.status(500).json({
       success: false,
       error: 'Failed to connect to Shopify API',
-      details: error.message
+      details: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 });

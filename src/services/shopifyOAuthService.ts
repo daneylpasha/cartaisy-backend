@@ -1,7 +1,14 @@
 import crypto from 'crypto';
 import fetch from 'node-fetch';
 import Store from '../models/Store';
-import { encrypt, decrypt } from '../utils/encryption';
+import { encrypt } from '../utils/encryption';
+import {
+  isEncryptedShopifyAdminToken,
+  migratePlaintextShopifyAdminToken,
+  readStoredShopifyAdminToken,
+  ShopifyAdminTokenError,
+  unsetLegacyStorefrontAccessTokenKeys,
+} from '../utils/shopifyTokenStorage';
 import { getShopifyClientForStore } from './shopifyService';
 import { catalogSyncShopChangeUpdate } from './catalogSyncService';
 
@@ -765,37 +772,38 @@ export const createStorefrontAccessToken = async (
 };
 
 /**
- * Retrieves and decrypts access token for a store
+ * Resolves the Admin token for a store.
+ * Accepts a legacy plaintext token or an encrypted envelope, and rewrites
+ * plaintext to the envelope after a successful read.
  */
 export const getAccessToken = async (storeId: string): Promise<string | null> => {
   try {
-    const store = await Store.findById(storeId).select('shopify.accessToken shopify.isConnected');
+    const store = await Store.findById(storeId).select('+shopify.accessToken shopify.isConnected');
 
     if (!store || !store.shopify?.isConnected) {
       return null;
     }
 
-    const encryptedToken = store.shopify?.accessToken;
-    if (!encryptedToken) {
+    const storedToken = store.shopify?.accessToken;
+    if (!storedToken) {
       return null;
     }
 
-    // Decrypt the token
-    const decryptedToken = decrypt(encryptedToken);
-    return decryptedToken;
+    const accessToken = readStoredShopifyAdminToken(storedToken);
+    if (!isEncryptedShopifyAdminToken(storedToken.trim())) {
+      await migratePlaintextShopifyAdminToken(storeId, storedToken);
+    }
+    return accessToken;
   } catch (error) {
-    console.error('Get access token error:', error);
+    if (error instanceof ShopifyAdminTokenError) {
+      throw error;
+    }
+    console.error('Get access token error:', error instanceof Error ? error.message : 'Unknown error');
     return null;
   }
 };
 
-const readStoredAdminToken = (stored: string): string => {
-  const isEncrypted = stored.includes(':') && stored.split(':').length === 3;
-  if (!isEncrypted) {
-    return stored;
-  }
-  return decrypt(stored);
-};
+const readStoredAdminToken = (stored: string): string => readStoredShopifyAdminToken(stored);
 
 /**
  * Ask Shopify to revoke the current offline access token. A 401/404 means the
@@ -892,6 +900,8 @@ const clearShopifyCredentials = async (
     }
     throw new ShopifyOAuthError('Store not found', 404, 'store_not_found');
   }
+
+  await unsetLegacyStorefrontAccessTokenKeys(store._id);
   return true;
 };
 
@@ -986,7 +996,7 @@ export const getCollections = async (storeId: string): Promise<Collection[]> => 
     const accessToken = await getAccessToken(storeId);
 
     if (!shop || !accessToken) {
-      throw new Error('Missing shop or access token');
+      throw new ShopifyAdminTokenError();
     }
 
     const response = await fetch(
@@ -1039,7 +1049,13 @@ export const getCollections = async (storeId: string): Promise<Collection[]> => 
 
     return collections;
   } catch (error) {
-    console.error('Get collections error:', error);
+    if (error instanceof ShopifyAdminTokenError) {
+      throw error;
+    }
+    console.error(
+      'Get collections error:',
+      error instanceof Error ? error.message : 'Unknown error'
+    );
     throw new Error('Failed to fetch collections from Shopify');
   }
 };
