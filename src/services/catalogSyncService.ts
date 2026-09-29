@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import Store, { CatalogSyncState, ICatalogSync } from '../models/Store';
 import { performFullSync } from './syncService';
 import { BusinessLogicError, NotFoundError } from '../utils/errors';
+import { ShopifyAdminBillingError } from '../utils/shopifyAdminBilling';
 
 /**
  * Durable catalog sync status for the authenticated store (issue #154).
@@ -13,7 +14,10 @@ import { BusinessLogicError, NotFoundError } from '../utils/errors';
  *
  * Quiet retries: the first failure is retried immediately up to
  * `CATALOG_SYNC_QUIET_RETRIES` more times (three attempts total) before the
- * stored status becomes `failed`. Status stays `syncing` for those retries.
+ * stored status becomes `failed`. A Shopify billing or frozen-store failure
+ * (`ShopifyAdminBillingError`) is not retried: the run is stored as `failed`
+ * once, with a merchant-safe summary, and the error is rethrown.
+ * Status stays `syncing` for those retries.
  * The dashboard does not surface attempt numbers. Sync again waits for that
  * run. The connect callback does not. A `syncing` record older than
  * `CATALOG_SYNC_STALE_AFTER_MS` can be claimed again, so a process restart
@@ -508,6 +512,13 @@ const executeClaimedCatalogSync = async (
         data: await readPublicStatus(storeId),
       };
     } catch (error) {
+      if (error instanceof ShopifyAdminBillingError) {
+        console.error(
+          `Catalog sync stopped for store ${storeId} shop ${shop}: ${error.code}`
+        );
+        await markFailed(storeId, shop, error.message, attempt);
+        throw error;
+      }
       if (error instanceof CatalogSyncNotConnectedError || error instanceof CatalogSyncStoreNotFoundError) {
         throw error;
       }

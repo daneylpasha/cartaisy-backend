@@ -12,6 +12,10 @@ import {
 } from '../services/catalogSyncService';
 import Store from '../models/Store';
 import { startOperationalWebhookRegistration } from '../services/shopifyWebhookSubscriptionService';
+import {
+  ShopifyAdminBillingError,
+  shopifyAdminBillingErrorBody,
+} from '../utils/shopifyAdminBilling';
 import { ShopifyAdminTokenError } from '../utils/shopifyTokenStorage';
 
 /**
@@ -502,6 +506,24 @@ export const triggerSync = async (req: AuthenticatedRequest, res: Response) => {
       });
     }
 
+    if (error instanceof ShopifyAdminBillingError) {
+      console.error('Trigger sync error:', error.code);
+      const failedStoreId = req.storeId?.toString();
+      const status = failedStoreId ? await getCatalogSyncStatus(failedStoreId) : null;
+      return res.status(error.statusCode).json({
+        ...shopifyAdminBillingErrorBody(error),
+        ...(status
+          ? {
+              data: {
+                ...status,
+                storeId: failedStoreId,
+                tokenOwner: 'backend',
+              },
+            }
+          : {}),
+      });
+    }
+
     console.error('Trigger sync error: Failed to sync Shopify store');
     return res.status(500).json({
       success: false,
@@ -547,6 +569,11 @@ export const getCollections = async (req: AuthenticatedRequest, res: Response) =
         error: error.message,
         code: error.code,
       });
+    }
+
+    if (error instanceof ShopifyAdminBillingError) {
+      console.error('Get collections error:', error.code);
+      return res.status(error.statusCode).json(shopifyAdminBillingErrorBody(error));
     }
 
     console.error('Get collections error:', safeErrorMessage(error, 'Failed to fetch collections'));

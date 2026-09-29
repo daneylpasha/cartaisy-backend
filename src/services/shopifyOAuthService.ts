@@ -3,6 +3,11 @@ import fetch from 'node-fetch';
 import Store from '../models/Store';
 import { encrypt } from '../utils/encryption';
 import {
+  shopifyAdminBillingErrorFromGraphqlErrors,
+  shopifyAdminBillingErrorFromHttp,
+  ShopifyAdminBillingError,
+} from '../utils/shopifyAdminBilling';
+import {
   isEncryptedShopifyAdminToken,
   migratePlaintextShopifyAdminToken,
   readStoredShopifyAdminToken,
@@ -981,6 +986,20 @@ export const isConnected = async (storeId: string): Promise<boolean> => {
   }
 };
 
+const shopifyAdminErrorSnippet = async (response: {
+  text?: () => Promise<unknown>;
+}): Promise<string> => {
+  if (typeof response.text !== 'function') {
+    return '';
+  }
+  try {
+    const text = await response.text();
+    return typeof text === 'string' ? text.slice(0, 500) : '';
+  } catch {
+    return '';
+  }
+};
+
 /**
  * Fetches all collections from connected Shopify store
  */
@@ -1029,10 +1048,20 @@ export const getCollections = async (storeId: string): Promise<Collection[]> => 
     );
 
     if (!response.ok) {
+      const bodyText = response.status === 402 ? '' : await shopifyAdminErrorSnippet(response);
+      const billing = shopifyAdminBillingErrorFromHttp(response.status, response.statusText, bodyText);
+      if (billing) {
+        throw billing;
+      }
       throw new Error(`Shopify API error: ${response.statusText}`);
     }
 
     const data = (await response.json()) as any;
+
+    const billing = shopifyAdminBillingErrorFromGraphqlErrors(data?.errors);
+    if (billing) {
+      throw billing;
+    }
 
     if (data.errors) {
       throw new Error(`Shopify GraphQL error: ${data.errors[0]?.message}`);
@@ -1049,7 +1078,7 @@ export const getCollections = async (storeId: string): Promise<Collection[]> => 
 
     return collections;
   } catch (error) {
-    if (error instanceof ShopifyAdminTokenError) {
+    if (error instanceof ShopifyAdminTokenError || error instanceof ShopifyAdminBillingError) {
       throw error;
     }
     console.error(
