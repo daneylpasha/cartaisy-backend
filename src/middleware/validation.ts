@@ -1,16 +1,27 @@
-import { body, validationResult } from 'express-validator';
+import { body, ValidationChain, validationResult } from 'express-validator';
 import { Request, Response, NextFunction } from 'express';
+
+/**
+ * Auth emails are stored as trimmed lowercase strings.
+ * Google sign-in keeps the verified address, including Gmail dots.
+ * validator.js normalizeEmail() defaults gmail_remove_dots to true, so
+ * first.last@gmail.com becomes firstlast@gmail.com before lookup.
+ */
+const validateAuthEmail = (): ValidationChain =>
+  body('email')
+    .trim()
+    .notEmpty().withMessage('Email is required')
+    .isEmail().withMessage('Please provide a valid email address')
+    .customSanitizer((value: unknown) =>
+      typeof value === 'string' ? value.toLowerCase() : value
+    );
 
 /**
  * Validation rules for user registration
  * Only validates email and password - name will be added later via completeProfile
  */
 export const validateRegister = [
-  body('email')
-    .trim()
-    .notEmpty().withMessage('Email is required')
-    .isEmail().withMessage('Please provide a valid email address')
-    .normalizeEmail(),
+  validateAuthEmail(),
 
   body('password')
     .notEmpty().withMessage('Password is required')
@@ -23,12 +34,8 @@ export const validateRegister = [
  * Validation rules for user login
  */
 export const validateLogin = [
-  body('email')
-    .trim()
-    .notEmpty().withMessage('Email is required')
-    .isEmail().withMessage('Please provide a valid email address')
-    .normalizeEmail(),
-  
+  validateAuthEmail(),
+
   body('password')
     .notEmpty().withMessage('Password is required')
 ];
@@ -54,11 +61,7 @@ export const validateGoogleLogin = [
  * Validation rules for password reset request
  */
 export const validatePasswordReset = [
-  body('email')
-    .trim()
-    .notEmpty().withMessage('Email is required')
-    .isEmail().withMessage('Please provide a valid email address')
-    .normalizeEmail()
+  validateAuthEmail()
 ];
 
 /**
