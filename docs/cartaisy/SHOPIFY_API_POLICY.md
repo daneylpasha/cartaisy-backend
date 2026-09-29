@@ -217,6 +217,82 @@ These are the Shopify Partner app credentials for the OAuth flow. They are app-l
 
 `SHOPIFY_API_KEY` and `SHOPIFY_API_SECRET` are fallbacks for the client ID and secret when the `SHOPIFY_CLIENT_*` names are unset. `SHOPIFY_ACCESS_TOKEN` and `SHOPIFY_STOREFRONT_ACCESS_TOKEN` are legacy global env credentials. New merchant connects must not use them; the token for a store is `Store.shopify.accessToken`, encrypted, and readable only by store-scoped backend calls.
 
+## Install page: "The installation link for this app is invalid"
+
+Shopify shows that banner, with **Install** disabled, on the store admin Install app screen when the grant was opened from Cartaisy's authorize URL and the Dev Dashboard app is not released for that grant. The app name and scope groups still render, because Shopify resolved `client_id`. A wrong client id does not produce this screen.
+
+### URL the connect flow builds
+
+`POST /api/v1/shopify/oauth/connect` calls `getAuthorizationUrl` in `src/services/shopifyOAuthService.ts`. The dashboard does not build this URL. It redirects the browser to `authorizationUrl`.
+
+Exact URL:
+
+```text
+https://{shop}.myshopify.com/admin/oauth/authorize?client_id={SHOPIFY_CLIENT_ID}&scope={SHOPIFY_SCOPES}&redirect_uri={SHOPIFY_REDIRECT_URI}&state={one-time-hex}
+```
+
+| Query param | Source |
+| --- | --- |
+| `client_id` | `SHOPIFY_CLIENT_ID`, or `SHOPIFY_API_KEY` only when the client id is unset |
+| `scope` | `SHOPIFY_SCOPES`, unchanged except trimming the whole value |
+| `redirect_uri` | `SHOPIFY_REDIRECT_URI` |
+| `state` | 32 random bytes, hex. Only the SHA-256 hash is stored on that store |
+
+`{shop}` must already be `store-name.myshopify.com`. The normalizer lowercases, strips a scheme and path, and rejects any other host. A merchant who lands on that store's admin Install app page got past this check. Shopify's standalone authorization-code grant still uses this host and path (`shopify.dev`, "Authenticate a standalone or API-only app"). Do not switch the host to `admin.shopify.com` in code. The dashboard settings reconnect only accepts `https://*.myshopify.com/admin/oauth/authorize`.
+
+The same callback handler is mounted at both of these paths:
+
+- `https://cartaisy-backend-production.up.railway.app/api/v1/shopify/oauth/callback` (the one to allowlist)
+- `https://cartaisy-backend-production.up.railway.app/api/auth/shopify/oauth/callback`
+
+Production Railway service `cartaisy-backend` (project `charming-energy`) has only the service domain `https://cartaisy-backend-production.up.railway.app`. `www.cartaisy.com` is the marketing site, not the API and not the OAuth callback.
+
+### Why a real store is rejected
+
+This grant installs a store only when the **released** Dev Dashboard version has **Use legacy install flow** on. That is the authorization-code grant this backend completes at `GET /api/v1/shopify/oauth/callback`.
+
+Shopify rejects the same URL, with this banner and a disabled Install button, in these cases:
+
+- Distribution is **Custom**. The first install has to be Shopify's signed link, `https://admin.shopify.com/store/{handle}/oauth/install_custom_app?client_id=…&signature=…`, generated in the Dev Dashboard for that store. `/admin/oauth/authorize` is only for a later re-authorization. The signature is Shopify's, it is bound to that `permanent_domain`, and it expires in about seven days. This codebase cannot mint it.
+- No distribution method is selected, or the app was created in a merchant Dev Dashboard organization. Those apps install only on stores in that organization. A Partner dev store can succeed while a merchant store shows this banner. Staging OAuth on `cartaisy-basic-test.myshopify.com` (issue #116) does not prove a merchant store can install.
+- **Use legacy install flow** is off. The app is on Shopify managed installation, which does not accept this authorize URL. Non-embedded apps do not get an App Bridge session token, so managed installation is the wrong mode for this backend.
+- The version that has the redirect URL and the legacy-install flag was never released. A draft does not change the install grant.
+- For custom distribution, the person installing is staff rather than the store owner. Shopify shows the same banner.
+
+Custom distribution is one store, or the stores in one Plus organization, and the choice cannot be changed later. Public distribution is what lets any merchant install from the Cartaisy dashboard, after Shopify approves the App Store listing. Before approval, a public app still installs only on development stores.
+
+### Dev Dashboard checks
+
+Open the app in the Partner organization's Dev Dashboard (`partners.shopify.com` → Dev Dashboard). Match **Client ID** to production `SHOPIFY_CLIENT_ID`. Do not compare or copy the client secret into git, logs, or this doc.
+
+1. Confirm the app is in the Partner org, not under a store's own Dev Dashboard.
+2. Read the Distribution card.
+   - **Public**, and the listing is approved: keep the current authorize URL. Turn on legacy install flow and release, using the redirect URL below.
+   - **Custom**, or no method yet, and this app must connect unrelated merchant stores: create a new app in the Partner org, choose **Public**, and point Railway `SHOPIFY_CLIENT_ID` and `SHOPIFY_CLIENT_SECRET` at that app after the version below is released. Leave the old custom app in place for any store already bound to it.
+   - **Custom** and this install is the one bound store: do not use Connect in the dashboard for the first install. Generate the install link in the Dev Dashboard for that `myshopify.com` domain and open it as the store owner.
+3. Release an app version with all of the following. Embedded stays off, because the merchant UI is the Cartaisy dashboard, not an admin iframe.
+   - **Use legacy install flow**: on.
+   - **Allowed redirection URL**, one entry, no trailing slash: `https://cartaisy-backend-production.up.railway.app/api/v1/shopify/oauth/callback`
+   - Staging, if it uses the same app: `https://cartaisy-backend-staging-staging.up.railway.app/api/v1/shopify/oauth/callback`
+   - **App URL**: `https://cartaisy-backend-production.up.railway.app` or the dashboard origin. Not `https://www.cartaisy.com` unless that host is the dashboard.
+   - **Scopes**: every scope in `SHOPIFY_SCOPES`. The repo example is `read_products,read_orders,read_customers,write_products,write_orders,write_inventory`. The install screen group "Sensitive data, device and activity data" is protected customer data access on the app, separate from that scope string. Approve it before relying on customer webhooks.
+
+### Railway production values
+
+Service `cartaisy-backend`, environment `production`. These names are already set. Compare values in the Railway variables UI. Do not paste secrets here.
+
+| Variable | Expected value |
+| --- | --- |
+| `SHOPIFY_CLIENT_ID` | Client ID of the Partner app in the checks above. Not the secret, and not a store-admin custom app key (those apps have no redirect URL; issue #115). |
+| `SHOPIFY_CLIENT_SECRET` | Client secret of that same app. Rotate only in the Dev Dashboard, then update Railway and redeploy. |
+| `SHOPIFY_API_KEY` / `SHOPIFY_API_SECRET` | Unused while the `SHOPIFY_CLIENT_*` pair is set. If you clear that pair, these fallbacks must be the same app. |
+| `SHOPIFY_REDIRECT_URI` | `https://cartaisy-backend-production.up.railway.app/api/v1/shopify/oauth/callback` |
+| `SHOPIFY_SCOPES` | Comma-separated scopes with no spaces, and each one present on the released version. |
+| `SHOPIFY_OAUTH_RETURN_URL` | Dashboard page after connect, such as `https://<dashboard-origin>/dashboard/onboarding?step=connect`. Confirm the origin in Vercel. `www.cartaisy.com` is the marketing site. |
+| `SHOPIFY_API_VERSION` | Optional. Unset uses `2024-01`. |
+
+After the released version and Railway redirect URI match, Connect from the dashboard should leave the Install app screen with Install enabled. Shopify then redirects the browser to `SHOPIFY_REDIRECT_URI` with `code`, `hmac`, `shop`, `state`, and `timestamp`.
+
 ## Related docs/issues
 
 - GitHub issue: #50.
