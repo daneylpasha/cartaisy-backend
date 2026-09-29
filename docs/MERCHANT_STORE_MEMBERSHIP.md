@@ -67,13 +67,17 @@ A store id outside membership returns `403` with `Store access denied`. The acti
 
 `POST /api/v1/auth/stores`
 
-Store owners only (`role` `super_admin`). Team `admin` and `moderator` users receive `403`.
+This route ships with list and switch. It is how a merchant adds another app.
+
+Only a store owner may call it: account role `super_admin` and at least one store already in membership (including the backfill from `storeId`). Invited `admin` and `moderator` users receive `403`. A `super_admin` with no store receives `403`. There is no per-store role matrix in v1.
+
+An account can hold 10 stores. The next create returns `400`. An empty or whitespace name returns `400`. A name must be 2 to 100 characters.
 
 ```json
-{ "storeName": "Second app" }
+{ "name": "Second app" }
 ```
 
-`name` is accepted when `storeName` is omitted. The name must be 2 to 100 characters. The API creates a store the same way signup does for name and slug only (active, free plan record, default settings, Shopify not connected). It appends the new id to `storeIds`, sets it active, and does not create another user.
+`storeName` is also accepted. The API creates a new store the same way signup does for name and slug only (active, free plan record, default settings, Shopify not connected). The slug is unique and a collision is retried. Nothing is copied from the current store: no Shopify connection or tokens, no branding assets, no home layout, and no Apple or Google credentials. It appends the new id to `storeIds`, sets that id as the active `storeId`, and does not create another user. Onboarding after this call targets the new store.
 
 ```json
 {

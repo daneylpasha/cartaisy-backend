@@ -4,6 +4,7 @@ import Store from '../models/Store';
 import User, { IUserDocument } from '../models/User';
 import { AuthenticatedRequest } from '../types';
 import {
+  MAX_MERCHANT_STORES,
   buildStoreSlug,
   explicitStoreIds,
   membershipStoreIds,
@@ -204,10 +205,13 @@ export const switchActiveStore = async (req: AuthRequest, res: Response): Promis
   }
 };
 
+const SLUG_SAVE_ATTEMPTS = 3;
+
 /**
- * Store owners (role super_admin) can open another store on the same user.
- * Appends membership and makes the new store active. Does not create a second user
- * and does not return tokens.
+ * Store owners can open another store on the same user.
+ * A store owner is a `super_admin` who already belongs to at least one store.
+ * The new store is blank: nothing is copied from the current app.
+ * Appends membership, makes the new store active, and does not issue tokens.
  * POST /api/v1/auth/stores
  */
 export const createMerchantStore = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -217,10 +221,19 @@ export const createMerchantStore = async (req: AuthRequest, res: Response): Prom
       return;
     }
 
-    if (user.role !== 'super_admin') {
+    const membership = membershipStoreIds(user);
+    if (user.role !== 'super_admin' || membership.length === 0) {
       res.status(403).json({
         status: 'error',
         message: 'Only a store owner can create a store',
+      });
+      return;
+    }
+
+    if (membership.length >= MAX_MERCHANT_STORES) {
+      res.status(400).json({
+        status: 'error',
+        message: `A merchant account can have at most ${MAX_MERCHANT_STORES} stores`,
       });
       return;
     }
@@ -232,6 +245,13 @@ export const createMerchantStore = async (req: AuthRequest, res: Response): Prom
         ? body.name
         : '';
     const storeName = rawName.trim();
+    if (!storeName) {
+      res.status(400).json({
+        status: 'error',
+        message: 'Store name is required',
+      });
+      return;
+    }
     if (storeName.length < 2 || storeName.length > 100) {
       res.status(400).json({
         status: 'error',
@@ -242,8 +262,9 @@ export const createMerchantStore = async (req: AuthRequest, res: Response): Prom
 
     let created: { _id: Types.ObjectId; name: string; slug: string } | null = null;
     let lastError: unknown;
-    for (let attempt = 0; attempt < 2; attempt += 1) {
+    for (let attempt = 0; attempt < SLUG_SAVE_ATTEMPTS; attempt += 1) {
       try {
+        // Fresh signup store. Do not read or copy the caller's current store.
         const store = new Store({
           name: storeName,
           slug: buildStoreSlug(storeName),
@@ -266,7 +287,7 @@ export const createMerchantStore = async (req: AuthRequest, res: Response): Prom
         break;
       } catch (error) {
         lastError = error;
-        if (!isDuplicateKeyError(error) || attempt === 1) {
+        if (!isDuplicateKeyError(error) || attempt === SLUG_SAVE_ATTEMPTS - 1) {
           break;
         }
       }

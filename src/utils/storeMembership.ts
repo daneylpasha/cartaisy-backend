@@ -6,6 +6,9 @@ import { Types } from 'mongoose';
  * An empty membership with an active store is treated as `[storeId]`.
  */
 
+/** Soft cap for stores on one merchant account. Not a billing gate. */
+export const MAX_MERCHANT_STORES = 10;
+
 export interface StoreMembershipRecord {
   storeId?: unknown;
   storeIds?: unknown;

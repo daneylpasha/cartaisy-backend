@@ -1,7 +1,10 @@
 import express from 'express';
+import { Types } from 'mongoose';
 import request from 'supertest';
 import User from '../src/models/User';
 import Store from '../src/models/Store';
+import HomeLayout from '../src/models/HomeLayout';
+import StoreAppCredentials from '../src/models/StoreAppCredentials';
 import authRoutes from '../src/routes/authRoutes';
 import { generateToken } from '../src/utils/jwt';
 
@@ -193,6 +196,24 @@ describe('merchant store membership', () => {
 
   test('a store owner can create another store on the same user', async () => {
     const storeA = await createStore('owner-a', 'Owner A');
+    await Store.updateOne(
+      { _id: storeA._id },
+      {
+        $set: {
+          'branding.logoUrl': 'https://cdn.example.com/owner-a-only.png',
+          'branding.iconUrl': 'https://cdn.example.com/owner-a-icon.png',
+          'branding.splashUrl': 'https://cdn.example.com/owner-a-splash.png',
+          'branding.primaryColor': '#112233',
+          'shopify.shop': 'owner-a.myshopify.com',
+          'shopify.isConnected': true,
+        },
+      }
+    );
+    await HomeLayout.create({
+      storeId: storeA._id.toString(),
+      sections: [{ type: 'carousel', position: 0, isVisible: true }],
+    });
+    await StoreAppCredentials.create({ storeId: storeA._id });
     const owner = await User.create({
       name: 'Owner',
       email: 'owner-create@example.com',
@@ -212,6 +233,7 @@ describe('merchant store membership', () => {
       isVerified: true,
       storeId: storeA._id,
     });
+    await User.collection.updateOne({ _id: owner._id }, { $unset: { storeIds: '' } });
     const ownerToken = generateToken(owner._id.toString());
     const teammateToken = generateToken(teammate._id.toString());
 
@@ -253,6 +275,19 @@ describe('merchant store membership', () => {
       created.body.data.store.id,
     ]);
 
+    const fresh = await Store.findById(created.body.data.store.id).select('+shopify.accessToken');
+    expect(fresh?.shopify.isConnected).toBe(false);
+    expect(fresh?.shopify.accessToken).toBeUndefined();
+    expect(fresh?.shopify.shop).toBeUndefined();
+    expect(fresh?.branding?.logoUrl).toBeUndefined();
+    expect(fresh?.branding?.iconUrl).toBeUndefined();
+    expect(fresh?.branding?.splashUrl).toBeUndefined();
+    expect(fresh?.branding?.primaryColor).not.toBe('#112233');
+    expect(await HomeLayout.countDocuments({ storeId: created.body.data.store.id })).toBe(0);
+    expect(await StoreAppCredentials.countDocuments({ storeId: fresh?._id })).toBe(0);
+    expect(await HomeLayout.countDocuments({ storeId: storeA._id.toString() })).toBe(1);
+    expect(await StoreAppCredentials.countDocuments({ storeId: storeA._id })).toBe(1);
+
     const profile = await request(app)
       .get('/api/v1/auth/profile')
       .set('Authorization', `Bearer ${ownerToken}`);
@@ -265,5 +300,76 @@ describe('merchant store membership', () => {
       .send({ storeId: storeA._id.toString() });
     expect(blocked.status).toBe(400);
     expect((await User.findById(owner._id))?.storeId?.toString()).toBe(created.body.data.store.id);
+  });
+
+  test('create rejects an empty name, a full account, and a non-owner', async () => {
+    const store = await createStore('cap-store', 'Cap Store');
+    const owner = await User.create({
+      name: 'Capped Owner',
+      email: 'capped-owner@example.com',
+      password: 'password123',
+      role: 'super_admin',
+      isActive: true,
+      isVerified: true,
+      storeId: store._id,
+    });
+    const noStore = await User.create({
+      name: 'No Store',
+      email: 'no-store-owner@example.com',
+      password: 'password123',
+      role: 'super_admin',
+      isActive: true,
+      isVerified: true,
+    });
+    const moderator = await User.create({
+      name: 'Moderator',
+      email: 'moderator-create@example.com',
+      password: 'password123',
+      role: 'moderator',
+      isActive: true,
+      isVerified: true,
+      storeId: store._id,
+    });
+    const ownerToken = generateToken(owner._id.toString());
+
+    const empty = await request(app)
+      .post('/api/v1/auth/stores')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ name: '   ' });
+    expect(empty.status).toBe(400);
+    expect(empty.body.message).toBe('Store name is required');
+
+    const missing = await request(app)
+      .post('/api/v1/auth/stores')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({});
+    expect(missing.status).toBe(400);
+
+    const stranger = await request(app)
+      .post('/api/v1/auth/stores')
+      .set('Authorization', `Bearer ${generateToken(noStore._id.toString())}`)
+      .send({ name: 'Orphan App' });
+    expect(stranger.status).toBe(403);
+
+    const staff = await request(app)
+      .post('/api/v1/auth/stores')
+      .set('Authorization', `Bearer ${generateToken(moderator._id.toString())}`)
+      .send({ name: 'Staff App' });
+    expect(staff.status).toBe(403);
+
+    const membership = [
+      store._id,
+      ...Array.from({ length: 9 }, () => new Types.ObjectId()),
+    ];
+    await User.updateOne({ _id: owner._id }, { $set: { storeIds: membership } });
+
+    const capped = await request(app)
+      .post('/api/v1/auth/stores')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ name: 'Eleventh App' });
+    expect(capped.status).toBe(400);
+    expect(capped.body.message).toBe('A merchant account can have at most 10 stores');
+    expect(await Store.countDocuments({ name: 'Eleventh App' })).toBe(0);
+    expect((await User.findById(owner._id))?.storeId?.toString()).toBe(store._id.toString());
   });
 });
