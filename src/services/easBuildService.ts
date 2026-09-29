@@ -244,6 +244,7 @@ const markPlatform = async (input: {
   };
   const $unset: Record<string, string> = {};
 
+  // Omit installUrl to leave a stored link in place. Never write null over it.
   if (input.installUrl) {
     $set[`${prefix}.installUrl`] = input.installUrl;
   }
@@ -458,8 +459,55 @@ const pickBuildJob = (jobs: EasWorkflowJob[], platform: BuildPlatformName): EasW
 const expectedBuildPlatform = (platform: BuildPlatformName): string =>
   platform === 'android' ? 'ANDROID' : 'IOS';
 
-const installUrlFromBuild = (buildUrl: string | null, archiveUrl: string | null): string | null =>
-  safeExpoInstallUrl(buildUrl) ?? safeExpoInstallUrl(archiveUrl);
+const containsExpoToken = (value: string, token: string): boolean => {
+  const trimmed = token.trim();
+  return trimmed.length >= 8 && value.includes(trimmed);
+};
+
+const installUrlFromBuild = (
+  buildUrl: string | null,
+  archiveUrl: string | null,
+  token: string
+): string | null => {
+  const candidate = safeExpoInstallUrl(buildUrl) ?? safeExpoInstallUrl(archiveUrl);
+  if (!candidate || containsExpoToken(candidate, token)) {
+    return null;
+  }
+  return candidate;
+};
+
+/**
+ * A device can scan an internal-distribution build page. Store and simulator
+ * profiles still finish successfully, but Expo does not give them an install QR.
+ * When Expo omits distribution, a safe public URL is still accepted.
+ */
+const buildHasScannableInstall = (build: {
+  distribution: string | null;
+  isForIosSimulator: boolean;
+}): boolean => {
+  if (build.isForIosSimulator) {
+    return false;
+  }
+  if (!build.distribution) {
+    return true;
+  }
+  return build.distribution === 'INTERNAL';
+};
+
+const publicInstallUrl = (
+  build: {
+    distribution: string | null;
+    isForIosSimulator: boolean;
+    buildUrl: string | null;
+    applicationArchiveUrl: string | null;
+  },
+  token: string
+): string | null => {
+  if (!buildHasScannableInstall(build)) {
+    return null;
+  }
+  return installUrlFromBuild(build.buildUrl, build.applicationArchiveUrl, token);
+};
 
 const finishFromRun = async (input: {
   doc: IBuildRequest;
@@ -532,25 +580,13 @@ const finishFromRun = async (input: {
   }
 
   if (build.status === 'FINISHED') {
-    const installUrl = installUrlFromBuild(build.buildUrl, build.applicationArchiveUrl);
-    if (!installUrl) {
-      await markPlatform({
-        doc: input.doc,
-        platform: input.platform,
-        workflowRunId: input.run.id,
-        status: 'failed',
-        message: EAS_MERCHANT_MESSAGES.noInstallUrl,
-        now: input.now,
-        eas,
-      });
-      return;
-    }
+    const installUrl = publicInstallUrl(build, input.token);
     await markPlatform({
       doc: input.doc,
       platform: input.platform,
       workflowRunId: input.run.id,
       status: 'ready',
-      installUrl,
+      ...(installUrl ? { installUrl } : {}),
       now: input.now,
       eas,
     });

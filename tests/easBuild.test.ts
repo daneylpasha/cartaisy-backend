@@ -449,6 +449,8 @@ describe('EAS build automation (issue #182)', () => {
     buildUrl?: string | null;
     applicationArchiveUrl?: string | null;
     status?: string;
+    distribution?: string | null;
+    isForIosSimulator?: boolean;
   }) => ({
     status: 200,
     json: {
@@ -458,6 +460,8 @@ describe('EAS build automation (issue #182)', () => {
             id: input.buildId,
             status: input.status ?? 'FINISHED',
             platform: input.platform,
+            distribution: input.distribution === undefined ? 'INTERNAL' : input.distribution,
+            isForIosSimulator: input.isForIosSimulator ?? false,
             project: { id: input.projectId ?? PROJECT_ID },
             artifacts: {
               buildUrl:
@@ -516,6 +520,7 @@ describe('EAS build automation (issue #182)', () => {
       return buildRecord({
         buildId: BUILD_ANDROID,
         platform: 'ANDROID',
+        distribution: null,
         applicationArchiveUrl: archive,
       });
     });
@@ -649,6 +654,7 @@ describe('EAS build automation (issue #182)', () => {
       return buildRecord({
         buildId: BUILD_ANDROID,
         platform: 'ANDROID',
+        distribution: 'INTERNAL',
         buildUrl: unsafe,
         applicationArchiveUrl: 'https://example.com/app.apk',
       });
@@ -662,10 +668,204 @@ describe('EAS build automation (issue #182)', () => {
     await pollInFlightEasBuilds();
 
     const stored = await BuildRequest.findById(doc._id).lean();
-    expect(stored?.platforms.android.status).toBe('failed');
-    expect(stored?.platforms.android.message).toBe(EAS_MERCHANT_MESSAGES.noInstallUrl);
+    expect(stored?.platforms.android.status).toBe('ready');
+    expect(stored?.platforms.android.installUrl).toBeUndefined();
+    expect(stored?.platforms.android.message).toBeUndefined();
+    expect(stored?.platforms.android.eas?.buildId).toBe(BUILD_ANDROID);
     expect(JSON.stringify(stored)).not.toContain('shpat_');
     expect(JSON.stringify(stored)).not.toContain('example.com');
+    expect(JSON.stringify(stored)).not.toContain(EXPO_TOKEN);
+  });
+
+  test('does not store an install URL that contains the Expo token', async () => {
+    enableAutomation();
+    const unsafe = `https://expo.dev/accounts/cartaisy/projects/app/builds/${BUILD_ANDROID}?access=${EXPO_TOKEN}`;
+    mockFetch((call) => {
+      if (call.method === 'GET') {
+        return workflowSuccess(RUN_ANDROID, BUILD_ANDROID, 'ANDROID');
+      }
+      return buildRecord({
+        buildId: BUILD_ANDROID,
+        platform: 'ANDROID',
+        distribution: 'INTERNAL',
+        buildUrl: unsafe,
+        applicationArchiveUrl: null,
+      });
+    });
+
+    const doc = await seedBuilding({
+      storeId: storeAId,
+      requestedBy: adminAId,
+      workflowRunId: RUN_ANDROID,
+    });
+    await pollInFlightEasBuilds();
+
+    const stored = await BuildRequest.findById(doc._id).lean();
+    expect(stored?.platforms.android.status).toBe('ready');
+    expect(stored?.platforms.android.installUrl).toBeUndefined();
+    expect(JSON.stringify(stored)).not.toContain(EXPO_TOKEN);
+
+    const merchant = await request(app)
+      .get(`/api/v1/build-requests/${doc._id.toString()}`)
+      .set('Authorization', `Bearer ${adminAToken}`);
+    expect(merchant.body.data.platforms.android.installUrl).toBeNull();
+    assertNoSecrets(merchant.body);
+  });
+
+  test('leaves installUrl unset when a finished build has no public install URL', async () => {
+    enableAutomation();
+    const archive = 'https://artifacts.example.com/app.apk?X-Amz-Signature=secret-signature';
+    mockFetch((call) => {
+      if (call.method === 'GET') {
+        return workflowSuccess(RUN_ANDROID, BUILD_ANDROID, 'ANDROID');
+      }
+      return buildRecord({
+        buildId: BUILD_ANDROID,
+        platform: 'ANDROID',
+        distribution: 'INTERNAL',
+        buildUrl: null,
+        applicationArchiveUrl: archive,
+      });
+    });
+
+    const doc = await seedBuilding({
+      storeId: storeAId,
+      requestedBy: adminAId,
+      workflowRunId: RUN_ANDROID,
+    });
+    await pollInFlightEasBuilds();
+
+    const stored = await BuildRequest.findById(doc._id).lean();
+    expect(stored?.platforms.android.status).toBe('ready');
+    expect(stored?.platforms.android.installUrl).toBeUndefined();
+    expect(stored?.platforms.android.message).toBeUndefined();
+    expect(stored?.platforms.android.eas?.buildId).toBe(BUILD_ANDROID);
+    expect(JSON.stringify(stored)).not.toContain('secret-signature');
+    expect(JSON.stringify(stored)).not.toContain(EXPO_TOKEN);
+
+    const merchant = await request(app)
+      .get(`/api/v1/build-requests/${doc._id.toString()}`)
+      .set('Authorization', `Bearer ${adminAToken}`);
+    expect(merchant.status).toBe(200);
+    expect(merchant.body.data.platforms.android.status).toBe('ready');
+    expect(merchant.body.data.platforms.android.installUrl).toBeNull();
+    expect(JSON.stringify(merchant.body)).not.toContain(BUILD_ANDROID);
+    assertNoSecrets(merchant.body);
+  });
+
+  test('leaves installUrl unset for a store profile even when Expo returns a build page', async () => {
+    enableAutomation();
+    const page = `https://expo.dev/accounts/cartaisy/projects/app/builds/${BUILD_ANDROID}`;
+    mockFetch((call) => {
+      if (call.method === 'GET') {
+        return workflowSuccess(RUN_IOS, BUILD_ANDROID, 'IOS');
+      }
+      return buildRecord({
+        buildId: BUILD_ANDROID,
+        platform: 'IOS',
+        distribution: 'STORE',
+        buildUrl: page,
+      });
+    });
+
+    const doc = await seedBuilding({
+      storeId: storeAId,
+      requestedBy: adminAId,
+      platform: 'ios',
+      workflowRunId: RUN_IOS,
+    });
+    await pollInFlightEasBuilds();
+
+    const stored = await BuildRequest.findById(doc._id).lean();
+    expect(stored?.platforms.ios.status).toBe('ready');
+    expect(stored?.platforms.ios.installUrl).toBeUndefined();
+    expect(stored?.platforms.ios.eas?.buildId).toBe(BUILD_ANDROID);
+    expect(JSON.stringify(stored)).not.toContain(page);
+    expect(stored?.platforms.android.status).toBe('not_requested');
+  });
+
+  test('leaves installUrl unset for an iOS simulator build', async () => {
+    enableAutomation();
+    const page = `https://expo.dev/accounts/cartaisy/projects/app/builds/${BUILD_ANDROID}`;
+    mockFetch((call) => {
+      if (call.method === 'GET') {
+        return workflowSuccess(RUN_IOS, BUILD_ANDROID, 'IOS');
+      }
+      return buildRecord({
+        buildId: BUILD_ANDROID,
+        platform: 'IOS',
+        distribution: 'INTERNAL',
+        isForIosSimulator: true,
+        buildUrl: page,
+      });
+    });
+
+    const doc = await seedBuilding({
+      storeId: storeAId,
+      requestedBy: adminAId,
+      platform: 'ios',
+      workflowRunId: RUN_IOS,
+    });
+    await pollInFlightEasBuilds();
+
+    const stored = await BuildRequest.findById(doc._id).lean();
+    expect(stored?.platforms.ios.status).toBe('ready');
+    expect(stored?.platforms.ios.installUrl).toBeUndefined();
+    expect(JSON.stringify(stored)).not.toContain(page);
+  });
+
+  test('re-sync does not wipe a stored install URL when Expo omits it', async () => {
+    enableAutomation();
+    const installUrl = `https://expo.dev/accounts/cartaisy/projects/app/builds/${BUILD_ANDROID}`;
+    let exposeUrl = true;
+    mockFetch((call) => {
+      if (call.method === 'GET') {
+        return workflowSuccess(RUN_ANDROID, BUILD_ANDROID, 'ANDROID');
+      }
+      return buildRecord({
+        buildId: BUILD_ANDROID,
+        platform: 'ANDROID',
+        distribution: 'INTERNAL',
+        buildUrl: exposeUrl ? installUrl : null,
+        applicationArchiveUrl: exposeUrl
+          ? null
+          : `https://expo.dev/accounts/cartaisy/builds/${EXPO_TOKEN}`,
+      });
+    });
+
+    const doc = await seedBuilding({
+      storeId: storeAId,
+      requestedBy: adminAId,
+      workflowRunId: RUN_ANDROID,
+    });
+
+    await pollInFlightEasBuilds();
+    const first = await BuildRequest.findById(doc._id).lean();
+    expect(first?.platforms.android.status).toBe('ready');
+    expect(first?.platforms.android.installUrl).toBe(installUrl);
+
+    exposeUrl = false;
+    await pollInFlightEasBuilds();
+    const stillReady = await BuildRequest.findById(doc._id).lean();
+    expect(stillReady?.platforms.android.status).toBe('ready');
+    expect(stillReady?.platforms.android.installUrl).toBe(installUrl);
+
+    await BuildRequest.updateOne(
+      { _id: doc._id },
+      { $set: { 'platforms.android.status': 'building' } }
+    );
+    await pollInFlightEasBuilds();
+
+    const stored = await BuildRequest.findById(doc._id).lean();
+    expect(stored?.platforms.android.installUrl).toBe(installUrl);
+    expect(JSON.stringify(stored)).not.toContain(EXPO_TOKEN);
+
+    const merchant = await request(app)
+      .get(`/api/v1/build-requests/${doc._id.toString()}`)
+      .set('Authorization', `Bearer ${adminAToken}`);
+    expect(merchant.status).toBe(200);
+    expect(merchant.body.data.platforms.android.installUrl).toBe(installUrl);
+    assertNoSecrets(merchant.body);
   });
 
   test('sets a merchant-safe failure when the workflow fails', async () => {

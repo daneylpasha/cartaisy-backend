@@ -307,18 +307,21 @@ Required environment variables on the API process (see `.env.example`):
 
 The workflow file lives in that Expo project's git repository. It must declare `workflow_dispatch` inputs `platform` and `storeId` (strings). Optional string inputs, sent only when safe: `appName`, `storeSlug`, `iconUrl`, `splashUrl`. `platform` is `android` or `ios`. A run should include one `type: build` job for that platform. Icon and splash are omitted unless they are absolute `https` URLs with no token-shaped text. Shopify tokens are not selected and are not inputs.
 
-Dispatch calls `POST https://api.expo.dev/v2/workflows/dispatch`. About once a minute the API polls `GET /v2/workflows/runs/:id` and, on success, the build's Expo `artifacts.buildUrl` (or an expo.dev archive URL). The token is not written to logs or responses. EAS ids are stored on the platform and are not returned.
+Dispatch calls `POST https://api.expo.dev/v2/workflows/dispatch`. About once a minute the API polls `GET /v2/workflows/runs/:id` and, on success, the build's Expo `artifacts.buildUrl` (or an expo.dev / expo.io archive URL). The token is not written to logs, the install URL, or responses. EAS ids are stored on the platform and are not returned.
+
+A finished build sets the platform to `ready`. `installUrl` is set only when that URL is a public https page on `expo.dev` or `expo.io` and the build is a device install (Expo `distribution` is `INTERNAL`, or Expo omitted distribution). A store or simulator profile, an iOS simulator build, or a finished build with no safe public URL stays `ready` with `installUrl` unset. The poller does not invent a URL and does not replace a stored URL with null.
 
 | Outcome | Platform status | `installUrl` | `message` |
 | --- | --- | --- | --- |
 | Credentials missing or invalid | `queued` | unchanged | Automated builds are not configured yet. An operator can still attach an install link. |
 | EAS accepted the run | `building` | unchanged | omitted |
-| Workflow succeeded and the install link is an https expo.dev or expo.io URL for this project and platform | `ready` | that URL | omitted |
-| Dispatch failed, workflow failed, or no safe install link | `failed` | unchanged | A fixed merchant-safe sentence. Expo's error body is not copied. |
+| Workflow succeeded and Expo returned a safe public install URL for this project and platform | `ready` | that URL | omitted |
+| Workflow succeeded and Expo did not return a scannable public install URL | `ready` | unchanged | omitted |
+| Dispatch failed, workflow failed, or the build is not this project and platform | `failed` | unchanged | A fixed merchant-safe sentence. Expo's error body is not copied. |
 
-`message` is omitted when empty. A value that contains a token marker is omitted too. `ready` still does not require an install URL when ops set the status themselves.
+`message` is omitted when empty. A value that contains a token marker is omitted too. `ready` does not require an install URL.
 
-Platform ops `PATCH` of status or `installUrl` clears automation tracking for that platform. The poller will not replace a link ops already pasted. The manual paste rules below stay in force.
+Platform ops `PATCH` of status or `installUrl` clears automation tracking for that platform. The poller will not replace a link ops already pasted, and a later sync will not clear an install URL that automation already stored. The manual paste rules below stay in force.
 
 Per-store bundle ids remain follow-up work. Apple and Google credential storage is `STORE_CREDENTIALS_API.md`. EAS Submit is `STORE_SUBMIT_API.md`. This route does not read credentials and does not start a submit. This route does not create an Expo project per store.
 
