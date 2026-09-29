@@ -405,7 +405,10 @@ const StoreBrandingSchema = new Schema<IStoreBranding>(
     primaryColor: {
       type: String,
       trim: true,
-      default: '#FF6B6B',
+      // No path default. `null` on branding PATCH `$unset`s this field, and a
+      // default would be written back the next time the store document is
+      // saved, so the merchant could not return to an unset color. New stores
+      // still receive the branding subdocument's initial `#FF6B6B` below.
       match: [/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/, 'Primary color must be a valid hex color'],
     },
     secondaryColor: {
