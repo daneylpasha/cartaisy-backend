@@ -374,4 +374,24 @@ describe('POST /api/v1/auth/google', () => {
     expect(response.body.code).toBeUndefined();
     expect(mockVerifyIdToken).not.toHaveBeenCalled();
   });
+
+  test('matches a merchant stored with Gmail dots', async () => {
+    const store = await createStore('gmail-dots-store', 'Gmail Dots');
+    const user = await User.create({
+      name: 'Daniyal Pasha',
+      email: 'daniyal.pasha7@gmail.com',
+      password: 'password123',
+      role: 'admin',
+      isActive: true,
+      isVerified: true,
+      storeId: store._id,
+    });
+    mockTicket(verifiedPayload('daniyal.pasha7@gmail.com', { sub: 'sub-gmail-dots' }));
+
+    const response = await request(app).post('/api/v1/auth/google').send({ idToken: ID_TOKEN });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.user.id).toBe(user._id.toString());
+    expect(response.body.data.user.email).toBe('daniyal.pasha7@gmail.com');
+  });
 });
