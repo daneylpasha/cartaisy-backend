@@ -5,7 +5,12 @@ import PromoBanner from '../models/PromoBanner';
 import CollectionDisplay from '../models/CollectionDisplay';
 import CategoryCollectionGrid from '../models/CategoryCollectionGrid';
 import CollectionShowcase from '../models/CollectionShowcase';
-import HomeLayout, { DEFAULT_HOME_SECTIONS, IHomeLayoutSection } from '../models/HomeLayout';
+import HomeLayout, { DEFAULT_HOME_SECTIONS, IHomeLayoutSection, SectionType } from '../models/HomeLayout';
+import {
+  backfillLegacyHomeLayoutPublishedAt,
+  homeLayoutIsLive,
+  publishedLayoutSections,
+} from '../services/homeLayoutPublishService';
 
 import shopifyStorefront, { ShopifyStorefrontClient } from '../services/shopifyStorefrontService';
 import productEnrichment from '../services/productEnrichmentService';
@@ -63,7 +68,23 @@ export class HomescreenController {
       };
     }
     try {
-      // Fetch MongoDB data and layout in parallel
+      // Publish state gates the live home. Draft sections are never served.
+      // No saved sections and no publishedAt is the smart-default path: empty
+      // module stacks, same as a store that has never published a home.
+      const storedLayout = await HomeLayout.findOne({ storeId }).lean();
+      const homeLayout = await backfillLegacyHomeLayoutPublishedAt(storeId, storedLayout);
+      if (!homeLayoutIsLive(homeLayout?.publishedAt, homeLayout?.sections)) {
+        return this.unpublishedHomescreen();
+      }
+
+      const sections: IHomeLayoutSection[] = publishedLayoutSections(
+        homeLayout?.publishedAt,
+        homeLayout?.sections
+      );
+      const visibleTypes = new Set<SectionType>(
+        sections.filter((section) => section.isVisible === true).map((section) => section.type)
+      );
+
       const [
         carousel,
         categoryGrid,
@@ -72,32 +93,32 @@ export class HomescreenController {
         collectionDisplaysRaw,
         categoryCollectionGrid,
         collectionShowcases,
-        homeLayout,
       ] = await Promise.all([
-        this.getCarouselData(storeId),
-        this.getCategoryGrid(storeId),
-        this.getCalloutBanners(storeId),
-        this.getPromoBanners(storeId),
-        this.getCollectionDisplaysRaw(storeId),
-        this.getCategoryCollectionGrid(storeId),
-        this.getCollectionShowcases(storeId),
-        HomeLayout.findOne({ storeId }).lean(),
+        visibleTypes.has('carousel') ? this.getCarouselData(storeId) : Promise.resolve([]),
+        visibleTypes.has('category_grid') ? this.getCategoryGrid(storeId) : Promise.resolve([]),
+        visibleTypes.has('callout_banners') ? this.getCalloutBanners(storeId) : Promise.resolve([]),
+        visibleTypes.has('promo_banners') ? this.getPromoBanners(storeId) : Promise.resolve([]),
+        visibleTypes.has('collection_displays')
+          ? this.getCollectionDisplaysRaw(storeId)
+          : Promise.resolve([]),
+        visibleTypes.has('category_collection_grid')
+          ? this.getCategoryCollectionGrid(storeId)
+          : Promise.resolve([]),
+        visibleTypes.has('collection_showcases')
+          ? this.getCollectionShowcases(storeId)
+          : Promise.resolve([]),
       ]);
 
-      // Fetch Shopify collections for collectionDisplays
-      const collectionDisplays = await this.enrichCollectionDisplays(storeId, collectionDisplaysRaw);
+      // Fetch Shopify collections only for a visible published section
+      const collectionDisplays = visibleTypes.has('collection_displays')
+        ? await this.enrichCollectionDisplays(storeId, collectionDisplaysRaw)
+        : [];
 
-      // Get layout sections from database or use defaults
-      const sections: IHomeLayoutSection[] = homeLayout?.sections || DEFAULT_HOME_SECTIONS;
-
-      // Sort by position and convert to response format
-      const layout: LayoutSection[] = [...sections]
-        .sort((a, b) => a.position - b.position)
-        .map((s) => ({
-          type: s.type,
-          position: s.position,
-          isVisible: s.isVisible,
-        }));
+      const layout: LayoutSection[] = sections.map((s) => ({
+        type: s.type,
+        position: s.position,
+        isVisible: s.isVisible,
+      }));
 
       const data: HomescreenData = {
         carousel,
@@ -160,6 +181,36 @@ export class HomescreenController {
         },
       };
     }
+  }
+
+  /**
+   * Empty module stacks. The installed app treats this as "no published home"
+   * and renders its smart default instead of active module documents.
+   */
+  private unpublishedHomescreen(): HomescreenResponse {
+    return {
+      success: true,
+      data: {
+        carousel: [],
+        categoryGrid: [],
+        calloutBanners: [],
+        promoBanners: [],
+        collectionDisplays: [],
+        categoryCollectionGrid: [],
+        collectionShowcases: [],
+        layout: [],
+        metadata: {
+          carouselItemsCount: 0,
+          categoryGridItemsCount: 0,
+          calloutBannersCount: 0,
+          promoBannersCount: 0,
+          collectionDisplaysCount: 0,
+          categoryCollectionGridCount: 0,
+          collectionShowcasesCount: 0,
+          lastUpdated: new Date().toISOString(),
+        },
+      },
+    };
   }
 
   /**
