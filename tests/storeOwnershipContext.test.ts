@@ -116,10 +116,10 @@ describe('requireOwnedStoreContext', () => {
     expect(res.status).toHaveBeenCalledWith(403);
   });
 
-  it('lets a super admin target another store and sets req.storeId from the request', async () => {
+  it('lets a super admin target a membership store and sets req.storeId from the request', async () => {
     const req = createRequest(
       { query: { storeId: otherStoreId.toString() } },
-      { role: 'super_admin' }
+      { role: 'super_admin', storeIds: [ownedStoreId, otherStoreId] }
     );
     const res = createResponse();
     const next = jest.fn() as NextFunction;
@@ -129,6 +129,60 @@ describe('requireOwnedStoreContext', () => {
     expect(next).toHaveBeenCalledTimes(1);
     // Must be the requested store, never the super admin's own store
     expect(req.storeId).toBe(otherStoreId.toString());
+  });
+
+  it('rejects a super admin who targets a store outside membership', async () => {
+    const req = createRequest(
+      { query: { storeId: otherStoreId.toString() } },
+      { role: 'super_admin', storeIds: [ownedStoreId] }
+    );
+    const res = createResponse();
+    const next = jest.fn() as NextFunction;
+
+    await requireOwnedStoreContext()(req, res, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.json).toHaveBeenCalledWith({ success: false, error: 'Store access denied' });
+  });
+
+  it('allows a platform operator to target a store outside membership', async () => {
+    const req = createRequest(
+      { query: { storeId: otherStoreId.toString() } },
+      { role: 'super_admin', storeIds: [ownedStoreId], isPlatformOperator: true }
+    );
+    const res = createResponse();
+    const next = jest.fn() as NextFunction;
+
+    await requireOwnedStoreContext()(req, res, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(req.storeId).toBe(otherStoreId.toString());
+  });
+
+  it('keeps an admin on the active store when another membership store is requested', async () => {
+    const req = createRequest(
+      { query: { storeId: otherStoreId.toString() } },
+      { storeIds: [ownedStoreId, otherStoreId] }
+    );
+    const res = createResponse();
+    const next = jest.fn() as NextFunction;
+
+    await requireOwnedStoreContext()(req, res, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(403);
+  });
+
+  it('scopes a super admin with membership to the active store when the store id is omitted', async () => {
+    const req = createRequest({}, { role: 'super_admin', storeIds: [ownedStoreId] });
+    const res = createResponse();
+    const next = jest.fn() as NextFunction;
+
+    await requireOwnedStoreContext({ required: false })(req, res, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(req.storeId).toBe(ownedStoreId.toString());
   });
 
   it('rejects a super admin who omits the store ID on a required-store route, even with an own storeId', async () => {

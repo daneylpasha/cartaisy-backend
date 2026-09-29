@@ -1,6 +1,7 @@
 import { Response, NextFunction } from 'express';
 import User from '../models/User';
 import { AuthenticatedRequest } from '../types';
+import { isStoreMember, membershipStoreIds } from '../utils/storeMembership';
 
 /**
  * Store Authentication Middleware
@@ -25,7 +26,7 @@ export const storeAuth = async (
     }
 
     // Get user with storeId
-    const user = await User.findById(req.user._id).select('storeId role isActive');
+    const user = await User.findById(req.user._id).select('storeId storeIds role isActive');
 
     if (!user) {
       res.status(401).json({
@@ -47,6 +48,14 @@ export const storeAuth = async (
       res.status(403).json({
         success: false,
         error: 'No store access. Please contact administrator.'
+      });
+      return;
+    }
+
+    if (membershipStoreIds(user).length > 0 && !isStoreMember(user, user.storeId)) {
+      res.status(403).json({
+        success: false,
+        error: 'Store access denied'
       });
       return;
     }

@@ -1,6 +1,8 @@
 import { Response, NextFunction } from 'express';
 import { Types } from 'mongoose';
 import { AuthenticatedRequest } from '../types';
+import { hasPlatformOpsAccess } from './platformOps';
+import { membershipStoreIds, normalizeStoreId } from '../utils/storeMembership';
 
 interface StoreOwnershipOptions {
   paramName?: string;
@@ -27,11 +29,42 @@ const normalizeObjectId = (value: unknown): string | null => {
 };
 
 /**
+ * True when this user must not open `storeId`.
+ * Platform operators keep cross-store access. A super admin with no membership
+ * (no storeId and no storeIds) keeps the previous cross-store allowance.
+ * Everyone else is limited to membership, with empty membership treated as `[storeId]`.
+ */
+const deniesStoreMembership = (
+  user: NonNullable<AuthenticatedRequest['user']>,
+  storeId: string
+): boolean => {
+  if (hasPlatformOpsAccess(user)) {
+    return false;
+  }
+
+  const membership = membershipStoreIds(user);
+  if (membership.length === 0) {
+    return false;
+  }
+
+  return !membership.includes(storeId);
+};
+
+const denyStoreAccess = (res: Response): void => {
+  res.status(403).json({
+    success: false,
+    error: 'Store access denied',
+  });
+};
+
+/**
  * Ensures an authenticated admin/staff user can only access their own :storeId.
  *
- * Super admins are allowed to target the requested store explicitly, and req.storeId
- * is always set from the validated route param so downstream handlers use the same
- * effective store context.
+ * Admin and moderator users must match the active storeId. A super admin may target
+ * another store only when it is in their membership (`storeIds`, or `[storeId]` when
+ * membership is empty). Platform operators keep cross-store access. A super admin
+ * with no membership keeps the previous cross-store allowance. req.storeId is set
+ * from the validated route param.
  */
 export const requireOwnedStoreParam = (options: StoreOwnershipOptions = {}) => {
   const paramName = options.paramName || 'storeId';
@@ -71,6 +104,10 @@ export const requireOwnedStoreParam = (options: StoreOwnershipOptions = {}) => {
       req.userRole = req.user.role;
 
       if (allowSuperAdmin && req.user.role === 'super_admin') {
+        if (deniesStoreMembership(req.user, requestedStoreId)) {
+          denyStoreAccess(res);
+          return;
+        }
         req.storeId = requestedStoreId;
         next();
         return;
@@ -78,10 +115,12 @@ export const requireOwnedStoreParam = (options: StoreOwnershipOptions = {}) => {
 
       const ownedStoreId = normalizeObjectId(req.user.storeId);
       if (!ownedStoreId || ownedStoreId !== requestedStoreId) {
-        res.status(403).json({
-          success: false,
-          error: 'Store access denied',
-        });
+        denyStoreAccess(res);
+        return;
+      }
+
+      if (deniesStoreMembership(req.user, requestedStoreId)) {
+        denyStoreAccess(res);
         return;
       }
 
@@ -157,9 +196,23 @@ export const requireOwnedStoreContext = (options: StoreContextOptions = {}) => {
 
       if (allowSuperAdmin && req.user.role === 'super_admin') {
         if (requestedStoreId) {
+          if (deniesStoreMembership(req.user, requestedStoreId)) {
+            denyStoreAccess(res);
+            return;
+          }
           req.storeId = requestedStoreId;
         } else if (!required) {
-          req.storeId = undefined;
+          const membership = membershipStoreIds(req.user);
+          const activeStoreId = normalizeStoreId(req.user.storeId);
+          if (!hasPlatformOpsAccess(req.user) && membership.length > 0) {
+            if (!activeStoreId || !membership.includes(activeStoreId)) {
+              denyStoreAccess(res);
+              return;
+            }
+            req.storeId = activeStoreId;
+          } else {
+            req.storeId = undefined;
+          }
         } else {
           // Super admins must always name the target store explicitly;
           // never silently fall back to their own record
@@ -175,10 +228,12 @@ export const requireOwnedStoreContext = (options: StoreContextOptions = {}) => {
 
       const ownedStoreId = normalizeObjectId(req.user.storeId);
       if (!ownedStoreId || (requestedStoreId && requestedStoreId !== ownedStoreId)) {
-        res.status(403).json({
-          success: false,
-          error: 'Store access denied',
-        });
+        denyStoreAccess(res);
+        return;
+      }
+
+      if (deniesStoreMembership(req.user, ownedStoreId)) {
+        denyStoreAccess(res);
         return;
       }
 

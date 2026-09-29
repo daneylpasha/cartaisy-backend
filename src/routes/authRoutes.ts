@@ -12,6 +12,11 @@ import {
   deleteAccount,
   refreshToken
 } from '../controllers/authController';
+import {
+  createMerchantStore,
+  listMerchantStores,
+  switchActiveStore,
+} from '../controllers/merchantStoreMembershipController';
 import { authenticate } from '../middleware/auth';
 import {
   validateRegister,
@@ -120,6 +125,37 @@ router.post(
   '/refresh-token',
   authLimiter,
   refreshToken
+);
+
+const createStoreLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  skip: skipPasswordResetLimitInTests,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    status: 'error',
+    message: 'Too many store creation attempts. Please try again later.'
+  }
+});
+
+/**
+ * Merchant multi-store membership. The caller's JWT stays valid across switch.
+ */
+router.get('/stores', authenticate as any, listMerchantStores as any);
+
+router.post(
+  '/stores/switch',
+  authenticate as any,
+  authLimiter,
+  switchActiveStore as any
+);
+
+router.post(
+  '/stores',
+  authenticate as any,
+  createStoreLimiter,
+  createMerchantStore as any
 );
 
 /**

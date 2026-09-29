@@ -499,6 +499,9 @@ export class AuthController extends Controller {
       }
 
       // Define restricted fields that cannot be updated through this API
+      // Active store and membership change only through the store switch API.
+      const readOnlyFields = ['storeId', 'storeIds'];
+
       const restrictedFields = [
         '_id',
         'email',
@@ -507,6 +510,7 @@ export class AuthController extends Controller {
         'isVerified',
         'isActive',
         'isPlatformOperator',
+        ...readOnlyFields,
         'passwordResetToken',
         'passwordResetExpires',
         'passwordChangedAt',
@@ -686,7 +690,8 @@ export class AuthController extends Controller {
 
       // Add all non-restricted fields from the user object
       Object.keys(userObj).forEach(key => {
-        if (!restrictedFields.includes(key) && !key.startsWith('_')) {
+        const hidden = restrictedFields.includes(key) && !readOnlyFields.includes(key);
+        if (!hidden && !key.startsWith('_')) {
           responseData[key] = (userObj as any)[key];
         }
       });

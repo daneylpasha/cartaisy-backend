@@ -337,6 +337,34 @@ describe('POST /api/v1/auth/google', () => {
     });
   });
 
+  test('does not 409 when one merchant user belongs to multiple stores', async () => {
+    const storeA = await createStore('multi-app-a', 'App A');
+    const storeB = await createStore('multi-app-b', 'App B');
+    const user = await User.create({
+      name: 'Multi App',
+      email: 'multi-app@example.com',
+      password: 'password123',
+      role: 'super_admin',
+      isActive: true,
+      isVerified: true,
+      storeId: storeA._id,
+      storeIds: [storeA._id, storeB._id],
+    });
+    mockTicket(verifiedPayload('multi-app@example.com', { sub: 'sub-multi-app' }));
+
+    const response = await request(app).post('/api/v1/auth/google').send({ idToken: ID_TOKEN });
+
+    expect(response.status).toBe(200);
+    expect(response.body.code).toBeUndefined();
+    expect(response.body.data.user.storeId).toBe(storeA._id.toString());
+    expect(response.body.data.user.storeIds).toEqual([
+      storeA._id.toString(),
+      storeB._id.toString(),
+    ]);
+    expect(await User.countDocuments({ email: 'multi-app@example.com' })).toBe(1);
+    expect((await User.findById(user._id))?.storeId?.toString()).toBe(storeA._id.toString());
+  });
+
   test('returns AMBIGUOUS_MERCHANT_ACCOUNT when two dashboard users share the email', async () => {
     const storeA = await createStore('ambiguous-a', 'Store A');
     const storeB = await createStore('ambiguous-b', 'Store B');

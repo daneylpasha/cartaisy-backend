@@ -67,6 +67,53 @@ describe('requireOwnedStoreParam', () => {
     });
   });
 
+  it('rejects a super admin who requests a store outside membership', async () => {
+    const req = createRequest(otherStoreId.toString(), {
+      role: 'super_admin',
+      storeIds: [ownedStoreId],
+    });
+    const res = createResponse();
+    const next = jest.fn() as NextFunction;
+
+    await requireOwnedStoreParam()(req, res, next);
+
+    expect(next).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.json).toHaveBeenCalledWith({
+      success: false,
+      error: 'Store access denied',
+    });
+  });
+
+  it('allows a super admin to open another store in membership', async () => {
+    const req = createRequest(otherStoreId.toString(), {
+      role: 'super_admin',
+      storeIds: [ownedStoreId, otherStoreId],
+    });
+    const res = createResponse();
+    const next = jest.fn() as NextFunction;
+
+    await requireOwnedStoreParam()(req, res, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(req.storeId).toBe(otherStoreId.toString());
+  });
+
+  it('allows a platform operator to open a store outside membership', async () => {
+    const req = createRequest(otherStoreId.toString(), {
+      role: 'super_admin',
+      storeIds: [ownedStoreId],
+      isPlatformOperator: true,
+    });
+    const res = createResponse();
+    const next = jest.fn() as NextFunction;
+
+    await requireOwnedStoreParam()(req, res, next);
+
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(req.storeId).toBe(otherStoreId.toString());
+  });
+
   it('allows super admins to target the requested store and uses that store as req.storeId', async () => {
     const req = createRequest(otherStoreId.toString(), {
       role: 'super_admin',
