@@ -1,6 +1,6 @@
 # Backend Status
 
-Last updated: 2026-09-28 (issue #174 public store config icon and splash).
+Last updated: 2026-09-29 (issue #200 clear branding colors).
 
 This file is a human/agent-maintained snapshot, not an automatically guaranteed source of truth. Verify current behavior in code, tests, CI, and deployed environments before making implementation decisions.
 
@@ -164,6 +164,12 @@ Token-shaped URLs (`shpat_`, `shpss_`, `shpca_`, `shpct_`, `shpua_`, `access_tok
 Public `GET /api/v1/store/config` (issue #174) reads `iconUrl` and `splashUrl` from the same `Store.branding` document as `logoUrl` and the colors. The response includes the read aliases `appIconUrl` and `splashImageUrl` when the URL is valid. Validation matches `logoUrl`: absolute `http` or `https` only. Invalid, unset, and token-shaped values are omitted rather than returned as `null`, and a bad value does not fail the request. The query still selects `settings`, `name`, `isActive`, and `branding` for the store named by `X-Store-ID`. Decision: `docs/DECISIONS.md` ("App icon and splash live on store branding").
 
 Platform ops `GET /api/v1/admin/build-requests` (issue #177) reads those same icon and splash fields for EAS handoff. That response is stricter: absolute `https` only, and missing or unsafe values are `null`. See the build-request section above.
+
+## Branding color clear
+
+Issue #200. `PATCH /api/v1/admin/stores/:storeId/branding` can clear `primaryColor` and `secondaryColor` independently. JSON `null` removes that field. A missing key is left as stored. A valid hex is saved. Any other value, including `""`, is `400`. The cleared field stays absent: `primaryColor` has no schema path default, so loading and saving the store does not write `#FF6B6B` back over the clear.
+
+Admin `GET` and the PATCH response return `null` for a cleared color, next to the other branding fields. Public `GET /api/v1/store/config` omits a cleared color, the same as a color that was never stored, so the app uses its bundled default. Store ownership on the route is unchanged. New stores may still be created with the branding subdocument's initial `#FF6B6B` until that color is cleared. Decision: `docs/DECISIONS.md` ("Runtime branding with build-time brand defaults").
 
 ## Related docs/issues
 

@@ -82,7 +82,7 @@ const uploadFilename = (kind: 'logo' | 'icon' | 'splash', originalName: string):
 
 interface BrandingResponseData {
   logoUrl: string | null;
-  primaryColor: string;
+  primaryColor: string | null;
   secondaryColor: string | null;
   iconUrl: string | null;
   appIconUrl: string | null;
@@ -90,14 +90,28 @@ interface BrandingResponseData {
   splashImageUrl: string | null;
 }
 
+/**
+ * A stored hex is returned as-is. An absent color is `null` so the dashboard
+ * can tell a cleared override from a saved hex. Callers that still want a
+ * swatch fall back locally. Public `/store/config` omits the field instead.
+ */
+const readBrandColor = (value: unknown): string | null => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
 const brandingResponse = (branding?: IStoreBranding | null): BrandingResponseData => {
   const iconUrl = readBrandImageUrl(branding?.iconUrl);
   const splashUrl = readBrandImageUrl(branding?.splashUrl);
 
   return {
     logoUrl: readBrandImageUrl(branding?.logoUrl),
-    primaryColor: branding?.primaryColor || '#FF6B6B',
-    secondaryColor: branding?.secondaryColor || null,
+    primaryColor: readBrandColor(branding?.primaryColor),
+    secondaryColor: readBrandColor(branding?.secondaryColor),
     iconUrl,
     appIconUrl: iconUrl,
     splashUrl,
@@ -161,19 +175,15 @@ export const getStoreBranding = async (req: Request, res: Response): Promise<voi
  * Image URLs in this body are ignored.
  *
  * Contract for `primaryColor`/`secondaryColor` in the request body, each
- * evaluated independently (see cartaisy-dashboard PR #13's
- * docs/ARCHITECTURE.md known-gap entry this closes):
- *   - Key absent from the body entirely  -> field is left untouched (today's
- *     existing "not provided" behavior, unchanged).
- *   - Key present, a valid hex string    -> field is set to that value
- *     (today's existing behavior, unchanged).
- *   - Key present, JSON `null`           -> field is explicitly cleared via
- *     `$unset` (new — this is what this ticket adds).
- *   - Key present, any other falsy value ("", 0, false) -> 400, same as the
- *     existing hex-validation-failure path for a malformed string. Empty
- *     string is deliberately NOT treated as "clear" — only an explicit
- *     `null` means that, so there's no ambiguity between "the caller
- *     cleared the input" and "the caller sent nothing."
+ * evaluated independently:
+ *   - Key absent from the body entirely  -> field is left untouched.
+ *   - Key present, a valid hex string    -> field is set to that value.
+ *   - Key present, JSON `null`           -> field is removed with `$unset`.
+ *     Admin GET and this response then return `null` for that color. Public
+ *     `/store/config` omits it, same as a color that was never stored, so
+ *     mobile uses its bundled default.
+ *   - Key present, any other value ("", 0, false, "red") -> 400. Empty
+ *     string is not a clear. Only JSON `null` removes the color.
  */
 export const updateStoreBranding = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -256,9 +266,12 @@ export const updateStoreBranding = async (req: Request, res: Response): Promise<
       update.$unset = unsetFields;
     }
 
-    const store = await Store.findByIdAndUpdate(storeId, update, { new: true }).select(
-      'branding name'
-    );
+    // lean() so a hydrated schema default cannot paint a cleared color back
+    // onto the response. The path itself has no default; this keeps the
+    // payload equal to what GET reads from MongoDB.
+    const store = await Store.findByIdAndUpdate(storeId, update, { new: true })
+      .select('branding name')
+      .lean();
 
     if (!store) {
       res.status(404).json({

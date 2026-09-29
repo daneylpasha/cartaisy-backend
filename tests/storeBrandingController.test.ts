@@ -46,9 +46,10 @@ const createResponse = () => {
  * reflecting whatever $set/$unset would have applied).
  */
 const mockUpdateResult = (document: unknown) => {
-  const select = jest.fn().mockResolvedValue(document);
+  const lean = jest.fn().mockResolvedValue(document);
+  const select = jest.fn().mockReturnValue({ lean });
   mockedStore.findByIdAndUpdate.mockReturnValue({ select } as any);
-  return { select };
+  return { select, lean };
 };
 
 describe('updateStoreBranding', () => {
@@ -114,11 +115,10 @@ describe('updateStoreBranding', () => {
     expect(updateArg).not.toHaveProperty('$unset');
   });
 
-  it('clears primaryColor when sent as explicit null, and GET-equivalent response falls back to the default', async () => {
+  it('clears primaryColor when sent as explicit null, and the response returns null', async () => {
     // Simulate the post-clear document: primaryColor removed from the DB
-    // entirely (what $unset actually does), so the response's own
-    // `|| '#FF6B6B'` fallback is what produces the default here — same
-    // fallback getStoreBranding already relies on, unchanged by this PR.
+    // entirely (what $unset actually does). The response must say null so
+    // the dashboard can show the platform default again.
     mockUpdateResult({
       _id: storeId,
       branding: { secondaryColor: '#00AABB' },
@@ -139,7 +139,7 @@ describe('updateStoreBranding', () => {
       success: true,
       data: {
         logoUrl: null,
-        primaryColor: '#FF6B6B',
+        primaryColor: null,
         secondaryColor: '#00AABB',
         iconUrl: null,
         appIconUrl: null,
@@ -390,7 +390,8 @@ describe('updateStoreBranding', () => {
   });
 
   it('returns 500 when the update fails', async () => {
-    const select = jest.fn().mockRejectedValue(new Error('connection lost'));
+    const lean = jest.fn().mockRejectedValue(new Error('connection lost'));
+    const select = jest.fn().mockReturnValue({ lean });
     mockedStore.findByIdAndUpdate.mockReturnValue({ select } as any);
     const res = createResponse();
 
