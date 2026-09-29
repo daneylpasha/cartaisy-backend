@@ -12,6 +12,7 @@ import shopifyOAuthRoutes from '../src/routes/shopifyOAuthRoutes';
 import shopifyStorefront from '../src/services/shopifyStorefrontService';
 import {
   isEncryptedShopifyAdminToken,
+  normalizeLegacyStorefrontAccessToken,
   readStoredShopifyAdminToken,
   ShopifyAdminTokenError,
   unsetLegacyStorefrontAccessTokenKeys,
@@ -112,6 +113,29 @@ describe('Shopify stored admin token formats', () => {
     await expect(getAccessToken(store._id.toString())).resolves.toBe(PLAIN_TOKEN);
     const again = await Store.findById(store._id).select('+shopify.accessToken');
     expect(again?.shopify?.accessToken).toBe(beforeSecondRead);
+  });
+
+  test('plaintext migration does not rewrite another store token', async () => {
+    const otherToken = 'shpat_other_store_plain_token';
+    const [storeA, storeB] = await Promise.all([
+      Store.create({
+        name: 'Migrate Store A',
+        slug: 'migrate-store-a',
+        shopify: { shop: 'migrate-a.myshopify.com', accessToken: PLAIN_TOKEN, isConnected: true },
+      }),
+      Store.create({
+        name: 'Migrate Store B',
+        slug: 'migrate-store-b',
+        shopify: { shop: 'migrate-b.myshopify.com', accessToken: otherToken, isConnected: true },
+      }),
+    ]);
+
+    await expect(getAccessToken(storeA._id.toString())).resolves.toBe(PLAIN_TOKEN);
+
+    const untouched = await Store.findById(storeB._id).select('+shopify.accessToken');
+    expect(untouched?.shopify?.accessToken).toBe(otherToken);
+    expect(loggedText([errorSpy, warnSpy, logSpy])).not.toContain(PLAIN_TOKEN);
+    expect(loggedText([errorSpy, warnSpy, logSpy])).not.toContain(otherToken);
   });
 
   test('getAccessToken reads an encrypted token without rewriting it', async () => {
@@ -318,6 +342,59 @@ describe('Shopify stored admin token formats', () => {
     const raw = await Store.collection.findOne({ _id: store._id });
     const shopify = (raw?.shopify || {}) as Record<string, unknown>;
     expect(shopify['storefrontAccessToken ']).toBeUndefined();
+    expect(loggedText([errorSpy, warnSpy, logSpy])).not.toContain(STOREFRONT_TOKEN);
+  });
+
+  test('storefront repair stays on the connected store and does not restore a disconnected one', async () => {
+    const [connected, other, disconnected] = await Promise.all([
+      Store.create({
+        name: 'Storefront Connected',
+        slug: 'storefront-connected',
+        shopify: { shop: 'sf-connected.myshopify.com', isConnected: true },
+      }),
+      Store.create({
+        name: 'Storefront Other',
+        slug: 'storefront-other',
+        shopify: { shop: 'sf-other.myshopify.com', isConnected: true },
+      }),
+      Store.create({
+        name: 'Storefront Disconnected',
+        slug: 'storefront-disconnected',
+        shopify: { shop: 'sf-disconnected.myshopify.com', isConnected: false },
+      }),
+    ]);
+
+    await Store.collection.updateOne(
+      { _id: connected._id },
+      { $set: { 'shopify.storefrontAccessToken ': STOREFRONT_TOKEN } }
+    );
+    await Store.collection.updateOne(
+      { _id: disconnected._id },
+      { $set: { 'shopify.storefrontAccessToken ': STOREFRONT_TOKEN } }
+    );
+
+    await normalizeLegacyStorefrontAccessToken(
+      connected._id.toString(),
+      {}
+    );
+    await normalizeLegacyStorefrontAccessToken(
+      disconnected._id.toString(),
+      {}
+    );
+
+    const connectedRaw = await Store.collection.findOne({ _id: connected._id });
+    const otherRaw = await Store.collection.findOne({ _id: other._id });
+    const disconnectedRaw = await Store.collection.findOne({ _id: disconnected._id });
+    const connectedShopify = connectedRaw?.shopify as Record<string, unknown>;
+    const otherShopify = (otherRaw?.shopify || {}) as Record<string, unknown>;
+    const disconnectedShopify = (disconnectedRaw?.shopify || {}) as Record<string, unknown>;
+
+    expect(connectedShopify.storefrontAccessToken).toBe(STOREFRONT_TOKEN);
+    expect(connectedShopify['storefrontAccessToken ']).toBeUndefined();
+    expect(otherShopify.storefrontAccessToken).toBeUndefined();
+    expect(otherShopify['storefrontAccessToken ']).toBeUndefined();
+    expect(disconnectedShopify.storefrontAccessToken).toBeUndefined();
+    expect(disconnectedShopify['storefrontAccessToken ']).toBeUndefined();
     expect(loggedText([errorSpy, warnSpy, logSpy])).not.toContain(STOREFRONT_TOKEN);
   });
 });

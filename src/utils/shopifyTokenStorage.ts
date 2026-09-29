@@ -149,20 +149,35 @@ const persistStorefrontTokenField = async (
     return;
   }
 
-  const update: { $set?: Record<string, string>; $unset: Record<string, ''> } = {
-    $unset: {},
-  };
+  const $unset: Record<string, ''> = {};
   for (const key of legacyKeys) {
-    update.$unset[`shopify.${key}`] = '';
-  }
-  if (!canonical && legacyToken) {
-    update.$set = { [`shopify.${STOREFRONT_TOKEN_FIELD}`]: legacyToken };
+    $unset[`shopify.${key}`] = '';
   }
 
+  const storeObjectId = new mongoose.Types.ObjectId(storeId);
+
   try {
+    // Fill the canonical field only while this store is still connected and
+    // the field is empty. A disconnect or a newer provisioning write that
+    // lands first must not be overwritten by this read.
+    if (!canonical && legacyToken) {
+      await Store.collection.updateOne(
+        {
+          _id: storeObjectId,
+          'shopify.isConnected': true,
+          $or: [
+            { 'shopify.storefrontAccessToken': { $exists: false } },
+            { 'shopify.storefrontAccessToken': null },
+            { 'shopify.storefrontAccessToken': '' },
+          ],
+        },
+        { $set: { [`shopify.${STOREFRONT_TOKEN_FIELD}`]: legacyToken } }
+      );
+    }
+
     await Store.collection.updateOne(
-      { _id: new mongoose.Types.ObjectId(storeId) },
-      update
+      { _id: storeObjectId },
+      { $unset }
     );
   } catch {
     console.error(`Storefront token field migration failed for store ${storeId}`);
@@ -186,7 +201,7 @@ export const normalizeLegacyStorefrontAccessToken = async (
     try {
       const raw = await Store.collection.findOne(
         { _id: new mongoose.Types.ObjectId(storeId) },
-        { projection: { shopify: 1 } }
+        { projection: { 'shopify.accessToken': 0 } }
       );
       resolved = storefrontTokenFrom(raw?.shopify as Record<string, unknown> | undefined);
     } catch {
@@ -218,7 +233,7 @@ export const unsetLegacyStorefrontAccessTokenKeys = async (
   try {
     const raw = await Store.collection.findOne(
       { _id: storeId as mongoose.Types.ObjectId },
-      { projection: { shopify: 1 } }
+      { projection: { 'shopify.accessToken': 0 } }
     );
     const shopify = raw?.shopify as Record<string, unknown> | undefined;
     if (!shopify) {

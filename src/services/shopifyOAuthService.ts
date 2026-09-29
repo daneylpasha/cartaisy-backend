@@ -799,7 +799,7 @@ export const getAccessToken = async (storeId: string): Promise<string | null> =>
       throw error;
     }
     console.error('Get access token error:', error instanceof Error ? error.message : 'Unknown error');
-    return null;
+    throw error;
   }
 };
 
