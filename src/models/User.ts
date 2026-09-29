@@ -10,6 +10,7 @@ import {
   MongooseDocument,
 } from '../types/index';
 import { PASSWORD_RESET_TTL_MS } from '../utils/passwordReset';
+import { backfillStoreMembership } from '../utils/storeMembership';
 
 /**
  * User Mongoose Model
@@ -237,6 +238,17 @@ const UserSchema = new Schema<IUser>(
       required: false,
       index: true,
     },
+    // Stores this user may open. storeId stays the active store.
+    // Empty membership is backfilled from storeId on save.
+    storeIds: {
+      type: [
+        {
+          type: Schema.Types.ObjectId,
+          ref: 'Store',
+        },
+      ],
+      default: () => [],
+    },
 
     // Shopify Integration
     shopifyCustomerId: {
@@ -449,6 +461,7 @@ UserSchema.index({ createdAt: -1 });
 UserSchema.index({ isActive: 1, role: 1 });
 UserSchema.index({ email: 1, isVerified: 1 });
 UserSchema.index({ storeId: 1, email: 1 }, { unique: true }); // Unique email per store
+UserSchema.index({ storeIds: 1 });
 UserSchema.index({ storeId: 1, role: 1 });
 // Store-scoped customer webhook/sync matching (issue #77). Partial: most
 // users have no Shopify account, and the matching queries always supply a
@@ -679,6 +692,15 @@ UserSchema.pre('save', function (this: MongooseDocument<IUser>, next): void {
     }
   });
 
+  next();
+});
+
+/**
+ * When membership is empty and an active store is set, persist `[storeId]`.
+ * When membership exists and the active store is missing, land on the first id.
+ */
+UserSchema.pre('save', function (this: MongooseDocument<IUser>, next): void {
+  backfillStoreMembership(this);
   next();
 });
 

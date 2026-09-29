@@ -15,6 +15,11 @@ import {
   GoogleIdTokenVerificationError,
   verifyGoogleIdToken,
 } from '../services/googleIdTokenService';
+import {
+  backfillStoreMembership,
+  membershipStoreIds,
+  persistStoreMembership,
+} from '../utils/storeMembership';
 
 // Use AuthenticatedRequest for consistency
 type AuthRequest = AuthenticatedRequest;
@@ -81,8 +86,9 @@ export const register = async (req: Request, res: Response): Promise<void> => {
         name: invitedUser.name,
         email: invitedUser.email,
         role: invitedUser.role,
-        storeId: invitedUser.storeId,
-        isEmailVerified: invitedUser.isVerified,
+      storeId: invitedUser.storeId,
+      storeIds: membershipStoreIds(invitedUser),
+      isEmailVerified: invitedUser.isVerified,
         isActive: invitedUser.isActive,
         createdAt: invitedUser.createdAt
       };
@@ -188,6 +194,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       email: newUser.email,
       role: newUser.role,
       storeId: newUser.storeId,
+      storeIds: membershipStoreIds(newUser),
       isEmailVerified: newUser.isVerified,
       isActive: newUser.isActive,
       createdAt: newUser.createdAt
@@ -250,7 +257,8 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // Update login tracking
+    // Update login tracking. Saving also backfills storeIds from storeId.
+    backfillStoreMembership(user);
     await user.updateLastLogin();
 
     // Generate JWT token
@@ -271,6 +279,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       email: user.email,
       role: user.role,
       storeId: user.storeId,
+      storeIds: membershipStoreIds(user),
       storeName,
       isEmailVerified: user.isVerified,
       isActive: user.isActive,
@@ -352,6 +361,7 @@ export const googleLogin = async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
+    // One user with many storeIds is a single account. 409 stays for two User documents.
     if (matches.length > 1) {
       res.status(409).json({
         status: 'error',
@@ -373,6 +383,7 @@ export const googleLogin = async (req: Request, res: Response): Promise<void> =>
 
     user.googleSub = identity.sub;
     user.authProvider = 'google';
+    backfillStoreMembership(user);
     await user.updateLastLogin();
 
     const token = generateToken((user._id as any).toString());
@@ -390,6 +401,7 @@ export const googleLogin = async (req: Request, res: Response): Promise<void> =>
       email: user.email,
       role: user.role,
       storeId: user.storeId,
+      storeIds: membershipStoreIds(user),
       storeName,
       isEmailVerified: user.isVerified,
       isActive: user.isActive,
@@ -473,9 +485,15 @@ export const getProfile = async (req: AuthRequest, res: Response): Promise<void>
       return;
     }
 
+    const profileUser = await User.findById(req.user._id);
+    if (profileUser) {
+      await persistStoreMembership(profileUser);
+    }
+    const activeStoreId = profileUser?.storeId ?? req.user.storeId;
+
     // Get store name and order stats in parallel
     const [store, orderStats] = await Promise.all([
-      req.user.storeId ? Store.findById(req.user.storeId).select('name') : null,
+      activeStoreId ? Store.findById(activeStoreId).select('name') : null,
       Order.aggregate([
         {
           $match: {
@@ -503,7 +521,8 @@ export const getProfile = async (req: AuthRequest, res: Response): Promise<void>
       name: req.user.name,
       email: req.user.email,
       role: req.user.role,
-      storeId: req.user.storeId,
+      storeId: activeStoreId,
+      storeIds: membershipStoreIds(profileUser ?? req.user),
       storeName,
       isEmailVerified: req.user.isVerified,
       isActive: req.user.isActive,
@@ -560,6 +579,9 @@ export const updateProfile = async (req: AuthRequest, res: Response): Promise<vo
     }
 
     // Define restricted fields that cannot be updated through this API
+    // Active store and membership change only through the store switch API.
+    const readOnlyFields = ['storeId', 'storeIds'];
+
     const restrictedFields = [
       '_id',
       'email',
@@ -568,6 +590,7 @@ export const updateProfile = async (req: AuthRequest, res: Response): Promise<vo
       'isVerified',
       'isActive',
       'isPlatformOperator',
+      ...readOnlyFields,
       'passwordResetToken',
       'passwordResetExpires',
       'passwordChangedAt',
@@ -676,7 +699,8 @@ export const updateProfile = async (req: AuthRequest, res: Response): Promise<vo
 
     // Add all non-restricted fields from the user object
     Object.keys(userObj).forEach(key => {
-      if (!restrictedFields.includes(key) && !key.startsWith('_')) {
+      const hidden = restrictedFields.includes(key) && !readOnlyFields.includes(key);
+      if (!hidden && !key.startsWith('_')) {
         responseData[key] = (userObj as any)[key];
       }
     });
@@ -827,6 +851,8 @@ export const refreshToken = async (req: Request, res: Response): Promise<void> =
       return;
     }
 
+    await persistStoreMembership(user);
+
     // Generate new tokens
     const newAccessToken = generateToken((user._id as any).toString());
     const newRefreshToken = generateRefreshToken((user._id as any).toString());
@@ -845,6 +871,7 @@ export const refreshToken = async (req: Request, res: Response): Promise<void> =
       email: user.email,
       role: user.role,
       storeId: user.storeId,
+      storeIds: membershipStoreIds(user),
       storeName,
       isEmailVerified: user.isVerified,
       isActive: user.isActive,

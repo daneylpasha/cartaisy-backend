@@ -1,6 +1,6 @@
 # Backend Status
 
-Last updated: 2026-09-29 (issue #200 clear branding colors).
+Last updated: 2026-09-29 (issue #202 merchant multi-store membership).
 
 This file is a human/agent-maintained snapshot, not an automatically guaranteed source of truth. Verify current behavior in code, tests, CI, and deployed environments before making implementation decisions.
 
@@ -146,6 +146,10 @@ Operator scripts under `src/scripts/` and `sync-products-now.js` still read proc
 ## Operational Shopify webhooks
 
 Issue #163 (parent epic #152). After a successful OAuth connect, Cartaisy registers product, order, inventory, and `customers/create` webhook subscriptions on that shop with `getShopifyClientForStore`. Callbacks are the existing `/api/webhooks/shopify/...` routes. The callback HTTP response does not wait. A failure is logged and stored as `shopify.webhookRegistrationError` on `GET /api/v1/shopify/status`. Reconnect reconciles the list and does not add a duplicate for the same callback. GDPR topics and `app/uninstalled` are unchanged (issue #162). Contract: `docs/cartaisy/SHOPIFY_API_POLICY.md`.
+
+## Merchant multi-store membership
+
+Issue #202. One dashboard user can belong to many stores. `User.storeIds` is the membership and `User.storeId` is the active store. `GET /api/v1/auth/stores` lists that caller's stores. `POST /api/v1/auth/stores/switch` changes the active store without a new token. `POST /api/v1/auth/stores` lets a store owner create another store on the same user. Login, Google, refresh, and profile still return the active `storeId`. Contract: `docs/MERCHANT_STORE_MEMBERSHIP.md`.
 
 ## Merchant dashboard Google sign-in
 

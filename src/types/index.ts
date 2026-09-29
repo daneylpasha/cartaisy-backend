@@ -93,7 +93,13 @@ export interface IMarketing {
 
 export interface IUser extends Document {
   _id: ObjectId;
+  /** Active store. Tenant-owned reads keep using this id. */
   storeId: ObjectId;
+  /**
+   * Stores this merchant may open. Empty with `storeId` set is treated as `[storeId]`.
+   * Switching the active store does not rotate tokens.
+   */
+  storeIds?: ObjectId[];
   shopifyCustomerId?: string;
   stripeCustomerId?: string;
   name: string;
@@ -942,6 +948,8 @@ export interface AuthenticatedRequest<
     _id: any; // Using any for ObjectId compatibility across different mongoose imports
     id?: string; // Convenience getter for _id.toString()
     storeId?: any;
+    /** Membership used by store-ownership checks. Empty falls back to `storeId`. */
+    storeIds?: any[];
     email: string;
     role: string; // Flexible for different role types
     name: string;

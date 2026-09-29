@@ -319,6 +319,14 @@ Known gap: exact original decision dates are not known for most entries. Use "Da
 - Impact: Set `DASHBOARD_URL` to the dashboard origin in each environment. The raw token and the new password must not be logged. See `docs/MERCHANT_PASSWORD_RESET.md`.
 - Related docs: `docs/MERCHANT_PASSWORD_RESET.md`, `.env.example`. GitHub issue: #188. Dashboard issue: #68.
 
+### One merchant user can belong to many stores
+
+- Date: 2026-09-29.
+- Decision: A dashboard user keeps one account and may belong to many stores. `User.storeIds` is the membership list. `User.storeId` stays the active store and the tenant boundary for store-scoped reads. An empty membership with `storeId` set is treated and saved as `[storeId]`. `GET /api/v1/auth/stores` returns only that caller's stores (`id`, `name`, `slug`, and a safe `logoUrl` or `iconUrl` when the value is an http(s) URL and not token-shaped). `POST /api/v1/auth/stores/switch` sets the active store only when the id is already in `storeIds`, and otherwise returns 403. The same access token and refresh token stay valid. `POST /api/v1/auth/stores` lets a store owner (`super_admin`) create another store from `storeName` (or `name`), append it to membership, and make it active. It does not create a second user and does not issue tokens. Login, Google sign-in, refresh, and profile keep returning the active `storeId`. Google returns 409 `AMBIGUOUS_MERCHANT_ACCOUNT` only when more than one dashboard User document shares the email. One user with many `storeIds` is not that conflict. Admin ownership still treats the active store as it does today for `admin` and `moderator`. A `super_admin` with a membership may open only those stores, except platform operators (`isPlatformOperator` or a verified `PLATFORM_OPS_EMAILS` match), who keep cross-store access. A `super_admin` with no membership still has the previous cross-store allowance. When a membership exists and the request omits a store id on an optional-store admin route, that merchant is scoped to the active store instead of a platform-wide aggregate. Profile updates cannot change `storeId` or `storeIds`.
+- Reason: Merchants with more than one branded app need to switch the active store without signing out. Creating a second User per app made Google sign-in 409 and split one person across accounts. Tenant data stays separated by the active `storeId`.
+- Impact: Existing single-store users keep working through the backfill. Dashboard issue #131 calls list, switch, and create. Responses do not include Shopify tokens or Expo tokens. No billing, org hierarchy, or shopper multi-store behavior is added. Invite-only signup is unchanged.
+- Related docs: `docs/MERCHANT_STORE_MEMBERSHIP.md`, `docs/STATUS.md`. GitHub issue: #202. Dashboard issue: #131.
+
 ## Related docs/issues
 
 - GitHub issue: #52.
