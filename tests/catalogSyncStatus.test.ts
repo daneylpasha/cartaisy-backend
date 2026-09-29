@@ -17,6 +17,11 @@ import {
   toSafeSyncErrorSummary,
 } from '../src/services/catalogSyncService';
 import { NotFoundError } from '../src/utils/errors';
+import {
+  SHOPIFY_PAYMENT_REQUIRED_CODE,
+  SHOPIFY_PAYMENT_REQUIRED_MESSAGE,
+  ShopifyAdminBillingError,
+} from '../src/utils/shopifyAdminBilling';
 
 jest.mock('../src/services/syncService', () => ({
   performFullSync: jest.fn(),
@@ -212,6 +217,35 @@ describe('catalog sync status and build eligibility (issue #154)', () => {
     const stored = await Store.findById(storeAId).select('catalogSync');
     expect(stored?.catalogSync?.status).toBe('failed');
     expect(stored?.catalogSync?.errorSummary).toBe('Shopify down [redacted]');
+  });
+
+  test('a Shopify billing failure is not retried and is returned as payment required', async () => {
+    await connectStore(storeAId, SHOP_A);
+    performFullSyncMock.mockRejectedValue(new ShopifyAdminBillingError());
+
+    const response = await request(app)
+      .post('/api/v1/shopify/sync')
+      .set('Authorization', `Bearer ${adminAToken}`);
+
+    expect(performFullSyncMock).toHaveBeenCalledTimes(1);
+    expect(response.status).toBe(402);
+    expect(response.body.success).toBe(false);
+    expect(response.body.code).toBe(SHOPIFY_PAYMENT_REQUIRED_CODE);
+    expect(response.body.error).toBe(SHOPIFY_PAYMENT_REQUIRED_MESSAGE);
+    expect(response.body.message).toBe(SHOPIFY_PAYMENT_REQUIRED_MESSAGE);
+    expect(response.body.data.status).toBe('failed');
+    expect(response.body.data.errorSummary).toBe(SHOPIFY_PAYMENT_REQUIRED_MESSAGE);
+    expect(response.body.data.attempts).toBe(1);
+    expect(response.body.data.eligibleForBuild).toBe(false);
+    expect(response.body.code).not.toBe('CATALOG_SYNC_FAILED');
+    expectNoToken(response.body);
+    expect(JSON.stringify(response.body)).not.toContain('Payment Required');
+    expect(JSON.stringify(response.body)).not.toContain('stack');
+
+    const stored = await Store.findById(storeAId).select('catalogSync');
+    expect(stored?.catalogSync?.status).toBe('failed');
+    expect(stored?.catalogSync?.errorSummary).toBe(SHOPIFY_PAYMENT_REQUIRED_MESSAGE);
+    expect(stored?.catalogSync?.attempts).toBe(1);
   });
 
   test('a resolved sync that imported zero products and reported errors is a failure', async () => {

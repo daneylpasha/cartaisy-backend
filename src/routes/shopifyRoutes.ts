@@ -21,6 +21,10 @@ import {
 import { authenticate, authorize } from '../middleware/auth';
 import { requireOwnedStoreContext } from '../middleware/storeOwnership';
 import { createStorefrontAccessToken } from '../services/shopifyOAuthService';
+import {
+  ShopifyAdminBillingError,
+  shopifyAdminBillingErrorBody,
+} from '../utils/shopifyAdminBilling';
 import { ShopifyAdminTokenError } from '../utils/shopifyTokenStorage';
 import Product from '../models/Product';
 import Order from '../models/Order';
@@ -95,6 +99,11 @@ router.post('/sync/full', async (req: Request, res: Response) => {
       data: result
     });
   } catch (error) {
+    if (error instanceof ShopifyAdminBillingError) {
+      console.error('Full synchronization stopped:', error.code);
+      res.status(error.statusCode).json(shopifyAdminBillingErrorBody(error));
+      return;
+    }
     console.error('Error performing full sync:', error);
     res.status(500).json({
       success: false,
@@ -121,6 +130,11 @@ router.post('/sync/incremental', async (req: Request, res: Response) => {
       data: result
     });
   } catch (error) {
+    if (error instanceof ShopifyAdminBillingError) {
+      console.error('Incremental synchronization stopped:', error.code);
+      res.status(error.statusCode).json(shopifyAdminBillingErrorBody(error));
+      return;
+    }
     console.error('Error performing incremental sync:', error);
     res.status(500).json({
       success: false,

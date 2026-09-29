@@ -14,6 +14,7 @@ import {
   IMobileStatusHistory
 } from '../types/index';
 import { ApiError } from '../utils/errors';
+import { shopifyAdminBillingErrorFromUnknown } from '../utils/shopifyAdminBilling';
 import {
   isEncryptedShopifyAdminToken,
   migratePlaintextShopifyAdminToken,
@@ -305,6 +306,10 @@ export const syncProducts = async (storeId: string): Promise<SyncResult> => {
     console.log(`✅ [Sync] Completed: ${synced} products synced across ${pageCount} page(s), ${errors.length} errors`);
     return { synced, errors };
   } catch (error: any) {
+    const billing = shopifyAdminBillingErrorFromUnknown(error);
+    if (billing) {
+      throw billing;
+    }
     console.error('Error syncing products from Shopify:', error.response?.data || error.message);
     errors.push(error.message || 'Unknown error');
     return { synced, errors };
@@ -618,6 +623,10 @@ export const syncCustomers = async (storeId: string): Promise<SyncResult> => {
     console.log(`👥 Synced ${synced} customers from Shopify`);
     return { synced, errors };
   } catch (error: any) {
+    const billing = shopifyAdminBillingErrorFromUnknown(error);
+    if (billing) {
+      throw billing;
+    }
     console.error('Error syncing customers from Shopify:', error.response?.data || error.message);
     errors.push(error.message || 'Unknown error');
     return { synced, errors };
@@ -761,6 +770,10 @@ export const syncOrders = async (daysBack: number = 30, storeId?: string): Promi
     console.log(`📋 Synced ${synced} orders from Shopify`);
     return { synced, errors };
   } catch (error: any) {
+    const billing = shopifyAdminBillingErrorFromUnknown(error);
+    if (billing) {
+      throw billing;
+    }
     console.error('Error syncing orders from Shopify:', error.response?.data || error.message);
     errors.push(error.message || 'Unknown error');
     return { synced, errors };
