@@ -327,6 +327,14 @@ Known gap: exact original decision dates are not known for most entries. Use "Da
 - Impact: Existing single-store users keep working through the backfill. Dashboard issue #131 calls list, switch, and create, and uses the create response to point onboarding at the new store without a new login. Responses do not include Shopify tokens or Expo tokens. No billing, org hierarchy, or shopper multi-store behavior is added. Invite-only signup is unchanged. The 10-store cap is a product limit, not a paid plan.
 - Related docs: `docs/MERCHANT_STORE_MEMBERSHIP.md`, `docs/STATUS.md`. GitHub issue: #202. Dashboard issue: #131.
 
+### A store owner can turn off a store, and the last store stays
+
+- Date: 2026-09-30.
+- Decision: `DELETE /api/v1/auth/stores/:storeId` removes one app from merchant membership. The body `{ name }` must match the stored store name. Only a `super_admin` who already belongs to that store may call it. The caller's last remaining store is refused with `409` `LAST_STORE`, because create still requires a membership and an account with zero stores cannot add another app. The store record is soft-deleted (`isActive: false`), matching account deletion, and Shopify is disconnected with the existing revoke-and-clear path before membership changes. The id is removed from every user's `storeIds`. A user whose active store was the removed one moves to their next membership id, or has `storeId` cleared when none remain. A unique `{ storeId, email }` collision for any affected user, including clearing `storeId`, is `409` `ACTIVE_STORE_CONFLICT` before Shopify is disconnected. Users are not deleted. Orders, home layouts, and store-account credentials are not cascade-deleted. The response does not include a new access token. A store outside membership is `403` and is not modified.
+- Reason: Merchants can add a blank app and then have no way to drop an unfinished one. Hard-deleting the store, or deleting every user on `storeId`, would destroy the account that still owns other apps. Keeping the last app avoids a locked-out owner.
+- Impact: Dashboard delete UI calls this route and must not call a local store delete that removes users. Shopify Admin tokens on the removed store are cleared. `shopify.complianceShop` still resolves compliance webhooks. Human review is required because this changes membership and Shopify credentials. Deploy the backend before the dashboard delete UI (dashboard PR #135).
+- Related docs: `docs/MERCHANT_STORE_MEMBERSHIP.md`, `docs/STATUS.md`, `docs/STORE_OWNERSHIP_VALIDATION_POLICY.md`. Dashboard PR: #135.
+
 ## Related docs/issues
 
 - GitHub issue: #52.

@@ -1,6 +1,6 @@
 # Backend Status
 
-Last updated: 2026-09-29 (issue #202 merchant multi-store membership).
+Last updated: 2026-09-30 (merchant store removal on `DELETE /api/v1/auth/stores/:storeId`).
 
 This file is a human/agent-maintained snapshot, not an automatically guaranteed source of truth. Verify current behavior in code, tests, CI, and deployed environments before making implementation decisions.
 
@@ -149,7 +149,7 @@ Issue #163 (parent epic #152). After a successful OAuth connect, Cartaisy regist
 
 ## Merchant multi-store membership
 
-Issue #202. One dashboard user can belong to many stores. `User.storeIds` is the membership and `User.storeId` is the active store. `GET /api/v1/auth/stores` lists that caller's stores. `POST /api/v1/auth/stores/switch` changes the active store without a new token. `POST /api/v1/auth/stores` is required with those routes: a store owner (`super_admin` with at least one membership) creates a blank store, up to 10, and that store becomes active. Login, Google, refresh, and profile still return the active `storeId`. Contract: `docs/MERCHANT_STORE_MEMBERSHIP.md`.
+Issue #202. One dashboard user can belong to many stores. `User.storeIds` is the membership and `User.storeId` is the active store. `GET /api/v1/auth/stores` lists that caller's stores. `POST /api/v1/auth/stores/switch` changes the active store without a new token. `POST /api/v1/auth/stores` is required with those routes: a store owner (`super_admin` with at least one membership) creates a blank store, up to 10, and that store becomes active. `DELETE /api/v1/auth/stores/:storeId` lets that owner turn a store off and drop it from membership after the stored name is confirmed. The caller's last store is kept (`409` `LAST_STORE`). Shopify credentials on the removed store are cleared. Users, orders, and home layouts are not deleted. Login, Google, refresh, and profile still return the active `storeId`. Contract: `docs/MERCHANT_STORE_MEMBERSHIP.md`.
 
 ## Merchant dashboard Google sign-in
 

@@ -15,6 +15,7 @@ import {
 import {
   createMerchantStore,
   listMerchantStores,
+  removeMerchantStore,
   switchActiveStore,
 } from '../controllers/merchantStoreMembershipController';
 import { authenticate } from '../middleware/auth';
@@ -156,6 +157,25 @@ router.post(
   authenticate as any,
   createStoreLimiter,
   createMerchantStore as any
+);
+
+const deleteStoreLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 20,
+  skip: skipPasswordResetLimitInTests,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    status: 'error',
+    message: 'Too many store removal attempts. Please try again later.'
+  }
+});
+
+router.delete(
+  '/stores/:storeId',
+  authenticate as any,
+  deleteStoreLimiter,
+  removeMerchantStore as any
 );
 
 /**

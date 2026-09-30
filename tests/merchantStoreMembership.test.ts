@@ -4,8 +4,10 @@ import request from 'supertest';
 import User from '../src/models/User';
 import Store from '../src/models/Store';
 import HomeLayout from '../src/models/HomeLayout';
+import Order from '../src/models/Order';
 import StoreAppCredentials from '../src/models/StoreAppCredentials';
 import authRoutes from '../src/routes/authRoutes';
+import * as shopifyOAuth from '../src/services/shopifyOAuthService';
 import { generateToken } from '../src/utils/jwt';
 
 const buildTestApp = () => {
@@ -371,5 +373,359 @@ describe('merchant store membership', () => {
     expect(capped.body.message).toBe('A merchant account can have at most 10 stores');
     expect(await Store.countDocuments({ name: 'Eleventh App' })).toBe(0);
     expect((await User.findById(owner._id))?.storeId?.toString()).toBe(store._id.toString());
+  });
+
+  test('a store owner can remove a membership store, and the last store stays', async () => {
+    const keep = await createStore('keep-app', 'Keep App');
+    const extra = await createStore('extra-app', 'Extra App');
+    const other = await createStore('foreign-app', 'Foreign App');
+    await HomeLayout.create({
+      storeId: extra._id.toString(),
+      sections: [{ type: 'carousel', position: 0, isVisible: true }],
+    });
+    await StoreAppCredentials.create({ storeId: extra._id });
+    await Order.create({
+      storeId: extra._id,
+      orderNumber: `ORDER-${new Types.ObjectId().toString()}`,
+      customer: new Types.ObjectId(),
+      email: 'buyer-extra@example.com',
+      lineItems: [{ quantity: 1, price: 10, title: 'Scoped Product' }],
+      subtotalPrice: 10,
+      totalTax: 0,
+      totalPrice: 10,
+      currency: 'USD',
+      shippingAddress: {
+        firstName: 'Test',
+        lastName: 'Buyer',
+        address1: '123 Test Street',
+        city: 'Test City',
+        province: 'CA',
+        country: 'US',
+        zip: '94105',
+      },
+      mobileStatus: { current: 'placed' },
+    });
+    const owner = await User.create({
+      name: 'Owner',
+      email: 'owner-delete@example.com',
+      password: 'password123',
+      role: 'super_admin',
+      isActive: true,
+      isVerified: true,
+      storeId: extra._id,
+      storeIds: [keep._id, extra._id],
+    });
+    const teammate = await User.create({
+      name: 'Teammate',
+      email: 'teammate-delete@example.com',
+      password: 'password123',
+      role: 'admin',
+      isActive: true,
+      isVerified: true,
+      storeId: extra._id,
+      storeIds: [extra._id],
+    });
+    const staff = await User.create({
+      name: 'Staff',
+      email: 'staff-delete@example.com',
+      password: 'password123',
+      role: 'admin',
+      isActive: true,
+      isVerified: true,
+      storeId: keep._id,
+      storeIds: [keep._id, extra._id],
+    });
+    const stranger = await User.create({
+      name: 'Stranger',
+      email: 'stranger-delete@example.com',
+      password: 'password123',
+      role: 'super_admin',
+      isActive: true,
+      isVerified: true,
+      storeId: other._id,
+      storeIds: [other._id],
+    });
+    const ownerToken = generateToken(owner._id.toString());
+    const extraId = extra._id.toString();
+
+    const mismatch = await request(app)
+      .delete(`/api/v1/auth/stores/${extraId}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ name: 'Wrong name' });
+    expect(mismatch.status).toBe(400);
+    expect(mismatch.body.code).toBe('NAME_MISMATCH');
+    const stillThere = await Store.findById(extra._id).select('+shopify.accessToken');
+    expect(stillThere?.isActive).not.toBe(false);
+    expect(stillThere?.shopify.accessToken).toBe('shpat_extra-app');
+
+    const missingName = await request(app)
+      .delete(`/api/v1/auth/stores/${extraId}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({});
+    expect(missingName.status).toBe(400);
+    expect(missingName.body.code).toBe('NAME_MISMATCH');
+
+    const deniedStaff = await request(app)
+      .delete(`/api/v1/auth/stores/${extraId}`)
+      .set('Authorization', `Bearer ${generateToken(staff._id.toString())}`)
+      .send({ name: 'Extra App' });
+    expect(deniedStaff.status).toBe(403);
+    expect(deniedStaff.body.code).toBe('NOT_OWNER');
+
+    const deniedStranger = await request(app)
+      .delete(`/api/v1/auth/stores/${extraId}`)
+      .set('Authorization', `Bearer ${generateToken(stranger._id.toString())}`)
+      .send({ name: 'Extra App' });
+    expect(deniedStranger.status).toBe(403);
+    expect(deniedStranger.body.message).toBe('Store access denied');
+    expect(deniedStranger.body.code).toBeUndefined();
+
+    const invalid = await request(app)
+      .delete('/api/v1/auth/stores/not-a-store')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ name: 'Extra App' });
+    expect(invalid.status).toBe(400);
+
+    const removed = await request(app)
+      .delete(`/api/v1/auth/stores/${extraId}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ name: '  Extra App  ' });
+
+    expect(removed.status).toBe(200);
+    expect(removed.body.message).toBe('Store removed');
+    expect(removed.body.data.token).toBeUndefined();
+    expect(removed.body.data.refreshToken).toBeUndefined();
+    expect(removed.body.data.removedStoreId).toBe(extraId);
+    expect(removed.body.data.user.storeId).toBe(keep._id.toString());
+    expect(removed.body.data.user.storeIds).toEqual([keep._id.toString()]);
+    expect(removed.body.data.user.storeName).toBe('Keep App');
+    const removedBody = JSON.stringify(removed.body);
+    expect(removedBody).not.toContain('shpat_');
+    expect(removedBody).not.toContain('accessToken');
+    expect(removedBody).not.toContain('expo');
+
+    const extraAfter = await Store.findById(extra._id).select('+shopify.accessToken');
+    expect(extraAfter?.isActive).toBe(false);
+    expect(extraAfter?.shopify.isConnected).toBe(false);
+    expect(extraAfter?.shopify.accessToken).toBeUndefined();
+    expect(extraAfter?.name).toBe('Extra App');
+    expect(await Store.countDocuments({ _id: extra._id })).toBe(1);
+    expect(await HomeLayout.countDocuments({ storeId: extra._id.toString() })).toBe(1);
+    expect(await StoreAppCredentials.countDocuments({ storeId: extra._id })).toBe(1);
+    expect(await Order.countDocuments({ storeId: extra._id })).toBe(1);
+
+    const keepAfter = await Store.findById(keep._id).select('+shopify.accessToken');
+    expect(keepAfter?.isActive).toBe(true);
+    expect(keepAfter?.shopify.accessToken).toBe('shpat_keep-app');
+    const otherAfter = await Store.findById(other._id).select('+shopify.accessToken');
+    expect(otherAfter?.isActive).toBe(true);
+    expect(otherAfter?.shopify.accessToken).toBe('shpat_foreign-app');
+
+    const savedOwner = await User.findById(owner._id);
+    expect(savedOwner?.storeId?.toString()).toBe(keep._id.toString());
+    expect(savedOwner?.storeIds?.map(id => id.toString())).toEqual([keep._id.toString()]);
+    const savedTeammate = await User.findById(teammate._id);
+    expect(savedTeammate).toBeTruthy();
+    expect(savedTeammate?.storeId).toBeFalsy();
+    expect(savedTeammate?.storeIds ?? []).toHaveLength(0);
+    const savedStaff = await User.findById(staff._id);
+    expect(savedStaff?.storeId?.toString()).toBe(keep._id.toString());
+    expect(savedStaff?.storeIds?.map(id => id.toString())).toEqual([keep._id.toString()]);
+    expect(await User.countDocuments({ email: 'owner-delete@example.com' })).toBe(1);
+    expect(await User.countDocuments({ email: 'teammate-delete@example.com' })).toBe(1);
+
+    const profile = await request(app)
+      .get('/api/v1/auth/profile')
+      .set('Authorization', `Bearer ${ownerToken}`);
+    expect(profile.status).toBe(200);
+    expect(profile.body.data.user.storeId).toBe(keep._id.toString());
+    expect(profile.body.data.token).toBeUndefined();
+
+    const listed = await request(app)
+      .get('/api/v1/auth/stores')
+      .set('Authorization', `Bearer ${ownerToken}`);
+    expect(listed.status).toBe(200);
+    expect(listed.body.data.activeStoreId).toBe(keep._id.toString());
+    expect(listed.body.data.stores.map((store: { id: string }) => store.id)).toEqual([
+      keep._id.toString(),
+    ]);
+
+    const last = await request(app)
+      .delete(`/api/v1/auth/stores/${keep._id.toString()}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ name: 'Keep App' });
+    expect(last.status).toBe(409);
+    expect(last.body.code).toBe('LAST_STORE');
+    expect((await Store.findById(keep._id))?.isActive).toBe(true);
+    expect((await User.findById(owner._id))?.storeId?.toString()).toBe(keep._id.toString());
+    expect((await User.findById(stranger._id))?.storeId?.toString()).toBe(other._id.toString());
+  });
+
+  test('switching the active store onto an email collision leaves the store unchanged', async () => {
+    const keep = await createStore('conflict-keep', 'Conflict Keep');
+    const extra = await createStore('conflict-extra', 'Conflict Extra');
+    const owner = await User.create({
+      name: 'Owner',
+      email: 'owner-conflict@example.com',
+      password: 'password123',
+      role: 'super_admin',
+      isActive: true,
+      isVerified: true,
+      storeId: extra._id,
+      storeIds: [keep._id, extra._id],
+    });
+    await User.create({
+      name: 'Other account',
+      email: 'owner-conflict@example.com',
+      password: 'password123',
+      role: 'admin',
+      isActive: true,
+      isVerified: true,
+      storeId: keep._id,
+      storeIds: [keep._id],
+    });
+
+    const response = await request(app)
+      .delete(`/api/v1/auth/stores/${extra._id.toString()}`)
+      .set('Authorization', `Bearer ${generateToken(owner._id.toString())}`)
+      .send({ name: 'Conflict Extra' });
+
+    expect(response.status).toBe(409);
+    expect(response.body.code).toBe('ACTIVE_STORE_CONFLICT');
+    const extraAfter = await Store.findById(extra._id).select('+shopify.accessToken');
+    expect(extraAfter?.isActive).not.toBe(false);
+    expect(extraAfter?.shopify.accessToken).toBe('shpat_conflict-extra');
+    expect(extraAfter?.shopify.isConnected).toBe(false);
+    const savedOwner = await User.findById(owner._id);
+    expect(savedOwner?.storeId?.toString()).toBe(extra._id.toString());
+    expect(savedOwner?.storeIds?.map(id => id.toString())).toEqual([
+      keep._id.toString(),
+      extra._id.toString(),
+    ]);
+  });
+
+  test('refuses removal when another member cannot leave the store', async () => {
+    const keep = await createStore('member-conflict-keep', 'Member Conflict Keep');
+    const extra = await createStore('member-conflict-extra', 'Member Conflict Extra');
+    const owner = await User.create({
+      name: 'Owner',
+      email: 'owner-member-conflict@example.com',
+      password: 'password123',
+      role: 'super_admin',
+      isActive: true,
+      isVerified: true,
+      storeId: extra._id,
+      storeIds: [keep._id, extra._id],
+    });
+    const teammate = await User.create({
+      name: 'Teammate',
+      email: 'teammate-member-conflict@example.com',
+      password: 'password123',
+      role: 'admin',
+      isActive: true,
+      isVerified: true,
+      storeId: extra._id,
+      storeIds: [extra._id],
+    });
+    await User.create({
+      name: 'Same email',
+      email: 'teammate-member-conflict@example.com',
+      password: 'password123',
+      role: 'customer',
+      isActive: true,
+      isVerified: true,
+    });
+
+    const response = await request(app)
+      .delete(`/api/v1/auth/stores/${extra._id.toString()}`)
+      .set('Authorization', `Bearer ${generateToken(owner._id.toString())}`)
+      .send({ name: 'Member Conflict Extra' });
+
+    expect(response.status).toBe(409);
+    expect(response.body.code).toBe('ACTIVE_STORE_CONFLICT');
+    const extraAfter = await Store.findById(extra._id).select('+shopify.accessToken');
+    expect(extraAfter?.isActive).toBe(true);
+    expect(extraAfter?.shopify.accessToken).toBe('shpat_member-conflict-extra');
+    const savedOwner = await User.findById(owner._id);
+    expect(savedOwner?.storeId?.toString()).toBe(extra._id.toString());
+    expect(savedOwner?.storeIds?.map(id => id.toString())).toEqual([
+      keep._id.toString(),
+      extra._id.toString(),
+    ]);
+    const savedTeammate = await User.findById(teammate._id);
+    expect(savedTeammate?.storeId?.toString()).toBe(extra._id.toString());
+    expect(savedTeammate?.storeIds?.map(id => id.toString())).toEqual([extra._id.toString()]);
+  });
+
+  test('moves an active store that was missing from storeIds', async () => {
+    const keep = await createStore('legacy-keep', 'Legacy Keep');
+    const extra = await createStore('legacy-extra', 'Legacy Extra');
+    const owner = await User.create({
+      name: 'Owner',
+      email: 'owner-legacy-active@example.com',
+      password: 'password123',
+      role: 'super_admin',
+      isActive: true,
+      isVerified: true,
+      storeId: keep._id,
+      storeIds: [keep._id, extra._id],
+    });
+    const legacy = await User.create({
+      name: 'Legacy',
+      email: 'legacy-active@example.com',
+      password: 'password123',
+      role: 'admin',
+      isActive: true,
+      isVerified: true,
+      storeId: extra._id,
+      storeIds: [keep._id],
+    });
+
+    const response = await request(app)
+      .delete(`/api/v1/auth/stores/${extra._id.toString()}`)
+      .set('Authorization', `Bearer ${generateToken(owner._id.toString())}`)
+      .send({ name: 'Legacy Extra' });
+
+    expect(response.status).toBe(200);
+    const savedLegacy = await User.findById(legacy._id);
+    expect(savedLegacy?.storeId?.toString()).toBe(keep._id.toString());
+    expect(savedLegacy?.storeIds?.map(id => id.toString())).toEqual([keep._id.toString()]);
+    expect((await Store.findById(extra._id))?.isActive).toBe(false);
+  });
+
+  test('a failed Shopify disconnect leaves membership unchanged', async () => {
+    const keep = await createStore('disconnect-keep', 'Disconnect Keep');
+    const extra = await createStore('disconnect-extra', 'Disconnect Extra');
+    const owner = await User.create({
+      name: 'Owner',
+      email: 'owner-disconnect@example.com',
+      password: 'password123',
+      role: 'super_admin',
+      isActive: true,
+      isVerified: true,
+      storeId: extra._id,
+      storeIds: [keep._id, extra._id],
+    });
+    const disconnectSpy = jest
+      .spyOn(shopifyOAuth, 'disconnect')
+      .mockRejectedValue(new Error('revoke failed'));
+
+    const response = await request(app)
+      .delete(`/api/v1/auth/stores/${extra._id.toString()}`)
+      .set('Authorization', `Bearer ${generateToken(owner._id.toString())}`)
+      .send({ name: 'Disconnect Extra' });
+
+    expect(response.status).toBe(502);
+    expect(response.body.code).toBe('SHOPIFY_DISCONNECT_FAILED');
+    expect(disconnectSpy).toHaveBeenCalledWith(extra._id.toString());
+    const extraAfter = await Store.findById(extra._id).select('+shopify.accessToken');
+    expect(extraAfter?.isActive).not.toBe(false);
+    expect(extraAfter?.shopify.accessToken).toBe('shpat_disconnect-extra');
+    const savedOwner = await User.findById(owner._id);
+    expect(savedOwner?.storeId?.toString()).toBe(extra._id.toString());
+    expect(savedOwner?.storeIds?.map(id => id.toString())).toEqual([
+      keep._id.toString(),
+      extra._id.toString(),
+    ]);
   });
 });

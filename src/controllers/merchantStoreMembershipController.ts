@@ -1,15 +1,18 @@
 import { Response } from 'express';
-import { Types } from 'mongoose';
+import mongoose, { Types } from 'mongoose';
 import Store from '../models/Store';
 import User, { IUserDocument } from '../models/User';
 import { AuthenticatedRequest } from '../types';
+import { disconnect as disconnectShopify } from '../services/shopifyOAuthService';
 import {
   MAX_MERCHANT_STORES,
   buildStoreSlug,
   explicitStoreIds,
   membershipStoreIds,
+  membershipWithoutStore,
   normalizeStoreId,
   persistStoreMembership,
+  type StoreMembershipRecord,
 } from '../utils/storeMembership';
 
 type AuthRequest = AuthenticatedRequest;
@@ -343,6 +346,250 @@ export const createMerchantStore = async (req: AuthRequest, res: Response): Prom
     res.status(500).json({
       status: 'error',
       message: 'Store creation failed. Please try again.',
+    });
+  }
+};
+
+const removalError = (
+  res: Response,
+  status: number,
+  code: string,
+  message: string
+): void => {
+  res.status(status).json({
+    status: 'error',
+    code,
+    message,
+  });
+};
+
+/**
+ * Membership after removal, including a user whose active `storeId` is the
+ * removed store even when that id is missing from an explicit `storeIds` list.
+ */
+const membershipAfterRemoval = (
+  record: StoreMembershipRecord,
+  removedId: string
+): { storeIds: string[]; storeId: string | null } | null => {
+  const fromMembership = membershipWithoutStore(record, removedId);
+  if (fromMembership) {
+    return fromMembership;
+  }
+
+  if (normalizeStoreId(record.storeId) !== removedId) {
+    return null;
+  }
+
+  const storeIds = membershipStoreIds(record).filter(id => id !== removedId);
+  return {
+    storeIds,
+    storeId: storeIds[0] ?? null,
+  };
+};
+
+const duplicateKey = (error: unknown): boolean => {
+  if (isDuplicateKeyError(error)) {
+    return true;
+  }
+  if (typeof error !== 'object' || error === null) {
+    return false;
+  }
+  const message = (error as { message?: unknown }).message;
+  if (typeof message === 'string' && message.includes('E11000')) {
+    return true;
+  }
+  const cause = (error as { cause?: unknown }).cause;
+  return cause ? duplicateKey(cause) : false;
+};
+
+/**
+ * True when the next active store would violate the unique `{ storeId, email }`
+ * index. A missing `storeId` is indexed as null, so clearing it can collide too.
+ */
+const nextActiveStoreClashes = async (
+  memberId: unknown,
+  email: unknown,
+  nextStoreId: string | null
+): Promise<boolean> => {
+  if (typeof email !== 'string' || !email) {
+    return false;
+  }
+
+  const clash = await User.exists({
+    _id: { $ne: memberId },
+    email,
+    storeId: nextStoreId ? new Types.ObjectId(nextStoreId) : null,
+  });
+  return Boolean(clash);
+};
+
+/**
+ * Turn off a store the caller belongs to and drop it from every membership.
+ * The last remaining store on the caller is kept. Does not issue tokens.
+ * DELETE /api/v1/auth/stores/:storeId
+ * Body: { "name": "<exact stored store name>" }
+ */
+export const removeMerchantStore = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const user = await loadCaller(req, res);
+    if (!user) {
+      return;
+    }
+
+    const rawStoreId = (req.params as { storeId?: unknown }).storeId;
+    const requested = normalizeStoreId(Array.isArray(rawStoreId) ? rawStoreId[0] : rawStoreId);
+    if (!requested) {
+      res.status(400).json({
+        status: 'error',
+        message: 'A valid storeId is required',
+      });
+      return;
+    }
+
+    const membership = membershipStoreIds(user);
+    if (!membership.includes(requested)) {
+      storeAccessDenied(res);
+      return;
+    }
+
+    if (user.role !== 'super_admin') {
+      removalError(res, 403, 'NOT_OWNER', 'Only a store owner can remove a store');
+      return;
+    }
+
+    const store = await Store.findById(requested).select('name');
+    if (!store) {
+      res.status(404).json({
+        status: 'error',
+        code: 'STORE_NOT_FOUND',
+        message: 'Store not found',
+      });
+      return;
+    }
+
+    const body = (req.body ?? {}) as { name?: unknown };
+    const provided = typeof body.name === 'string' ? body.name.trim() : '';
+    const expected = typeof store.name === 'string' ? store.name.trim() : '';
+    if (!provided || !expected || provided !== expected) {
+      removalError(res, 400, 'NAME_MISMATCH', 'Type the app name to confirm');
+      return;
+    }
+
+    if (membership.length < 2) {
+      removalError(res, 409, 'LAST_STORE', 'Keep at least one app');
+      return;
+    }
+
+    const requestedObjectId = new Types.ObjectId(requested);
+    const affected = await User.find({
+      $or: [{ storeId: requestedObjectId }, { storeIds: requestedObjectId }],
+    }).select('_id storeId storeIds email');
+    const callerId = user._id.toString();
+    const members = affected.some(member => member._id.toString() === callerId)
+      ? affected
+      : [user, ...affected];
+
+    for (const member of members) {
+      const next = membershipAfterRemoval(member, requested);
+      if (!next) {
+        continue;
+      }
+      const currentActive = normalizeStoreId(member.storeId);
+      if (next.storeId === currentActive) {
+        continue;
+      }
+      if (await nextActiveStoreClashes(member._id, member.email, next.storeId)) {
+        removalError(
+          res,
+          409,
+          'ACTIVE_STORE_CONFLICT',
+          'That store is already linked to another account with this email'
+        );
+        return;
+      }
+    }
+
+    try {
+      await disconnectShopify(requested);
+    } catch {
+      console.error('Remove merchant store disconnect error', requested);
+      removalError(
+        res,
+        502,
+        'SHOPIFY_DISCONNECT_FAILED',
+        'Shopify could not be disconnected. The app was not removed.'
+      );
+      return;
+    }
+
+    const session = await mongoose.startSession();
+    try {
+      await session.withTransaction(async () => {
+        await Store.updateOne(
+          { _id: requestedObjectId },
+          { $set: { isActive: false } },
+          { session }
+        );
+
+        for (const member of members) {
+          const next = membershipAfterRemoval(member, requested);
+          if (!next) {
+            continue;
+          }
+          const storeIds = next.storeIds.map(id => new Types.ObjectId(id));
+          if (next.storeId) {
+            await User.updateOne(
+              { _id: member._id },
+              { $set: { storeIds, storeId: new Types.ObjectId(next.storeId) } },
+              { session }
+            );
+          } else {
+            await User.updateOne(
+              { _id: member._id },
+              { $set: { storeIds: [] }, $unset: { storeId: '' } },
+              { session }
+            );
+          }
+        }
+      });
+    } catch (error) {
+      if (duplicateKey(error)) {
+        console.error('Remove merchant store membership conflict', requested);
+        removalError(
+          res,
+          409,
+          'ACTIVE_STORE_CONFLICT',
+          'That store is already linked to another account with this email'
+        );
+        return;
+      }
+      throw error;
+    } finally {
+      await session.endSession();
+    }
+
+    const saved = await User.findById(user._id);
+    if (!saved) {
+      res.status(401).json({
+        status: 'error',
+        message: 'User not authenticated',
+      });
+      return;
+    }
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Store removed',
+      data: {
+        removedStoreId: requested,
+        user: await userStoreFields(saved),
+      },
+    });
+  } catch (error) {
+    console.error('Remove merchant store error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to remove store. Please try again.',
     });
   }
 };
