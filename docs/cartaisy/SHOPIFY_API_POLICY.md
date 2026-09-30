@@ -217,6 +217,50 @@ These are the Shopify Partner app credentials for the OAuth flow. They are app-l
 
 `SHOPIFY_API_KEY` and `SHOPIFY_API_SECRET` are fallbacks for the client ID and secret when the `SHOPIFY_CLIENT_*` names are unset. `SHOPIFY_ACCESS_TOKEN` and `SHOPIFY_STOREFRONT_ACCESS_TOKEN` are legacy global env credentials. New merchant connects must not use them; the token for a store is `Store.shopify.accessToken`, encrypted, and readable only by store-scoped backend calls.
 
+## Install page: "The installation link for this app is invalid"
+
+Root cause is custom distribution on the production Dev Dashboard app. Production Connect already returns Shopify's standalone grant, and that URL stays as it is:
+
+```text
+https://{shop}.myshopify.com/admin/oauth/authorize?client_id={SHOPIFY_CLIENT_ID}&scope={SHOPIFY_SCOPES}&redirect_uri={SHOPIFY_REDIRECT_URI}&state={one-time-hex}
+```
+
+`POST /api/v1/shopify/oauth/connect` builds it in `getAuthorizationUrl`. The dashboard only redirects the browser there. Production `redirect_uri` is `https://cartaisy-backend-production.up.railway.app/api/v1/shopify/oauth/callback`. Railway already has `SHOPIFY_CLIENT_ID`, `SHOPIFY_CLIENT_SECRET`, `SHOPIFY_REDIRECT_URI`, `SHOPIFY_SCOPES`, and `SHOPIFY_OAUTH_RETURN_URL`.
+
+The production Dev Dashboard app Cartaisy uses **Custom distribution**. Shopify then accepts that OAuth URL only for the store on the custom install link. Any other shop gets this banner and a disabled Install button, which is the merchant screenshot. Custom distribution is one store, or the stores in one Plus organization. It cannot onboard arbitrary merchant shops.
+
+### What Shopify's UI offers now
+
+App distribution is set in the Dev Dashboard. Partner Dashboard links there; it is not a separate distribution screen.
+
+Shopify's current methods are only:
+
+| Dev Dashboard label | Who can install |
+| --- | --- |
+| **Public distribution** | Any merchant shop, after the Shopify App Store listing is approved. Before approval, development stores only. Non-embedded apps use the authorization code grant, which is the URL above. |
+| **Custom distribution** | One store, or stores in one Plus organization, via the generated install link. This is the production app today. |
+
+There is no **Unlisted** or **unpublished public** choice. Shopify deprecated unpublished apps on December 9, 2019. Do not look for that control.
+
+You cannot change the distribution method after it is selected. The existing Cartaisy app stays custom. Create a new app and select **Public distribution** on it.
+
+### Steps in the Dev Dashboard
+
+1. Open [partners.shopify.com](https://partners.shopify.com), then **Dev Dashboard**.
+2. Leave the current Cartaisy app as-is. On its Home page, the Distribution card already says custom install / **Manage custom install link**. There is no control to switch it to Public.
+3. Create a new app in that same Partner organization.
+4. On the new app's Home page, open the **Distribution** card and click **Select distribution method**.
+5. Choose **Public distribution** and confirm. This cannot be undone. The card then links to **Manage Shopify App Store listing**.
+6. Open the new app's version configuration (Dev Dashboard version editor, or `shopify.app.toml` released with `shopify app deploy`) and set:
+   - `embedded = false`. The merchant UI is the Cartaisy dashboard, not an admin iframe.
+   - `[access_scopes]` `use_legacy_install_flow = true`, and `scopes` equal to production `SHOPIFY_SCOPES` with no spaces. The connect URL sends `scope` on the query string. Shopify managed installation (`use_legacy_install_flow` omitted or false) does not.
+   - `[auth]` `redirect_urls` includes this exact string, no trailing slash: `https://cartaisy-backend-production.up.railway.app/api/v1/shopify/oauth/callback`. Keep that URL. Add the staging callback on the same list only if staging will use this new app: `https://cartaisy-backend-staging-staging.up.railway.app/api/v1/shopify/oauth/callback`.
+7. Release that version. A draft does not change install behavior.
+8. In Railway, production service `cartaisy-backend`, set `SHOPIFY_CLIENT_ID` and `SHOPIFY_CLIENT_SECRET` to the new app's client id and secret, then redeploy. Leave `SHOPIFY_REDIRECT_URI` as `https://cartaisy-backend-production.up.railway.app/api/v1/shopify/oauth/callback`. Do not commit either secret, and do not put the client id in git.
+9. Submit the App Store listing. Until Shopify approves it, a real merchant shop still cannot install. Development stores can. There is no unlisted listing that skips review.
+
+After approval, Connect on a merchant shop should show Install enabled. Shopify then redirects to `SHOPIFY_REDIRECT_URI` with `code`, `hmac`, `shop`, `state`, and `timestamp`. The dashboard never sees the "installation link is invalid" banner, because Shopify renders it before the callback.
+
 ## Related docs/issues
 
 - GitHub issue: #50.
