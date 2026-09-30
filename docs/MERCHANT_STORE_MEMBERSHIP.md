@@ -101,6 +101,42 @@ An account can hold 10 stores. The next create returns `400`. An empty or whites
 
 No tokens are returned. The existing access token remains valid.
 
+## Remove a store
+
+`DELETE /api/v1/auth/stores/:storeId`
+
+```json
+{ "name": "Second app" }
+```
+
+`name` must match the stored store name after trim. A missing or different name returns `400` with `code: "NAME_MISMATCH"` and changes nothing.
+
+Only a store owner may call it: account role `super_admin` and the store already in that caller's membership. Anyone else who is a member receives `403` with `code: "NOT_OWNER"`. A store id outside membership receives `403` with `Store access denied` and no code, and that store is not read for the caller. An invalid id returns `400`. A membership id whose store document is gone returns `404`.
+
+The caller's last remaining store cannot be removed. That returns `409` with `code: "LAST_STORE"` and changes nothing. Create still requires at least one membership, so removing the last app would leave the account unable to add another.
+
+On success the store is turned off (`isActive: false`), not hard-deleted. Shopify is disconnected first, through the same revoke-and-clear path as `POST /api/v1/shopify/disconnect`: the Admin token is revoked when a shop domain is stored, then local Shopify credentials are cleared and the shop domain is kept on `shopify.complianceShop` for compliance webhooks. If that disconnect fails, membership is left unchanged and the response is `502` with `code: "SHOPIFY_DISCONNECT_FAILED"`. Orders, customers, home layouts, and Apple or Google credentials are not cascade-deleted. User documents are not deleted.
+
+The store id is removed from every user's `storeIds`. A user whose active `storeId` was that store is moved to their next remaining membership id, including when that id was only the active store and not listed in `storeIds`. A user with no store left has `storeId` unset, `storeIds` set to `[]`, and `isActive` set to `false` in the same transaction. An active account is never left with empty membership: a `super_admin` with no `storeId` and no `storeIds` is allowed to open any store. The user document is not deleted. The caller's response is the updated active store, same shape as switch, plus `removedStoreId`. No access token or refresh token is returned. The existing access token stays valid. If moving any affected user's active store would hit the unique `{ storeId, email }` index, including clearing `storeId` when another account with that email already has no store, the response is `409` with `code: "ACTIVE_STORE_CONFLICT"`. That check runs before Shopify disconnect, so the store, membership, and Shopify connection are left unchanged.
+
+Removals are limited to 20 per hour per client.
+
+```json
+{
+  "status": "success",
+  "message": "Store removed",
+  "data": {
+    "removedStoreId": "507f1f77bcf86cd799439012",
+    "user": {
+      "id": "507f1f77bcf86cd799439099",
+      "storeId": "507f1f77bcf86cd799439011",
+      "storeIds": ["507f1f77bcf86cd799439011"],
+      "storeName": "Northwind"
+    }
+  }
+}
+```
+
 ## Session payloads
 
 `POST /api/v1/auth/login`, `POST /api/v1/auth/google`, `POST /api/v1/auth/refresh-token`, and `GET /api/v1/auth/profile` still return the active `storeId` and `storeName`. They also return `storeIds` for the same user. `PATCH /api/v1/auth/profile` cannot change `storeId` or `storeIds`.

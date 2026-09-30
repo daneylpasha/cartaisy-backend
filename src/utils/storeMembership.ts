@@ -68,6 +68,32 @@ export function isStoreMember(
 }
 
 /**
+ * Membership after one store is removed.
+ * Returns null when that id is not in membership.
+ * `storeId` is null when nothing remains. The active store stays when it
+ * is still in the list; otherwise it becomes the first remaining id.
+ */
+export function membershipWithoutStore(
+  user: StoreMembershipRecord | null | undefined,
+  removedStoreId: string
+): { storeIds: string[]; storeId: string | null } | null {
+  const removed = normalizeStoreId(removedStoreId);
+  if (!removed) {
+    return null;
+  }
+
+  const membership = membershipStoreIds(user);
+  if (!membership.includes(removed)) {
+    return null;
+  }
+
+  const storeIds = membership.filter(id => id !== removed);
+  const active = normalizeStoreId(user?.storeId);
+  const storeId = active && storeIds.includes(active) ? active : (storeIds[0] ?? null);
+  return { storeIds, storeId };
+}
+
+/**
  * Mutates the user so an empty membership is `[storeId]`, and a missing active
  * store becomes the first membership id. Returns true when a field changed.
  */
