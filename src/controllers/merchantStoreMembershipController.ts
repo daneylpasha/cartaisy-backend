@@ -544,9 +544,11 @@ export const removeMerchantStore = async (req: AuthRequest, res: Response): Prom
               { session }
             );
           } else {
+            // Empty membership on an active super_admin is treated as cross-store
+            // access. Deactivate in this same transaction. Do not hard-delete.
             await User.updateOne(
               { _id: member._id },
-              { $set: { storeIds: [] }, $unset: { storeId: '' } },
+              { $set: { storeIds: [], isActive: false }, $unset: { storeId: '' } },
               { session }
             );
           }

@@ -7,7 +7,9 @@ import HomeLayout from '../src/models/HomeLayout';
 import Order from '../src/models/Order';
 import StoreAppCredentials from '../src/models/StoreAppCredentials';
 import authRoutes from '../src/routes/authRoutes';
+import { requireOwnedStoreContext, requireOwnedStoreParam } from '../src/middleware/storeOwnership';
 import * as shopifyOAuth from '../src/services/shopifyOAuthService';
+import { AuthenticatedRequest } from '../src/types';
 import { generateToken } from '../src/utils/jwt';
 
 const buildTestApp = () => {
@@ -526,9 +528,11 @@ describe('merchant store membership', () => {
     expect(savedOwner?.storeIds?.map(id => id.toString())).toEqual([keep._id.toString()]);
     const savedTeammate = await User.findById(teammate._id);
     expect(savedTeammate).toBeTruthy();
+    expect(savedTeammate?.isActive).toBe(false);
     expect(savedTeammate?.storeId).toBeFalsy();
     expect(savedTeammate?.storeIds ?? []).toHaveLength(0);
     const savedStaff = await User.findById(staff._id);
+    expect(savedStaff?.isActive).toBe(true);
     expect(savedStaff?.storeId?.toString()).toBe(keep._id.toString());
     expect(savedStaff?.storeIds?.map(id => id.toString())).toEqual([keep._id.toString()]);
     expect(await User.countDocuments({ email: 'owner-delete@example.com' })).toBe(1);
@@ -559,6 +563,145 @@ describe('merchant store membership', () => {
     expect((await Store.findById(keep._id))?.isActive).toBe(true);
     expect((await User.findById(owner._id))?.storeId?.toString()).toBe(keep._id.toString());
     expect((await User.findById(stranger._id))?.storeId?.toString()).toBe(other._id.toString());
+  });
+
+  test('a member whose only store is removed is deactivated and cannot open another tenant', async () => {
+    const keep = await createStore('second-owner-keep', 'Second Owner Keep');
+    const extra = await createStore('second-owner-extra', 'Second Owner Extra');
+    const foreign = await createStore('second-owner-foreign', 'Second Owner Foreign');
+    await HomeLayout.create({
+      storeId: extra._id.toString(),
+      sections: [{ type: 'carousel', position: 0, isVisible: true }],
+    });
+    await StoreAppCredentials.create({ storeId: extra._id });
+    await Order.create({
+      storeId: extra._id,
+      orderNumber: `ORDER-${new Types.ObjectId().toString()}`,
+      customer: new Types.ObjectId(),
+      email: 'buyer-second-owner@example.com',
+      lineItems: [{ quantity: 1, price: 10, title: 'Scoped Product' }],
+      subtotalPrice: 10,
+      totalTax: 0,
+      totalPrice: 10,
+      currency: 'USD',
+      shippingAddress: {
+        firstName: 'Test',
+        lastName: 'Buyer',
+        address1: '123 Test Street',
+        city: 'Test City',
+        province: 'CA',
+        country: 'US',
+        zip: '94105',
+      },
+      mobileStatus: { current: 'placed' },
+      paymentStatus: 'paid',
+    });
+    const caller = await User.create({
+      name: 'Caller',
+      email: 'caller-second-owner@example.com',
+      password: 'password123',
+      role: 'super_admin',
+      isActive: true,
+      isVerified: true,
+      storeId: extra._id,
+      storeIds: [keep._id, extra._id],
+    });
+    const secondOwner = await User.create({
+      name: 'Second Owner',
+      email: 'second-owner-only@example.com',
+      password: 'password123',
+      role: 'super_admin',
+      isActive: true,
+      isVerified: true,
+      isPlatformOperator: false,
+      storeId: extra._id,
+      storeIds: [extra._id],
+    });
+    const callerToken = generateToken(caller._id.toString());
+    const secondToken = generateToken(secondOwner._id.toString());
+
+    const removed = await request(app)
+      .delete(`/api/v1/auth/stores/${extra._id.toString()}`)
+      .set('Authorization', `Bearer ${callerToken}`)
+      .send({ name: 'Second Owner Extra' });
+
+    expect(removed.status).toBe(200);
+    expect(removed.body.data.user.storeId).toBe(keep._id.toString());
+    expect(removed.body.data.user.storeIds).toEqual([keep._id.toString()]);
+
+    const savedCaller = await User.findById(caller._id);
+    expect(savedCaller?.isActive).toBe(true);
+    expect(savedCaller?.storeIds?.map(id => id.toString())).toEqual([keep._id.toString()]);
+
+    const savedSecond = await User.findById(secondOwner._id);
+    expect(savedSecond).toBeTruthy();
+    expect(savedSecond?.isActive).toBe(false);
+    expect(savedSecond?.storeId).toBeFalsy();
+    expect(savedSecond?.storeIds ?? []).toHaveLength(0);
+    expect(await User.countDocuments({ email: 'second-owner-only@example.com' })).toBe(1);
+    expect(await Store.countDocuments({ _id: extra._id })).toBe(1);
+    expect(await HomeLayout.countDocuments({ storeId: extra._id.toString() })).toBe(1);
+    expect(await StoreAppCredentials.countDocuments({ storeId: extra._id })).toBe(1);
+    expect(await Order.countDocuments({ storeId: extra._id })).toBe(1);
+
+    const profile = await request(app)
+      .get('/api/v1/auth/profile')
+      .set('Authorization', `Bearer ${secondToken}`);
+    expect(profile.status).toBe(403);
+    expect(profile.body.message).toBe('Your account has been deactivated. Please contact support.');
+
+    const ownershipReq = {
+      params: { storeId: foreign._id.toString() },
+      query: {},
+      body: {},
+      headers: {},
+      user: {
+        _id: savedSecond?._id,
+        id: savedSecond?._id.toString(),
+        storeId: savedSecond?.storeId,
+        storeIds: savedSecond?.storeIds,
+        email: savedSecond?.email,
+        role: savedSecond?.role,
+        name: savedSecond?.name,
+        isActive: savedSecond?.isActive,
+        isVerified: savedSecond?.isVerified,
+        isPlatformOperator: false,
+      },
+    } as AuthenticatedRequest;
+    const ownershipRes = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn().mockReturnThis(),
+    };
+    const next = jest.fn();
+
+    await requireOwnedStoreParam()(ownershipReq, ownershipRes as any, next);
+    expect(next).not.toHaveBeenCalled();
+    expect(ownershipRes.status).toHaveBeenCalledWith(403);
+    expect(ownershipRes.json).toHaveBeenCalledWith({
+      success: false,
+      error: 'User account is inactive',
+    });
+
+    next.mockClear();
+    ownershipRes.status.mockClear();
+    ownershipRes.json.mockClear();
+    await requireOwnedStoreContext()(ownershipReq, ownershipRes as any, next);
+    expect(next).not.toHaveBeenCalled();
+    expect(ownershipRes.status).toHaveBeenCalledWith(403);
+    expect(ownershipRes.json).toHaveBeenCalledWith({
+      success: false,
+      error: 'User account is inactive',
+    });
+
+    const last = await request(app)
+      .delete(`/api/v1/auth/stores/${keep._id.toString()}`)
+      .set('Authorization', `Bearer ${callerToken}`)
+      .send({ name: 'Second Owner Keep' });
+    expect(last.status).toBe(409);
+    expect(last.body.code).toBe('LAST_STORE');
+    expect((await User.findById(caller._id))?.isActive).toBe(true);
+    expect((await User.findById(caller._id))?.storeId?.toString()).toBe(keep._id.toString());
+    expect((await Store.findById(keep._id))?.isActive).toBe(true);
   });
 
   test('switching the active store onto an email collision leaves the store unchanged', async () => {
