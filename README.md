@@ -215,7 +215,7 @@ curl http://localhost:3000/api/health
 | `JWT_SECRET` | JWT signing key | Yes | - |
 | `SHOPIFY_API_KEY` | Legacy fallback for the Partner app client ID | No | - |
 | `SHOPIFY_CLIENT_ID` | Partner app client ID for merchant OAuth | Yes for connect | - |
-| `SHOPIFY_CLIENT_SECRET` | Partner app secret (callback HMAC and code exchange) | Yes for connect | - |
+| `SHOPIFY_CLIENT_SECRET` | Partner app secret (OAuth and webhook HMAC, including compliance webhooks) | Yes for connect | - |
 | `SHOPIFY_REDIRECT_URI` | Backend OAuth callback URL registered on the Partner app | Yes for connect | - |
 | `SHOPIFY_SCOPES` | Comma-separated Admin scopes requested at connect | Yes for connect | - |
 | `SHOPIFY_OAUTH_RETURN_URL` | Dashboard URL the browser returns to after connect | No | - |
