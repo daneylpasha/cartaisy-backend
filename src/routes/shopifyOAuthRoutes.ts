@@ -9,8 +9,10 @@ const router = Router();
  * Dashboard Shopify connect contract. Tokens are stored only on the backend
  * Store record. These handlers never return shopify.accessToken.
  *
+ * GET  /oauth/install  — public App Store entry; HMAC, then 302 to Shopify authorize
  * POST /oauth/connect  — start connect, returns the Shopify authorize URL
  * GET  /oauth/callback — Shopify browser redirect; completes the grant
+ * POST /oauth/claim    — store admin attaches a pending App Store token with the claim nonce
  * GET  /status         — connected | disconnected for the authenticated store
  * POST /disconnect     — revoke the Shopify token, then clear it
  * GET  /sync           — durable catalog sync status for the authenticated store
@@ -18,6 +20,14 @@ const router = Router();
  */
 
 const dashboardGuard = [authenticate as any, storeAuth as any, storeAdmin as any];
+
+/**
+ * Public App Store install entry. Shopify opens this URL with shop, hmac,
+ * timestamp, and host. No JWT. A bad HMAC is rejected and is not redirected
+ * to the authorize URL.
+ * GET /oauth/install
+ */
+router.get('/oauth/install', shopifyOAuthController.beginPublicInstall as any);
 
 /**
  * Initiate Shopify OAuth flow
@@ -39,6 +49,13 @@ router.get(
   '/oauth/callback',
   shopifyOAuthController.handleCallback as any
 );
+
+/**
+ * Claim a pending App Store install onto the authenticated store.
+ * POST /oauth/claim { shop, claimToken }
+ * Protected: store admin. Client storeId is ignored.
+ */
+router.post('/oauth/claim', ...dashboardGuard, shopifyOAuthController.claimPendingInstall as any);
 
 /**
  * Get Shopify connection status
