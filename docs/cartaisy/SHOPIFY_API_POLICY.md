@@ -34,8 +34,10 @@ The backend is the only owner of Shopify access tokens for new merchant connects
 
 | Action | Method and path | Auth | Result |
 | --- | --- | --- | --- |
-| Start connect | `POST /api/v1/shopify/oauth/connect` with `{ "shop": "store.myshopify.com" }` | Store admin JWT | `{ authorizationUrl, state, tokenOwner: "backend" }`. Redirect the merchant's browser to `authorizationUrl`. `state` is CSRF material, not a Shopify token. |
-| Complete connect | `GET /api/v1/shopify/oauth/callback` | Public. Shopify redirects the browser here. | Exchanges the code, encrypts the Admin token onto that store only, best-effort provisions the Storefront token, starts the first catalog sync, and registers operational webhook subscriptions for that shop. The sync and webhook registration do not block the browser redirect. A sync or webhook error does not fail the callback. Response and optional browser redirect never include the token. |
+| App Store install | `GET /api/v1/shopify/oauth/install` | Public. Shopify opens the App URL with `shop`, `hmac`, `timestamp`, and `host`. | Verifies the HMAC, then **302** to the Shopify authorize URL. No JWT, no marketing page, and no Cartaisy store yet. A bad HMAC is **401** and is not sent to authorize. |
+| Start connect | `POST /api/v1/shopify/oauth/connect` with `{ "shop": "store.myshopify.com" }` | Store admin JWT | `{ authorizationUrl, state, tokenOwner: "backend" }`. Redirect the merchant's browser to `authorizationUrl`. `state` is CSRF material, not a Shopify token. Dashboard Connect is unchanged. |
+| Complete connect | `GET /api/v1/shopify/oauth/callback` | Public. Shopify redirects the browser here. | Dashboard connect: exchanges the code, encrypts the Admin token onto that store only, best-effort provisions the Storefront token, starts the first catalog sync, and registers operational webhook subscriptions for that shop. App Store install (no store on the state): exchanges the code, encrypts the token onto a pending install, and does **not** sync or register webhooks yet. The sync and webhook registration do not block the browser redirect. A sync or webhook error does not fail the callback. Response and optional browser redirect never include the token. |
+| Claim install | `POST /api/v1/shopify/oauth/claim` with `{ "shop": "store.myshopify.com", "claimToken": "<64-hex nonce>" }` | Store admin JWT | Attaches the pending App Store token to the authenticated store via `saveCredentials`, then starts the same catalog sync, webhook registration, and Storefront token provisioning as dashboard connect. `claimToken` is the one-time nonce from the callback URL fragment. Knowing the shop domain is not enough. A client `storeId` is ignored. Neither token is returned. |
 | Connection status | `GET /api/v1/shopify/status` | Store admin JWT | `status` is `connected` or `disconnected` for the authenticated store. When connected, `webhooksRegisteredAt` and `webhookRegistrationError` report the latest operational webhook registration. A client `storeId` is ignored. |
 | Catalog sync status | `GET /api/v1/shopify/sync` | Store admin JWT | Durable status for the authenticated store only: `idle`, `syncing`, `succeeded`, or `failed`, plus timestamps, a safe `errorSummary`, and `eligibleForBuild`. A client `storeId` is ignored. |
 | Sync again | `POST /api/v1/shopify/sync` | Store admin JWT | Same in-request full sync, using the backend token for that store only. Refuses when disconnected. Persists the status above. A fresh `syncing` run returns 409 `CATALOG_SYNC_IN_PROGRESS` and does not start a second sync. |
@@ -90,7 +92,19 @@ Do not mention the automatic retries. If the button is pressed while status is a
 
 Build my app is a separate tracked request, not this sync route (issue #155, dashboard `daneylpasha/cartaisy-dashboard#17`). `POST /api/v1/build-requests` calls `assertBuildEligible(storeId)` before insert and returns `buildEligibilityErrorBody` at HTTP 409 when it throws. It does not write `Store.catalogSync`. Contract: `docs/cartaisy/BUILD_REQUEST_API.md`.
 
-When `SHOPIFY_OAUTH_RETURN_URL` is set, the callback redirects the browser there with `shopify=connected` or `shopify=error` and a short `reason`. The return URL is taken only from that environment variable.
+When `SHOPIFY_OAUTH_RETURN_URL` is set, the callback redirects the browser there with `shopify=connected` or `shopify=error` and a short `reason`. An App Store install that still needs a Cartaisy store adds `claim=pending` on the success redirect (`shopify=connected&shop=…&claim=pending`) and puts a one-time `claim_token` in the URL fragment. That nonce is not a Shopify access token and is not a query parameter, so it is not sent on the next request's Referer. The dashboard reads the fragment in the browser and posts it as `claimToken`. The Shopify access token is not on that URL. The return URL is taken only from that environment variable. Pending installs expire about 10 minutes after the token is stored. `POST /api/v1/shopify/oauth/claim` is what moves that token onto the signed-in store, and only when `claimToken` matches.
+
+### App Store install URL
+
+Issue #207. Shopify's automated checks open the App URL and require an immediate authorize redirect, before any Cartaisy login. Set the Partner app **App URL** to the public install route, not the marketing site and not `/dashboard`:
+
+`https://cartaisy-backend-production.up.railway.app/api/v1/shopify/oauth/install`
+
+Keep the allowed redirection URL on the existing callback:
+
+`https://cartaisy-backend-production.up.railway.app/api/v1/shopify/oauth/callback`
+
+The released app version stays non-embedded with the legacy authorization-code install: `embedded = false` and `[access_scopes] use_legacy_install_flow = true`. Do not switch this app to managed install or token exchange. Dashboard `POST /api/v1/shopify/oauth/connect` remains the path for a merchant who is already signed in.
 
 Webhook HMAC verification and shop-domain-to-Store mapping stay store-scoped. Disconnect and `app/uninstalled` clear `shopify.shop` and `shopify.isConnected`, so a disconnected shop no longer resolves for catalog, order, or customer webhooks. Both paths copy that shop domain onto `shopify.complianceShop` before clearing it. Mandatory compliance webhooks use that retained domain so `shop/redact` can still find the store. See the compliance section below.
 
@@ -281,3 +295,4 @@ After approval, Connect on a merchant shop should show Install enabled. Shopify 
 - GitHub issue: #155 and `docs/cartaisy/BUILD_REQUEST_API.md` (tracked build request; dashboard `daneylpasha/cartaisy-dashboard#17`).
 - GitHub issue: #162 (mandatory compliance webhooks and `app/uninstalled`).
 - GitHub issue: #163 (operational product, order, inventory, and `customers/create` subscriptions after connect).
+- GitHub issue: #207 (public App Store OAuth install entry, pending token, and authenticated claim).

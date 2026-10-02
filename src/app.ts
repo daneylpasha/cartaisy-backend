@@ -276,7 +276,8 @@ app.use(`/api/${apiConfig.version}/customer/addresses`, customerAddressRoutes);
 // Unified cart routes - supports both authenticated customers and guest users
 app.use(`/api/${apiConfig.version}/unified-cart`, unifiedCartRoutes);
 // IMPORTANT: shopifyOAuthRoutes MUST come before shopifyRoutes
-// because shopifyRoutes has router.use(authenticate) which would block the OAuth callback
+// because shopifyRoutes has router.use(authenticate) which would block the
+// public OAuth install entry and the OAuth callback.
 app.use(`/api/${apiConfig.version}/shopify`, shopifyOAuthRoutes);
 app.use(`/api/${apiConfig.version}/shopify`, shopifyRoutes);
 // Shopify OAuth callback route (matches Shopify Partner Dashboard redirect URL)

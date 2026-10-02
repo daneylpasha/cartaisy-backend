@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import fetch from 'node-fetch';
+import ShopifyPendingInstall from '../models/ShopifyPendingInstall';
 import Store from '../models/Store';
 import { encrypt } from '../utils/encryption';
 import {
@@ -23,6 +24,7 @@ import { catalogSyncShopChangeUpdate } from './catalogSyncService';
  */
 
 const STATE_TOKEN_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
+const OAUTH_TIMESTAMP_MAX_SKEW_MS = STATE_TOKEN_EXPIRY_MS;
 
 const SHOP_DOMAIN_PATTERN = /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/;
 
@@ -236,6 +238,23 @@ export const verifyOAuthCallbackHmac = (query: Record<string, unknown>): boolean
 };
 
 /**
+ * Reject a signed Shopify install query whose timestamp is missing or stale.
+ * Call this only after the HMAC check. The callback path does not use it:
+ * that grant is already bound to a single-use state.
+ */
+export const assertRecentOAuthTimestamp = (query: Record<string, unknown>): void => {
+  const raw = query.timestamp;
+  if (typeof raw !== 'string' || !/^\d{10}$/.test(raw)) {
+    throw new ShopifyOAuthError('Invalid OAuth timestamp', 401, 'invalid_timestamp');
+  }
+
+  const issuedAtMs = Number(raw) * 1000;
+  if (Math.abs(Date.now() - issuedAtMs) > OAUTH_TIMESTAMP_MAX_SKEW_MS) {
+    throw new ShopifyOAuthError('Expired OAuth request', 401, 'expired_timestamp');
+  }
+};
+
+/**
  * Browser return URL after the public OAuth callback. Built only from
  * `SHOPIFY_OAUTH_RETURN_URL`. Caller-supplied return URLs are ignored so the
  * callback cannot be turned into an open redirect, and the token is never
@@ -243,7 +262,7 @@ export const verifyOAuthCallbackHmac = (query: Record<string, unknown>): boolean
  */
 export const buildOAuthReturnUrl = (
   outcome: 'connected' | 'error',
-  details: { shop?: string; reason?: string } = {}
+  details: { shop?: string; reason?: string; claim?: 'pending'; claimToken?: string } = {}
 ): string | null => {
   const raw = (process.env.SHOPIFY_OAUTH_RETURN_URL || '').trim();
   if (!raw) {
@@ -267,6 +286,21 @@ export const buildOAuthReturnUrl = (
   }
   if (outcome === 'error' && details.reason && /^[a-z0-9_]+$/.test(details.reason)) {
     url.searchParams.set('reason', details.reason);
+  }
+  if (outcome === 'connected' && details.claim === 'pending') {
+    url.searchParams.set('claim', 'pending');
+  }
+  // The claim nonce is a fragment so the dashboard can read it and it is not
+  // sent on the next request's Referer. It is not a Shopify access token.
+  if (
+    outcome === 'connected' &&
+    details.claimToken &&
+    /^[a-f0-9]{64}$/.test(details.claimToken)
+  ) {
+    const current = url.hash.replace(/^#/, '');
+    url.hash = current
+      ? `${current}&claim_token=${details.claimToken}`
+      : `claim_token=${details.claimToken}`;
   }
 
   const serialized = url.toString();
@@ -1162,4 +1196,217 @@ export const validateStateToken = async (
     shop: pending.shopify.oauthStateShop,
     storeId: pending._id.toString(),
   };
+};
+
+const pendingInstallExpiry = (): Date => new Date(Date.now() + STATE_TOKEN_EXPIRY_MS);
+
+/**
+ * Public App Store install. Creates a store-less one-time state and returns
+ * Shopify's authorize URL. No Cartaisy store is created or updated.
+ */
+export const beginPublicAppInstall = async (shop: string): Promise<string> => {
+  const normalizedShop = normalizeShopDomain(shop);
+  const state = crypto.randomBytes(32).toString('hex');
+  const created = await ShopifyPendingInstall.create({
+    shop: normalizedShop,
+    stateHash: hashOAuthState(state),
+    status: 'awaiting_auth',
+    expiresAt: pendingInstallExpiry(),
+  });
+
+  try {
+    return getAuthorizationUrl(normalizedShop, state);
+  } catch (error) {
+    await ShopifyPendingInstall.deleteOne({ _id: created._id });
+    throw error;
+  }
+};
+
+/**
+ * Single-use consume of a public-install state. Returns null when the state
+ * is missing, expired, or already used. Does not attach a store.
+ */
+export const consumePendingInstallState = async (
+  state: string
+): Promise<{ id: string; shop: string } | null> => {
+  if (!state || typeof state !== 'string') {
+    return null;
+  }
+
+  const pending = await ShopifyPendingInstall.findOneAndUpdate(
+    {
+      stateHash: hashOAuthState(state),
+      status: 'awaiting_auth',
+      expiresAt: { $gt: new Date() },
+    },
+    {
+      $set: { status: 'exchanging' },
+      $unset: { stateHash: '' },
+    },
+    { new: true }
+  );
+
+  if (!pending) {
+    return null;
+  }
+
+  return {
+    id: pending._id.toString(),
+    shop: pending.shop,
+  };
+};
+
+/**
+ * Encrypt the offline token onto the pending install and return a one-time
+ * claim nonce. Only the hash is stored. Catalog sync and webhook registration
+ * stay off until the installing browser's store admin claims the shop.
+ */
+export const storePendingInstallToken = async (
+  id: string,
+  accessToken: string,
+  scope: string
+): Promise<string> => {
+  if (!accessToken || !scope) {
+    throw new ShopifyOAuthError(
+      'Failed to obtain access token from Shopify',
+      400,
+      'token_exchange_failed'
+    );
+  }
+
+  const claimToken = crypto.randomBytes(32).toString('hex');
+  const encryptedToken = encrypt(accessToken);
+  const updated = await ShopifyPendingInstall.findOneAndUpdate(
+    { _id: id, status: 'exchanging' },
+    {
+      $set: {
+        status: 'authorized',
+        accessToken: encryptedToken,
+        claimTokenHash: hashOAuthState(claimToken),
+        scope,
+        expiresAt: pendingInstallExpiry(),
+      },
+    },
+    { new: true }
+  );
+
+  if (!updated) {
+    throw new ShopifyOAuthError('Pending install not found', 404, 'pending_install_not_found');
+  }
+
+  await ShopifyPendingInstall.deleteMany({
+    shop: updated.shop,
+    _id: { $ne: updated._id },
+    status: { $in: ['awaiting_auth', 'authorized', 'exchanging'] },
+  });
+
+  return claimToken;
+};
+
+export interface PendingInstallGrant {
+  id: string;
+  shop: string;
+  accessToken: string;
+  scope: string;
+}
+
+/**
+ * Atomically take the authorized install for this shop and claim nonce.
+ * A wrong nonce does not change the record. The plaintext Shopify token is
+ * returned only to the claim handler, which must pass it to `saveCredentials`
+ * and must not put it on the HTTP response.
+ *
+ * A process crash while status is `claiming` leaves the install until
+ * `expiresAt`. The merchant installs again after that.
+ */
+export const beginPendingInstallClaim = async (
+  shop: string,
+  storeId: string,
+  claimToken: string
+): Promise<PendingInstallGrant> => {
+  if (!storeId) {
+    throw new ShopifyOAuthError('Store authentication required', 401, 'store_required');
+  }
+
+  const normalizedShop = normalizeShopDomain(shop);
+  if (typeof claimToken !== 'string' || !/^[a-f0-9]{64}$/.test(claimToken)) {
+    throw new ShopifyOAuthError(
+      'No pending Shopify install to claim for this shop',
+      404,
+      'pending_install_not_found'
+    );
+  }
+
+  const pending = await ShopifyPendingInstall.findOneAndUpdate(
+    {
+      shop: normalizedShop,
+      claimTokenHash: hashOAuthState(claimToken),
+      status: 'authorized',
+      expiresAt: { $gt: new Date() },
+    },
+    {
+      $set: {
+        status: 'claiming',
+        claimedByStoreId: storeId,
+        claimedAt: new Date(),
+      },
+    },
+    { sort: { updatedAt: -1 }, new: true }
+  ).select('+accessToken');
+
+  if (!pending) {
+    throw new ShopifyOAuthError(
+      'No pending Shopify install to claim for this shop',
+      404,
+      'pending_install_not_found'
+    );
+  }
+
+  if (!pending.accessToken || !pending.scope) {
+    await ShopifyPendingInstall.deleteOne({ _id: pending._id, status: 'claiming' });
+    throw new ShopifyOAuthError(
+      'No pending Shopify install to claim for this shop',
+      404,
+      'pending_install_not_found'
+    );
+  }
+
+  try {
+    return {
+      id: pending._id.toString(),
+      shop: normalizedShop,
+      accessToken: readStoredShopifyAdminToken(pending.accessToken),
+      scope: pending.scope,
+    };
+  } catch (error) {
+    await abortPendingInstallClaim(pending._id.toString(), storeId);
+    if (error instanceof ShopifyOAuthError) {
+      throw error;
+    }
+    throw new ShopifyOAuthError(
+      'Pending Shopify install could not be read. Install the app again.',
+      409,
+      'pending_install_unreadable'
+    );
+  }
+};
+
+/** Drop the pending token after it has been saved on the store. */
+export const completePendingInstallClaim = async (id: string, shop: string): Promise<void> => {
+  await ShopifyPendingInstall.deleteOne({ _id: id, status: 'claiming' });
+  await ShopifyPendingInstall.deleteMany({
+    shop,
+    status: { $in: ['awaiting_auth', 'authorized', 'exchanging'] },
+  });
+};
+
+/** Return a claim that failed before credentials were saved so it can be retried. */
+export const abortPendingInstallClaim = async (id: string, storeId: string): Promise<void> => {
+  await ShopifyPendingInstall.updateOne(
+    { _id: id, status: 'claiming', claimedByStoreId: storeId },
+    {
+      $set: { status: 'authorized' },
+      $unset: { claimedByStoreId: '', claimedAt: '' },
+    }
+  );
 };

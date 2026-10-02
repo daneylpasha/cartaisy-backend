@@ -23,9 +23,15 @@ import { ShopifyAdminTokenError } from '../utils/shopifyTokenStorage';
  *
  * Dashboard contract (backend is the only token owner):
  * - POST /shopify/oauth/connect returns an authorize URL. No access token.
- * - GET  /shopify/oauth/callback completes OAuth, stores the token, starts
- *   the first catalog sync, and registers operational webhook subscriptions.
+ * - GET  /shopify/oauth/install is the public App Store entry. It verifies
+ *   the Shopify HMAC and redirects to the authorize URL with no store yet.
+ * - GET  /shopify/oauth/callback completes OAuth. A dashboard connect stores
+ *   the token, starts the first catalog sync, and registers operational
+ *   webhook subscriptions. An App Store install stores the encrypted token
+ *   on a pending record and does not sync until that install is claimed.
  *   Neither the sync nor webhook registration blocks the redirect.
+ * - POST /shopify/oauth/claim attaches a pending App Store token to the
+ *   authenticated store, then starts the same sync and webhook work.
  * - GET  /shopify/status reports connected or disconnected.
  * - POST /shopify/disconnect revokes and clears the backend token.
  * - GET  /shopify/sync reads durable catalog sync status for this store only.
@@ -47,6 +53,9 @@ const queryOf = (req: AuthenticatedRequest): OAuthQuery =>
 
 const bodyShopOf = (req: AuthenticatedRequest): unknown =>
   (req.body as { shop?: unknown } | undefined)?.shop;
+
+const bodyClaimTokenOf = (req: AuthenticatedRequest): unknown =>
+  (req.body as { claimToken?: unknown } | undefined)?.claimToken;
 
 const oauthStatusCode = (error: unknown, fallback: number): number => {
   if (error instanceof shopifyOAuth.ShopifyOAuthError) {
@@ -76,11 +85,19 @@ const sendCallbackResult = (
   res: Response,
   status: number,
   body: Record<string, unknown>,
-  redirect: { outcome: 'connected' | 'error'; shop?: string; reason?: string }
+  redirect: {
+    outcome: 'connected' | 'error';
+    shop?: string;
+    reason?: string;
+    claim?: 'pending';
+    claimToken?: string;
+  }
 ): void => {
   const returnUrl = shopifyOAuth.buildOAuthReturnUrl(redirect.outcome, {
     shop: redirect.shop,
     reason: redirect.reason,
+    claim: redirect.claim,
+    claimToken: redirect.claimToken,
   });
 
   if (returnUrl) {
@@ -140,11 +157,139 @@ export const initiateOAuth = async (req: AuthenticatedRequest, res: Response) =>
 };
 
 /**
+ * After a token is stored on a store: currency/timezone, then catalog sync,
+ * operational webhooks, and the Storefront token. Sync and webhook failures
+ * do not roll back the connection. The sync claim is awaited so status is
+ * `syncing` before the HTTP response; the import itself keeps running.
+ */
+const startPostConnectWork = async (storeId: string, normalizedShop: string): Promise<void> => {
+  try {
+    await startCatalogSyncForStore(storeId);
+  } catch (syncStartError: unknown) {
+    console.error(
+      `[Shopify OAuth] Catalog sync failed to start for store ${storeId} shop ${normalizedShop}: ${toSafeSyncErrorSummary(syncStartError)}`
+    );
+  }
+
+  try {
+    startOperationalWebhookRegistration(storeId);
+  } catch (webhookError: unknown) {
+    console.error(
+      `[Shopify OAuth] Webhook registration failed to start for store ${storeId} shop ${normalizedShop}: ${safeErrorMessage(webhookError, 'Webhook registration failed')}`
+    );
+  }
+
+  try {
+    await shopifyOAuth.createStorefrontAccessToken(storeId);
+  } catch (storefrontError: unknown) {
+    const message = storefrontError instanceof Error ? storefrontError.message : 'Unknown error';
+    console.warn(
+      `[Shopify OAuth] Storefront access token provisioning failed for store ${storeId}; store remains Admin-connected:`,
+      message || 'Unknown error'
+    );
+  }
+};
+
+const connectGrantedToken = async (
+  storeId: string,
+  normalizedShop: string,
+  accessToken: string,
+  scope: string
+) => {
+  const shopInfo = await shopifyOAuth.getShopInfo(normalizedShop, accessToken);
+
+  await shopifyOAuth.saveCredentials(
+    storeId,
+    normalizedShop,
+    accessToken,
+    scope
+  );
+
+  return shopInfo;
+};
+
+const rememberShopSettings = async (
+  storeId: string,
+  shopInfo: shopifyOAuth.ShopInfo
+): Promise<void> => {
+  await Store.findByIdAndUpdate(storeId, {
+    $set: {
+      'settings.currency': shopInfo.currency || 'USD',
+      'settings.timezone': shopInfo.timezone || 'UTC',
+    },
+  });
+};
+
+/**
+ * Public App Store install entry.
+ * GET /shopify/oauth/install?shop=...&hmac=...&timestamp=...
+ * No JWT. Verifies Shopify's HMAC before any redirect to the authorize URL.
+ */
+export const beginPublicInstall = async (req: AuthenticatedRequest, res: Response) => {
+  const query = (req.query || {}) as Record<string, unknown>;
+  const fail = (status: number, error: string, reason: string, shopDomain?: string): void => {
+    sendCallbackResult(
+      res,
+      status,
+      { success: false, error },
+      { outcome: 'error', reason, shop: shopDomain }
+    );
+  };
+
+  let hmacValid = false;
+  try {
+    hmacValid = shopifyOAuth.verifyOAuthCallbackHmac(query);
+  } catch (error) {
+    return fail(
+      oauthStatusCode(error, 500),
+      safeErrorMessage(error, 'OAuth install failed'),
+      oauthReasonCode(error, 'oauth_not_configured')
+    );
+  }
+
+  if (!hmacValid) {
+    return res.status(401).json({
+      success: false,
+      error: 'Invalid OAuth signature',
+    });
+  }
+
+  try {
+    shopifyOAuth.assertRecentOAuthTimestamp(query);
+  } catch (error) {
+    return res.status(oauthStatusCode(error, 401)).json({
+      success: false,
+      error: safeErrorMessage(error, 'Invalid OAuth request'),
+    });
+  }
+
+  try {
+    if (typeof query.shop !== 'string') {
+      return fail(400, 'Shop parameter is required', 'invalid_shop');
+    }
+
+    const authorizationUrl = await shopifyOAuth.beginPublicAppInstall(query.shop);
+    return res.redirect(302, authorizationUrl);
+  } catch (error) {
+    const shop = typeof query.shop === 'string' ? query.shop : undefined;
+    console.error('Public install error:', safeErrorMessage(error, 'OAuth install failed'));
+    return fail(
+      oauthStatusCode(error, 400),
+      safeErrorMessage(error, 'OAuth install failed'),
+      oauthReasonCode(error, 'oauth_failed'),
+      shop
+    );
+  }
+};
+
+/**
  * Handles Shopify OAuth callback
  * GET /shopify/oauth/callback?code=...&hmac=...&shop=...&state=...
- * Public: Shopify redirects the merchant's browser here. storeId comes from
- * the single-use state record. When SHOPIFY_OAUTH_RETURN_URL is set, the
- * browser is sent back to the dashboard without the access token.
+ * Public: Shopify redirects the merchant's browser here. A dashboard connect
+ * reads storeId from the single-use state record. An App Store install has
+ * no storeId; the token stays on the pending record until claim. When
+ * SHOPIFY_OAUTH_RETURN_URL is set, the browser is sent back to the dashboard
+ * without the access token.
  */
 export const handleCallback = async (req: AuthenticatedRequest, res: Response) => {
   const fail = (
@@ -192,11 +337,17 @@ export const handleCallback = async (req: AuthenticatedRequest, res: Response) =
 
     const normalizedShop = shopifyOAuth.normalizeShopDomain(shop);
     const validatedData = await shopifyOAuth.validateStateToken(state);
-    if (!validatedData || validatedData.shop !== normalizedShop) {
+    const pending = validatedData
+      ? null
+      : await shopifyOAuth.consumePendingInstallState(state);
+
+    if (validatedData && validatedData.shop !== normalizedShop) {
+      return fail(401, 'Invalid or expired state token', 'invalid_state', normalizedShop);
+    }
+    if (!validatedData && (!pending || pending.shop !== normalizedShop)) {
       return fail(401, 'Invalid or expired state token', 'invalid_state', normalizedShop);
     }
 
-    const storeId = validatedData.storeId;
     const tokenResponse = await shopifyOAuth.exchangeCodeForToken(normalizedShop, code);
 
     if (!tokenResponse.accessToken) {
@@ -208,57 +359,49 @@ export const handleCallback = async (req: AuthenticatedRequest, res: Response) =
       );
     }
 
-    const shopInfo = await shopifyOAuth.getShopInfo(normalizedShop, tokenResponse.accessToken);
+    if (pending) {
+      const claimToken = await shopifyOAuth.storePendingInstallToken(
+        pending.id,
+        tokenResponse.accessToken,
+        tokenResponse.scope
+      );
 
-    await shopifyOAuth.saveCredentials(
+      return sendCallbackResult(
+        res,
+        200,
+        {
+          success: true,
+          data: {
+            status: 'pending_claim',
+            claim: 'pending',
+            claimToken,
+            tokenOwner: 'backend',
+            shop: normalizedShop,
+            message: 'Shopify authorized. Claim this shop for your store to finish connect.',
+          },
+        },
+        { outcome: 'connected', shop: normalizedShop, claim: 'pending', claimToken }
+      );
+    }
+
+    if (!validatedData) {
+      return fail(401, 'Invalid or expired state token', 'invalid_state', normalizedShop);
+    }
+
+    const storeId = validatedData.storeId;
+    const shopInfo = await connectGrantedToken(
       storeId,
       normalizedShop,
       tokenResponse.accessToken,
       tokenResponse.scope
     );
+    await rememberShopSettings(storeId, shopInfo);
 
-    await Store.findByIdAndUpdate(storeId, {
-      $set: {
-        'settings.currency': shopInfo.currency || 'USD',
-        'settings.timezone': shopInfo.timezone || 'UTC',
-      },
-    });
-
-    // First catalog sync (issue #166). Claim `syncing` before the redirect so
-    // GET /shopify/sync shows progress, then let the import finish in the
-    // background. A sync error must not roll back a successful connect.
-    try {
-      await startCatalogSyncForStore(storeId);
-    } catch (syncStartError: unknown) {
-      console.error(
-        `[Shopify OAuth] Catalog sync failed to start for store ${storeId} shop ${normalizedShop}: ${toSafeSyncErrorSummary(syncStartError)}`
-      );
-    }
-
-    // Operational product/order/inventory/customer subscriptions for this shop
-    // only. Runs after the token is saved and does not block the redirect.
-    // A Shopify or configuration failure is logged and stored on
-    // shopify.webhookRegistrationError. Reconnect retries the same registration.
-    try {
-      startOperationalWebhookRegistration(storeId);
-    } catch (webhookError: unknown) {
-      console.error(
-        `[Shopify OAuth] Webhook registration failed to start for store ${storeId} shop ${normalizedShop}: ${safeErrorMessage(webhookError, 'Webhook registration failed')}`
-      );
-    }
-
-    // Best-effort: provision a per-store Storefront API access token so
-    // store-scoped mobile product/cart/checkout paths work for this store.
-    // A failure here must NOT fail the OAuth flow — the store stays
-    // Admin-connected and an operator can retry via POST /shopify/storefront-token.
-    try {
-      await shopifyOAuth.createStorefrontAccessToken(storeId);
-    } catch (storefrontError: any) {
-      console.warn(
-        `[Shopify OAuth] Storefront access token provisioning failed for store ${storeId}; store remains Admin-connected:`,
-        storefrontError?.message || 'Unknown error'
-      );
-    }
+    // First catalog sync (issue #166) and operational webhooks. Claim
+    // `syncing` before the redirect so GET /shopify/sync shows progress, then
+    // let the import finish in the background. A sync or webhook error must
+    // not roll back a successful connect.
+    await startPostConnectWork(storeId, normalizedShop);
 
     return sendCallbackResult(
       res,
@@ -289,6 +432,103 @@ export const handleCallback = async (req: AuthenticatedRequest, res: Response) =
       safeErrorMessage(error, 'OAuth callback failed'),
       oauthReasonCode(error, 'oauth_failed')
     );
+  }
+};
+
+const shopSummary = (shopInfo: shopifyOAuth.ShopInfo) => ({
+  shop: shopInfo.shop,
+  name: shopInfo.name,
+  email: shopInfo.email,
+  domain: shopInfo.domain,
+  currency: shopInfo.currency,
+  timezone: shopInfo.timezone,
+  country: shopInfo.country,
+});
+
+/**
+ * Attach a pending App Store install to the authenticated store.
+ * POST /shopify/oauth/claim { shop, claimToken }
+ * Store admin JWT. claimToken is the nonce from the callback fragment.
+ * A client storeId is ignored. Sync and webhooks start only after
+ * saveCredentials succeeds.
+ */
+export const claimPendingInstall = async (req: AuthenticatedRequest, res: Response) => {
+  let claim: shopifyOAuth.PendingInstallGrant | null = null;
+  let credentialsSaved = false;
+
+  try {
+    if (!req.storeId) {
+      return res.status(401).json({
+        success: false,
+        error: 'Store authentication required',
+      });
+    }
+
+    const rawShop = bodyShopOf(req);
+    if (typeof rawShop !== 'string') {
+      return res.status(400).json({
+        success: false,
+        error: 'Shop parameter is required',
+      });
+    }
+
+    const claimToken = bodyClaimTokenOf(req);
+    if (typeof claimToken !== 'string' || !claimToken) {
+      return res.status(400).json({
+        success: false,
+        error: 'Claim token is required',
+      });
+    }
+
+    const storeId = req.storeId.toString();
+    claim = await shopifyOAuth.beginPendingInstallClaim(rawShop, storeId, claimToken);
+    const shopInfo = await connectGrantedToken(
+      storeId,
+      claim.shop,
+      claim.accessToken,
+      claim.scope
+    );
+    credentialsSaved = true;
+    await rememberShopSettings(storeId, shopInfo);
+    await shopifyOAuth.completePendingInstallClaim(claim.id, claim.shop);
+    const connectedShop = claim.shop;
+    claim = null;
+
+    await startPostConnectWork(storeId, connectedShop);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        status: 'connected',
+        tokenOwner: 'backend',
+        shop: shopSummary(shopInfo),
+        message: 'Shopify store connected successfully',
+      },
+    });
+  } catch (error) {
+    if (claim) {
+      try {
+        if (credentialsSaved) {
+          await shopifyOAuth.completePendingInstallClaim(claim.id, claim.shop);
+        } else {
+          await shopifyOAuth.abortPendingInstallClaim(claim.id, req.storeId?.toString() || '');
+        }
+      } catch (abortError) {
+        console.error(
+          'Pending install claim abort error:',
+          safeErrorMessage(abortError, 'Failed to release pending Shopify install')
+        );
+      }
+    }
+
+    const claimError = error instanceof shopifyOAuth.ShopifyOAuthError
+      ? error.message
+      : 'Failed to claim Shopify install';
+    console.error('Pending install claim error:', claimError);
+    return res.status(oauthStatusCode(error, 400)).json({
+      success: false,
+      error: claimError,
+    });
   }
 };
 
