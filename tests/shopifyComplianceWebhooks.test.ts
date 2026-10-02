@@ -26,6 +26,8 @@ jest.mock('node-fetch', () => ({
 const fetchMock = fetch as unknown as jest.Mock;
 
 const TEST_WEBHOOK_SECRET = 'test-webhook-secret';
+const TEST_CLIENT_SECRET = 'test-partner-client-secret';
+const TEST_API_SECRET = 'test-partner-api-secret';
 const SHOP_A = 'compliance-a.myshopify.com';
 const SHOP_B = 'compliance-b.myshopify.com';
 const UNKNOWN_SHOP = 'compliance-unknown.myshopify.com';
@@ -351,6 +353,150 @@ describe('Shopify compliance webhooks', () => {
     expect(await User.findOne({ storeId: storeAId, email: EMAIL })).toBeTruthy();
     expect(fetchMock).not.toHaveBeenCalled();
     await expectStoreBUntouched();
+  });
+
+  test('verifies compliance topics with the partner client secret when the webhook secret is unset', async () => {
+    await seedShopper();
+    const originalClientSecret = process.env.SHOPIFY_CLIENT_SECRET;
+    const originalApiSecret = process.env.SHOPIFY_API_SECRET;
+    tenantConfig.shopify.webhookSecret = '';
+    delete process.env.SHOPIFY_API_SECRET;
+    process.env.SHOPIFY_CLIENT_SECRET = TEST_CLIENT_SECRET;
+
+    try {
+      const topics = [
+        ['customers/data_request', dataRequestPayload(), 'customers/data_request'],
+        ['customers/redact', redactPayload(), 'customers/redact'],
+        ['shop/redact', { shop_id: 1, shop_domain: SHOP_A }, 'shop/redact'],
+      ] as const;
+
+      for (const [path, payload, topic] of topics) {
+        const invalid = await postWebhook(app, path, payload, SHOP_A, {
+          topic,
+          secret: 'wrong-secret',
+        });
+        expect(invalid.status).toBe(401);
+        expect(invalid.body).toEqual({ error: 'Invalid webhook signature' });
+
+        const valid = await postWebhook(app, path, payload, SHOP_A, {
+          topic,
+          secret: TEST_CLIENT_SECRET,
+        });
+        expect(valid.status).toBe(200);
+        expect(valid.body).toEqual({ success: true });
+        expectNoSecrets(valid.body);
+      }
+
+      const dispatched = await postWebhook(
+        app,
+        'compliance',
+        dataRequestPayload(),
+        SHOP_A,
+        { topic: 'customers/data_request', secret: TEST_CLIENT_SECRET }
+      );
+      expect(dispatched.status).toBe(200);
+      expect(dispatched.body).toEqual({ success: true });
+
+      expect(await ShopifyComplianceRequest.countDocuments({ storeId: storeBId })).toBe(0);
+      await expectStoreBUntouched();
+    } finally {
+      tenantConfig.shopify.webhookSecret = TEST_WEBHOOK_SECRET;
+      if (originalClientSecret === undefined) {
+        delete process.env.SHOPIFY_CLIENT_SECRET;
+      } else {
+        process.env.SHOPIFY_CLIENT_SECRET = originalClientSecret;
+      }
+      if (originalApiSecret === undefined) {
+        delete process.env.SHOPIFY_API_SECRET;
+      } else {
+        process.env.SHOPIFY_API_SECRET = originalApiSecret;
+      }
+    }
+  });
+
+  test('falls back to SHOPIFY_API_SECRET when the client secret is unset', async () => {
+    const originalClientSecret = process.env.SHOPIFY_CLIENT_SECRET;
+    const originalApiSecret = process.env.SHOPIFY_API_SECRET;
+    tenantConfig.shopify.webhookSecret = '';
+    delete process.env.SHOPIFY_CLIENT_SECRET;
+    process.env.SHOPIFY_API_SECRET = TEST_API_SECRET;
+
+    try {
+      const invalid = await postWebhook(
+        app,
+        'shop/redact',
+        { shop_id: 1, shop_domain: UNKNOWN_SHOP },
+        UNKNOWN_SHOP,
+        { topic: 'shop/redact', secret: TEST_WEBHOOK_SECRET }
+      );
+      expect(invalid.status).toBe(401);
+      expect(invalid.body).toEqual({ error: 'Invalid webhook signature' });
+
+      const valid = await postWebhook(
+        app,
+        'shop/redact',
+        { shop_id: 1, shop_domain: UNKNOWN_SHOP },
+        UNKNOWN_SHOP,
+        { topic: 'shop/redact', secret: TEST_API_SECRET }
+      );
+      expect(valid.status).toBe(200);
+      expect(valid.body).toEqual({ success: true });
+      expect(await ShopifyComplianceRequest.countDocuments({})).toBe(0);
+    } finally {
+      tenantConfig.shopify.webhookSecret = TEST_WEBHOOK_SECRET;
+      if (originalClientSecret === undefined) {
+        delete process.env.SHOPIFY_CLIENT_SECRET;
+      } else {
+        process.env.SHOPIFY_CLIENT_SECRET = originalClientSecret;
+      }
+      if (originalApiSecret === undefined) {
+        delete process.env.SHOPIFY_API_SECRET;
+      } else {
+        process.env.SHOPIFY_API_SECRET = originalApiSecret;
+      }
+    }
+  });
+
+  test('accepts either the client secret or the webhook secret when both are set', async () => {
+    const originalClientSecret = process.env.SHOPIFY_CLIENT_SECRET;
+    const originalApiSecret = process.env.SHOPIFY_API_SECRET;
+    delete process.env.SHOPIFY_API_SECRET;
+    process.env.SHOPIFY_CLIENT_SECRET = TEST_CLIENT_SECRET;
+    tenantConfig.shopify.webhookSecret = TEST_WEBHOOK_SECRET;
+    const payload = { shop_id: 1, shop_domain: UNKNOWN_SHOP };
+
+    try {
+      const fromClientSecret = await postWebhook(app, 'customers/data_request', payload, UNKNOWN_SHOP, {
+        topic: 'customers/data_request',
+        secret: TEST_CLIENT_SECRET,
+      });
+      const fromWebhookSecret = await postWebhook(app, 'customers/redact', payload, UNKNOWN_SHOP, {
+        topic: 'customers/redact',
+        secret: TEST_WEBHOOK_SECRET,
+      });
+      const invalid = await postWebhook(app, 'shop/redact', payload, UNKNOWN_SHOP, {
+        topic: 'shop/redact',
+        secret: 'neither-secret',
+      });
+
+      expect(fromClientSecret.status).toBe(200);
+      expect(fromWebhookSecret.status).toBe(200);
+      expect(invalid.status).toBe(401);
+      expect(invalid.body).toEqual({ error: 'Invalid webhook signature' });
+      expect(await ShopifyComplianceRequest.countDocuments({})).toBe(0);
+    } finally {
+      tenantConfig.shopify.webhookSecret = TEST_WEBHOOK_SECRET;
+      if (originalClientSecret === undefined) {
+        delete process.env.SHOPIFY_CLIENT_SECRET;
+      } else {
+        process.env.SHOPIFY_CLIENT_SECRET = originalClientSecret;
+      }
+      if (originalApiSecret === undefined) {
+        delete process.env.SHOPIFY_API_SECRET;
+      } else {
+        process.env.SHOPIFY_API_SECRET = originalApiSecret;
+      }
+    }
   });
 
   test('acknowledges an unknown shop without writing', async () => {

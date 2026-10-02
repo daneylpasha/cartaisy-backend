@@ -100,7 +100,7 @@ Historical tokens already stored in the dashboard database are not migrated by t
 
 Issue #162. Shopify requires `customers/data_request`, `customers/redact`, and `shop/redact` for any app that is distributed. Cartaisy also handles `app/uninstalled`. These are **app-level** subscriptions. Compliance topics cannot be created with the Admin API `webhookSubscriptionCreate`, and this backend does not register them per store during connect.
 
-Every route below verifies `X-Shopify-Hmac-Sha256` with `SHOPIFY_WEBHOOK_SECRET` (the app client secret, not a merchant token) and resolves `X-Shopify-Shop-Domain` to one Cartaisy store. A webhook for shop A never reads or writes store B. HMAC failure is `401`. A shop that cannot be mapped safely (unknown, malformed, or more than one store) is acknowledged with `200` and no writes, so Shopify does not retry a delivery that can never be applied. A store-scoped write that throws returns `500` so Shopify retries; the handlers are idempotent.
+Every route below verifies `X-Shopify-Hmac-Sha256` against the raw request body. The key is the public app client secret: `SHOPIFY_CLIENT_SECRET`, or `SHOPIFY_API_SECRET` when that name is unset. `SHOPIFY_WEBHOOK_SECRET` is an additional accepted key when it is already set. A signature that matches any configured key is accepted. This is not a merchant access token. Do not set, clear, or rotate `SHOPIFY_WEBHOOK_SECRET` to fix HMAC: email-only and order-only redact receipt ids are derived from it, and changing it makes a Shopify retry look like a new request. The handler then resolves `X-Shopify-Shop-Domain` to one Cartaisy store. A webhook for shop A never reads or writes store B. HMAC failure is `401`. A shop that cannot be mapped safely (unknown, malformed, or more than one store) is acknowledged with `200` and no writes, so Shopify does not retry a delivery that can never be applied. A store-scoped write that throws returns `500` so Shopify retries; the handlers are idempotent.
 
 | Topic | Method and path | When Shopify sends it |
 | --- | --- | --- |
@@ -114,9 +114,13 @@ Every route below verifies `X-Shopify-Hmac-Sha256` with `SHOPIFY_WEBHOOK_SECRET`
 
 ### Operator configuration
 
-Set this on the Shopify app (Dev Dashboard or `shopify.app.toml`) and deploy the app config. Do not subscribe to these topics per shop from the backend.
+This backend is not a Shopify CLI app. There is no `shopify.app.toml` in the repo. Compliance topics are app-level: paste the production URLs on the public app in the Dev Dashboard, or put the same URLs in that app's toml and deploy the app version. Do not subscribe to these topics per shop from the backend, and do not point the App Store app at staging.
+
+Production API origin: `https://cartaisy-backend-production.up.railway.app`
 
 `app/uninstalled` is a normal topic, not a `compliance_topics` entry. Subscribe to it at app level as well so every install is covered without a per-store Admin API registration.
+
+If the public app is versioned with `shopify.app.toml`, set this and run `shopify app deploy` from that app project:
 
 ```toml
 [webhooks]
@@ -124,22 +128,26 @@ api_version = "2024-10"
 
 [[webhooks.subscriptions]]
 topics = ["app/uninstalled"]
-uri = "https://<api-host>/api/webhooks/shopify/app/uninstalled"
+uri = "https://cartaisy-backend-production.up.railway.app/api/webhooks/shopify/app/uninstalled"
 
 [[webhooks.subscriptions]]
 compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
-uri = "https://<api-host>/api/webhooks/shopify/compliance"
+uri = "https://cartaisy-backend-production.up.railway.app/api/webhooks/shopify/compliance"
 ```
 
-Separate URLs, if the dashboard asks for one field per GDPR topic:
+`POST /api/webhooks/shopify/compliance` reads `X-Shopify-Topic` and runs the same handler as the specific path. Use it when the app config has one `uri` for every compliance topic.
 
-| Dashboard field | URL |
+If the Dev Dashboard asks for one field per mandatory webhook, paste these exactly. Use `https`, no trailing slash.
+
+| Dev Dashboard field | URL |
 | --- | --- |
-| Customer data request | `https://<api-host>/api/webhooks/shopify/customers/data_request` |
-| Customer data erasure | `https://<api-host>/api/webhooks/shopify/customers/redact` |
-| Shop data erasure | `https://<api-host>/api/webhooks/shopify/shop/redact` |
+| Customer data request endpoint | `https://cartaisy-backend-production.up.railway.app/api/webhooks/shopify/customers/data_request` |
+| Customer data erasure endpoint | `https://cartaisy-backend-production.up.railway.app/api/webhooks/shopify/customers/redact` |
+| Shop data erasure endpoint | `https://cartaisy-backend-production.up.railway.app/api/webhooks/shopify/shop/redact` |
 
-`SHOPIFY_WEBHOOK_SECRET` must be the app's client secret. The handlers do not log tokens, webhook secrets, or customer PII (email, phone, name, address).
+Railway production must have `SHOPIFY_CLIENT_SECRET` set to that same public app's client secret. Use `SHOPIFY_API_SECRET` only when the client-secret name is unset, and only when that value is the same Partner app secret, not a merchant custom-app secret. Shopify's automated checks sign with the app client secret. Do not add `SHOPIFY_WEBHOOK_SECRET` so that HMAC will pass. If it is already set, leave the value unchanged. The handlers do not log tokens, webhook secrets, or customer PII (email, phone, name, address).
+
+After the URLs are saved and this backend is deployed, rerun the App Store automated checks. Invalid HMAC must return `401`. Valid HMAC must return `200`.
 
 ### v1 behavior
 
@@ -207,12 +215,12 @@ These are the Shopify Partner app credentials for the OAuth flow. They are app-l
 | Variable | Required | Purpose |
 | --- | --- | --- |
 | `SHOPIFY_CLIENT_ID` | Yes | Partner app client ID. Sent to Shopify as `client_id` on the authorize URL. |
-| `SHOPIFY_CLIENT_SECRET` | Yes | Partner app secret. Used for the code exchange and to verify the callback HMAC. Never send this to the dashboard or mobile app. |
+| `SHOPIFY_CLIENT_SECRET` | Yes | Partner app secret. Used for the code exchange, the OAuth callback HMAC, and webhook HMAC (`X-Shopify-Hmac-Sha256`), including the three mandatory compliance topics. Never send this to the dashboard or mobile app. |
 | `SHOPIFY_REDIRECT_URI` | Yes | Must match an allowed redirection URL on the Partner app exactly. Point it at this backend, for example `https://<api-host>/api/v1/shopify/oauth/callback`. |
 | `SHOPIFY_SCOPES` | Yes | Comma-separated Admin API scopes requested at install. |
 | `SHOPIFY_OAUTH_RETURN_URL` | No | Absolute `http` or `https` URL of the dashboard page that should continue after connect. The access token is not appended. |
 | `SHOPIFY_API_VERSION` | No | Admin API version used during connect. Defaults to `2024-01`. |
-| `SHOPIFY_WEBHOOK_SECRET` | Yes for webhooks | App webhook HMAC secret. This is not the merchant access token. |
+| `SHOPIFY_WEBHOOK_SECRET` | Leave unchanged | Not required for App Store HMAC checks. Those use `SHOPIFY_CLIENT_SECRET`, or `SHOPIFY_API_SECRET` when that name is unset. If this variable is already set, do not change or remove it. It also keys compliance receipt ids for redacts that have no Shopify customer id. A signature that matches either configured key is accepted. This is not the merchant access token. |
 | `SHOPIFY_WEBHOOK_URL` | No | Public origin or `/api/webhooks` mount used as the callback host when operational subscriptions are registered after connect. Falls back to `API_BASE_URL`, then `RAILWAY_STATIC_URL`. |
 
 `SHOPIFY_API_KEY` and `SHOPIFY_API_SECRET` are fallbacks for the client ID and secret when the `SHOPIFY_CLIENT_*` names are unset. `SHOPIFY_ACCESS_TOKEN` and `SHOPIFY_STOREFRONT_ACCESS_TOKEN` are legacy global env credentials. New merchant connects must not use them; the token for a store is `Store.shopify.accessToken`, encrypted, and readable only by store-scoped backend calls.

@@ -8,7 +8,7 @@ import { tenantConfig } from '../config/tenant';
  *
  * Every Shopify webhook must pass two gates before any handler runs:
  * 1. `verifyShopifyWebhook` - HMAC verification against the exact raw request
- *    body using the Shopify app webhook secret (timing-safe comparison).
+ *    body using the Shopify app client secret (timing-safe comparison).
  * 2. `resolveShopifyWebhookStore` - resolves the trusted
  *    `X-Shopify-Shop-Domain` header to exactly one active, connected Store
  *    and attaches the trusted storeId to the request.
@@ -35,6 +35,36 @@ export interface ShopifyWebhookRequest extends Request {
 // X-Shopify-Shop-Domain, never a custom storefront domain.
 const SHOP_DOMAIN_PATTERN = /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/;
 
+const readSecret = (value: string | undefined): string => (value || '').trim();
+
+/**
+ * HMAC keys for `X-Shopify-Hmac-Sha256`.
+ *
+ * Shopify signs App Store checks and app-level compliance webhooks with the
+ * public app's client secret. That value is `SHOPIFY_CLIENT_SECRET`, or
+ * `SHOPIFY_API_SECRET` when the client-secret name is unset. `SHOPIFY_WEBHOOK_SECRET`
+ * remains an additional key so a deployment that already set it keeps verifying.
+ * A signature that matches any configured key is accepted. Secrets are not logged.
+ */
+export const shopifyWebhookHmacSecrets = (): string[] => {
+  const partnerSecret = readSecret(
+    process.env.SHOPIFY_CLIENT_SECRET || process.env.SHOPIFY_API_SECRET
+  );
+  const webhookSecret = readSecret(tenantConfig.shopify.webhookSecret);
+  return [...new Set([partnerSecret, webhookSecret].filter((secret) => secret.length > 0))];
+};
+
+const signatureMatches = (rawBody: Buffer, signature: string, secrets: string[]): boolean => {
+  const providedSignature = Buffer.from(signature, 'base64');
+  return secrets.some((secret) => {
+    const expectedSignature = crypto.createHmac('sha256', secret).update(rawBody).digest();
+    return (
+      providedSignature.length === expectedSignature.length &&
+      crypto.timingSafeEqual(providedSignature, expectedSignature)
+    );
+  });
+};
+
 /**
  * JSON body parser for Shopify webhook routes that captures the exact raw
  * body bytes before parsing. Must be mounted on the webhook path before the
@@ -58,10 +88,12 @@ export const verifyShopifyWebhook = (
   res: Response,
   next: NextFunction
 ): void => {
-  const webhookSecret = tenantConfig.shopify.webhookSecret;
+  const hmacSecrets = shopifyWebhookHmacSecrets();
 
-  if (!webhookSecret) {
-    console.error('❌ SHOPIFY_WEBHOOK_SECRET is not configured; rejecting Shopify webhook');
+  if (hmacSecrets.length === 0) {
+    console.error(
+      '❌ Shopify webhook HMAC secret is not configured (SHOPIFY_CLIENT_SECRET, SHOPIFY_API_SECRET, or SHOPIFY_WEBHOOK_SECRET); rejecting webhook'
+    );
     res.status(401).json({ error: 'Webhook verification is not configured' });
     return;
   }
@@ -80,16 +112,7 @@ export const verifyShopifyWebhook = (
     return;
   }
 
-  const expectedSignature = crypto
-    .createHmac('sha256', webhookSecret)
-    .update(rawBody)
-    .digest();
-  const providedSignature = Buffer.from(signature, 'base64');
-
-  if (
-    providedSignature.length !== expectedSignature.length ||
-    !crypto.timingSafeEqual(providedSignature, expectedSignature)
-  ) {
+  if (!signatureMatches(rawBody, signature, hmacSecrets)) {
     console.warn('⚠️ Shopify webhook rejected: invalid HMAC signature');
     res.status(401).json({ error: 'Invalid webhook signature' });
     return;

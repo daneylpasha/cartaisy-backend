@@ -117,8 +117,12 @@ describe('Shopify webhook verification and tenant mapping', () => {
       await expectNoWebhookWrites();
     });
 
-    test('rejects webhook when the webhook secret is not configured', async () => {
+    test('rejects webhook when no HMAC secret is configured', async () => {
+      const originalClientSecret = process.env.SHOPIFY_CLIENT_SECRET;
+      const originalApiSecret = process.env.SHOPIFY_API_SECRET;
       tenantConfig.shopify.webhookSecret = '';
+      delete process.env.SHOPIFY_CLIENT_SECRET;
+      delete process.env.SHOPIFY_API_SECRET;
       try {
         const response = await request(app)
           .post('/api/webhooks/shopify/orders/create')
@@ -128,9 +132,52 @@ describe('Shopify webhook verification and tenant mapping', () => {
           .send(orderCreatePayload);
 
         expect(response.status).toBe(401);
+        expect(response.body).toEqual({ error: 'Webhook verification is not configured' });
         await expectNoWebhookWrites();
       } finally {
         tenantConfig.shopify.webhookSecret = TEST_WEBHOOK_SECRET;
+        if (originalClientSecret === undefined) {
+          delete process.env.SHOPIFY_CLIENT_SECRET;
+        } else {
+          process.env.SHOPIFY_CLIENT_SECRET = originalClientSecret;
+        }
+        if (originalApiSecret === undefined) {
+          delete process.env.SHOPIFY_API_SECRET;
+        } else {
+          process.env.SHOPIFY_API_SECRET = originalApiSecret;
+        }
+      }
+    });
+
+    test('accepts an operational webhook signed with SHOPIFY_CLIENT_SECRET', async () => {
+      const originalClientSecret = process.env.SHOPIFY_CLIENT_SECRET;
+      const originalApiSecret = process.env.SHOPIFY_API_SECRET;
+      tenantConfig.shopify.webhookSecret = '';
+      delete process.env.SHOPIFY_API_SECRET;
+      process.env.SHOPIFY_CLIENT_SECRET = 'partner-client-secret-for-orders';
+      try {
+        const response = await request(app)
+          .post('/api/webhooks/shopify/orders/create')
+          .set('Content-Type', 'application/json')
+          .set('X-Shopify-Hmac-Sha256', signBody(orderCreatePayload, 'partner-client-secret-for-orders'))
+          .set('X-Shopify-Shop-Domain', UNKNOWN_SHOP)
+          .send(orderCreatePayload);
+
+        expect(response.status).toBe(403);
+        expect(response.body).toEqual({ error: 'Unknown shop domain' });
+        await expectNoWebhookWrites();
+      } finally {
+        tenantConfig.shopify.webhookSecret = TEST_WEBHOOK_SECRET;
+        if (originalClientSecret === undefined) {
+          delete process.env.SHOPIFY_CLIENT_SECRET;
+        } else {
+          process.env.SHOPIFY_CLIENT_SECRET = originalClientSecret;
+        }
+        if (originalApiSecret === undefined) {
+          delete process.env.SHOPIFY_API_SECRET;
+        } else {
+          process.env.SHOPIFY_API_SECRET = originalApiSecret;
+        }
       }
     });
   });
